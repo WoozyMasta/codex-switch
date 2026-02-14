@@ -19,6 +19,7 @@ interface ProfilesFileV1 {
 const PROFILES_FILENAME = 'profiles.json'
 const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
 const LAST_PROFILE_KEY = 'codexSwitch.lastProfileId'
+const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 
 // Backward compatibility keys (pre-rename).
 const OLD_ACTIVE_PROFILE_KEY = 'codexUsage.activeProfileId'
@@ -62,6 +63,27 @@ export class ProfileManager {
     }
   }
 
+  private parseProfilesFile(raw: string): ProfilesFileV1 {
+    const parsed: any = JSON.parse(raw)
+
+    // Legacy format: plain array of profiles.
+    if (Array.isArray(parsed)) {
+      return { version: 1, profiles: parsed as ProfileSummary[] }
+    }
+
+    // Legacy format: { profiles: [...] } without a version.
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.profiles)) {
+      return { version: 1, profiles: parsed.profiles as ProfileSummary[] }
+    }
+
+    // Current format: { version: 1, profiles: [...] }
+    if (parsed && parsed.version === 1 && Array.isArray(parsed.profiles)) {
+      return { version: 1, profiles: parsed.profiles as ProfileSummary[] }
+    }
+
+    return { version: 1, profiles: [] }
+  }
+
   private async readProfilesFile(): Promise<ProfilesFileV1> {
     this.ensureStorageDir()
     const filePath = this.getProfilesPath()
@@ -71,11 +93,7 @@ export class ProfileManager {
 
     try {
       const raw = fs.readFileSync(filePath, 'utf8')
-      const parsed = JSON.parse(raw) as Partial<ProfilesFileV1>
-      if (parsed.version !== 1 || !Array.isArray(parsed.profiles)) {
-        return { version: 1, profiles: [] }
-      }
-      return { version: 1, profiles: parsed.profiles }
+      return this.parseProfilesFile(raw)
     } catch {
       // If corrupted, don't crash the extension.
       return { version: 1, profiles: [] }
@@ -97,7 +115,82 @@ export class ProfileManager {
     return `${OLD_SECRET_PREFIX}${profileId}`
   }
 
+  private getGlobalStorageRoot(): string {
+    // .../User/globalStorage/<publisher.name> -> .../User/globalStorage
+    return path.dirname(this.getStorageDir())
+  }
+
+  private async tryMigrateLegacyProfilesOnce(): Promise<void> {
+    if (this.context.globalState.get<boolean>(MIGRATED_LEGACY_KEY)) return
+
+    const current = await this.readProfilesFile()
+    if (current.profiles.length > 0) {
+      await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+      return
+    }
+
+    const root = this.getGlobalStorageRoot()
+    if (!fs.existsSync(root)) {
+      await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+      return
+    }
+
+    const currentDirName = path.basename(this.getStorageDir())
+    const candidates: string[] = []
+
+    try {
+      const entries = fs.readdirSync(root, { withFileTypes: true })
+      for (const e of entries) {
+        if (!e.isDirectory()) continue
+        const name = e.name
+        if (name === currentDirName) continue
+        if (!name.endsWith('.codex-switch') && !name.endsWith('.codex-stats')) continue
+        candidates.push(name)
+      }
+    } catch {
+      await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+      return
+    }
+
+    // Prefer older ids we used during development.
+    candidates.sort((a, b) => {
+      const rank = (n: string) => {
+        if (n.toLowerCase().includes('codex-switch')) return 0
+        if (n.toLowerCase().includes('codex-stats')) return 1
+        return 2
+      }
+      return rank(a) - rank(b)
+    })
+
+    for (const dirName of candidates) {
+      const legacyProfilesPath = path.join(root, dirName, PROFILES_FILENAME)
+      if (!fs.existsSync(legacyProfilesPath)) continue
+
+      try {
+        const raw = fs.readFileSync(legacyProfilesPath, 'utf8')
+        const legacy = this.parseProfilesFile(raw)
+        if (!legacy.profiles || legacy.profiles.length === 0) continue
+
+        // Only migrate the profile list. Tokens are stored in SecretStorage and cannot be
+        // read across extension ids.
+        this.writeProfilesFile({ version: 1, profiles: legacy.profiles })
+
+        void vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            'Found profiles from a previous install. Please re-import auth.json for each profile to restore tokens.',
+          ),
+        )
+        break
+      } catch {
+        // keep trying other candidates
+      }
+    }
+
+    await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+  }
+
   async listProfiles(): Promise<ProfileSummary[]> {
+    await this.tryMigrateLegacyProfilesOnce()
     const file = await this.readProfilesFile()
     return [...file.profiles].sort((a, b) => a.name.localeCompare(b.name))
   }
@@ -267,20 +360,39 @@ export class ProfileManager {
     return undefined
   }
 
-  async setActiveProfileId(profileId: string | undefined): Promise<void> {
+  async setActiveProfileId(profileId: string | undefined): Promise<boolean> {
     const bucket = this.getStateBucket()
     const prev =
       bucket.get<string>(ACTIVE_PROFILE_KEY) ||
       bucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
+
+    let authData: AuthData | null = null
+    if (profileId) {
+      authData = await this.loadAuthData(profileId)
+      if (!authData) {
+        const p = await this.getProfile(profileId)
+        void vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Profile "{0}" is missing tokens. Re-import auth.json to replace it.',
+            p?.name || profileId,
+          ),
+        )
+        return false
+      }
+    }
+
     if (prev && profileId && prev !== profileId) {
       await this.setLastProfileId(prev)
     }
     await bucket.update(ACTIVE_PROFILE_KEY, profileId)
     await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
 
-    if (profileId) {
-      await this.maybeSyncToCodexAuthFile(profileId)
+    if (profileId && authData) {
+      // We already validated tokens above; avoid a second secret read.
+      syncCodexAuthFile(getDefaultCodexAuthPath(), authData)
+      this.lastSyncedProfileId = profileId
     }
+    return true
   }
 
   async getLastProfileId(): Promise<string | undefined> {
@@ -311,12 +423,13 @@ export class ProfileManager {
     const active = await this.getActiveProfileId()
     const last = await this.getLastProfileId()
     if (!last) return undefined
-    await this.setActiveProfileId(last)
-    if (active) {
+
+    const ok = await this.setActiveProfileId(last)
+    if (ok && active) {
       // Swap so a second click toggles back.
       await this.setLastProfileId(active)
     }
-    return last
+    return ok ? last : undefined
   }
 
   async syncActiveProfileToCodexAuthFile(): Promise<void> {

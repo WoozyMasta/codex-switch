@@ -61,7 +61,7 @@ export function registerCommands(
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
           label: p.name,
-          description: p.email,
+          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
           detail:
             p.id === activeId ? vscode.l10n.t('Active') : undefined,
           profileId: p.id,
@@ -70,7 +70,8 @@ export function registerCommands(
       )
 
       if (!pick) return
-      await profileManager.setActiveProfileId(pick.profileId)
+      const ok = await profileManager.setActiveProfileId(pick.profileId)
+      if (!ok) return
       await onAuthChanged()
     },
   )
@@ -290,7 +291,7 @@ export function registerCommands(
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
           label: p.name,
-          description: p.email,
+          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
           profileId: p.id,
         })),
         { placeHolder: vscode.l10n.t('Rename profile') },
@@ -317,7 +318,7 @@ export function registerCommands(
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
           label: p.name,
-          description: p.email,
+          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
           profileId: p.id,
         })),
         { placeHolder: vscode.l10n.t('Delete profile') },

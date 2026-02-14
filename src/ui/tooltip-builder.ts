@@ -23,7 +23,12 @@ export function createProfileTooltip(
     const activeId = activeProfile?.id
     for (const p of profiles) {
       const name = escapeMarkdown(p.name)
-      const plan = escapeMarkdown((p.planType || 'Unknown').toUpperCase())
+      const rawPlan = p.planType || 'Unknown'
+      const planDisplay =
+        rawPlan === 'Unknown'
+          ? vscode.l10n.t('Unknown')
+          : rawPlan.toUpperCase()
+      const plan = escapeMarkdown(planDisplay)
 
       if (activeId && p.id === activeId) {
         tooltip.appendMarkdown(`* **${name}** - ${plan}\n`)

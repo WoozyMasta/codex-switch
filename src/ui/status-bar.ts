@@ -26,13 +26,13 @@ export function updateProfileStatus(
   cachedProfiles = profiles || []
 
   if (!profile) {
-    statusBarItem.text = '$(account) Codex: none'
+    statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', vscode.l10n.t('none'))}`
     statusBarItem.command = 'codex-switch.profile.manage'
     statusBarItem.tooltip = createProfileTooltip(null, cachedProfiles)
     return
   }
 
-  statusBarItem.text = `$(account) Codex: ${profile.name}`
+  statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', profile.name)}`
   statusBarItem.command = 'codex-switch.profile.toggleLast'
   statusBarItem.tooltip = createProfileTooltip(profile, cachedProfiles)
 }

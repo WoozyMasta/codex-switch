@@ -4,6 +4,7 @@
   "configuration.title": "Codex Switch",
   "configuration.debugLogging.description": "Включить подробные логи (токены не выводятся)",
   "configuration.activeProfileScope.description": "Где хранить выбор активного профиля",
+  "configuration.reloadWindowAfterProfileSwitch.description": "Перезагружать окно VS Code после успешного переключения/импорта профиля, чтобы расширение Codex перечитало auth.json",
   "command.login.title": "Codex Switch: Помощь по входу",
   "command.profile.manage.title": "Codex Switch: Управление профилями",
   "command.profile.login.title": "Codex Switch: Войти (Codex CLI)",

@@ -12,5 +12,6 @@
   "command.profile.addFromCodexAuthFile.title": "Codex Switch: Ajouter depuis ~/.codex/auth.json",
   "command.profile.addFromFile.title": "Codex Switch: Importer depuis un fichier",
   "command.profile.rename.title": "Codex Switch: Renommer le profil",
-  "command.profile.delete.title": "Codex Switch: Supprimer le profil"
+  "command.profile.delete.title": "Codex Switch: Supprimer le profil",
+  "configuration.reloadWindowAfterProfileSwitch.description": "Recharger la fenetre VS Code apres un changement/import de profil reussi afin que l'extension Codex relise auth.json"
 }

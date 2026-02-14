@@ -93,6 +93,11 @@
           ],
           "default": "global",
           "description": "%configuration.activeProfileScope.description%"
+        },
+        "codexSwitch.reloadWindowAfterProfileSwitch": {
+          "type": "boolean",
+          "default": false,
+          "description": "%configuration.reloadWindowAfterProfileSwitch.description%"
         }
       }
     }

@@ -12,5 +12,6 @@
   "command.profile.addFromCodexAuthFile.title": "Codex Switch: ~/.codex/auth.json 에서 추가",
   "command.profile.addFromFile.title": "Codex Switch: 파일에서 가져오기",
   "command.profile.rename.title": "Codex Switch: 프로필 이름 변경",
-  "command.profile.delete.title": "Codex Switch: 프로필 삭제"
+  "command.profile.delete.title": "Codex Switch: 프로필 삭제",
+  "configuration.reloadWindowAfterProfileSwitch.description": "프로필 전환/가져오기에 성공한 후 Codex 확장이 auth.json을 다시 읽도록 VS Code 창을 다시 로드합니다"
 }

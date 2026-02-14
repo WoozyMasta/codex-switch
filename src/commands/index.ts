@@ -12,6 +12,14 @@ export function registerCommands(
   profileManager: ProfileManager,
   onAuthChanged: () => Promise<void>,
 ) {
+  const maybeReloadWindowAfterProfileSwitch = async () => {
+    const reloadAfterSwitch = vscode.workspace
+      .getConfiguration('codexSwitch')
+      .get<boolean>('reloadWindowAfterProfileSwitch', false)
+    if (!reloadAfterSwitch) return
+    await vscode.commands.executeCommand('workbench.action.reloadWindow')
+  }
+
   // Login command
   const loginCommand = vscode.commands.registerCommand(
     'codex-switch.login',
@@ -73,6 +81,7 @@ export function registerCommands(
       const ok = await profileManager.setActiveProfileId(pick.profileId)
       if (!ok) return
       await onAuthChanged()
+      await maybeReloadWindowAfterProfileSwitch()
     },
   )
 
@@ -85,6 +94,7 @@ export function registerCommands(
         return
       }
       await onAuthChanged()
+      await maybeReloadWindowAfterProfileSwitch()
     },
   )
 
@@ -121,6 +131,7 @@ export function registerCommands(
         await profileManager.replaceProfileAuth(existing.id, authData)
         await profileManager.setActiveProfileId(existing.id)
         await onAuthChanged()
+        await maybeReloadWindowAfterProfileSwitch()
         return
       }
 
@@ -137,6 +148,7 @@ export function registerCommands(
       const profile = await profileManager.createProfile(name, authData)
       await profileManager.setActiveProfileId(profile.id)
       await onAuthChanged()
+      await maybeReloadWindowAfterProfileSwitch()
     },
   )
 
@@ -263,6 +275,7 @@ export function registerCommands(
         await profileManager.replaceProfileAuth(existing.id, authData)
         await profileManager.setActiveProfileId(existing.id)
         await onAuthChanged()
+        await maybeReloadWindowAfterProfileSwitch()
         return
       }
 
@@ -279,6 +292,7 @@ export function registerCommands(
       const profile = await profileManager.createProfile(name, authData)
       await profileManager.setActiveProfileId(profile.id)
       await onAuthChanged()
+      await maybeReloadWindowAfterProfileSwitch()
     },
   )
 

@@ -33,7 +33,11 @@ export function updateProfileStatus(
   }
 
   statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', profile.name)}`
-  statusBarItem.command = 'codex-switch.profile.toggleLast'
+  // If there is nothing meaningful to switch to, go straight to Manage.
+  statusBarItem.command =
+    cachedProfiles.length <= 1
+      ? 'codex-switch.profile.manage'
+      : 'codex-switch.profile.toggleLast'
   statusBarItem.tooltip = createProfileTooltip(profile, cachedProfiles)
 }
 

@@ -1,0 +1,107 @@
+{
+  "name": "codex-switch",
+  "author": "WoozyMasta",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WoozyMasta/codex-switch"
+  },
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
+  "version": "1.0.0",
+  "license": "MIT",
+  "publisher": "woozy-masta",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "vscode:publish": "vsce publish",
+    "compile": "tsc -p ./",
+    "vscode:package": "vsce package",
+    "watch": "tsc -watch -p ./"
+  },
+  "engines": {
+    "vscode": "^1.105.1"
+  },
+  "categories": [
+    "Other"
+  ],
+  "icon": "resources/codex-switch.png",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "l10n": "./l10n",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codex-switch.login",
+        "title": "%command.login.title%"
+      },
+      {
+        "command": "codex-switch.profile.manage",
+        "title": "%command.profile.manage.title%"
+      },
+      {
+        "command": "codex-switch.profile.login",
+        "title": "%command.profile.login.title%"
+      },
+      {
+        "command": "codex-switch.profile.switch",
+        "title": "%command.profile.switch.title%"
+      },
+      {
+        "command": "codex-switch.profile.toggleLast",
+        "title": "%command.profile.toggleLast.title%"
+      },
+      {
+        "command": "codex-switch.profile.addFromCodexAuthFile",
+        "title": "%command.profile.addFromCodexAuthFile.title%"
+      },
+      {
+        "command": "codex-switch.profile.addFromFile",
+        "title": "%command.profile.addFromFile.title%"
+      },
+      {
+        "command": "codex-switch.profile.rename",
+        "title": "%command.profile.rename.title%"
+      },
+      {
+        "command": "codex-switch.profile.delete",
+        "title": "%command.profile.delete.title%"
+      }
+    ],
+    "menus": {
+      "statusBar/item/context": [
+        {
+          "command": "codex-switch.profile.manage",
+          "when": "statusBarItemId == codex-switch.profile",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "%configuration.title%",
+      "properties": {
+        "codexSwitch.debugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "%configuration.debugLogging.description%"
+        },
+        "codexSwitch.activeProfileScope": {
+          "type": "string",
+          "enum": [
+            "global",
+            "workspace"
+          ],
+          "default": "global",
+          "description": "%configuration.activeProfileScope.description%"
+        }
+      }
+    }
+  },
+  "devDependencies": {
+    "@types/node": "24.x",
+    "@types/vscode": "^1.105.1",
+    "typescript": "^5.9.3",
+    "vsce": "^2.15.0"
+  },
+  "dependencies": {}
+}

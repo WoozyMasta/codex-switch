@@ -1,0 +1,17 @@
+**/.git/**
+**/.github/**
+**/.vscode/**
+**/.DS_Store
+**/*.ts
+**/*.map
+
+# Dev / build inputs
+src/**
+node_modules/**
+.vscode-test/**
+
+# Workspace noise
+package-lock.json
+tsconfig.json
+.vscodeignore
+.gitignore

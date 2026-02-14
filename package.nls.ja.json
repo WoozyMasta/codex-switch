@@ -1,0 +1,17 @@
+{
+  "extension.displayName": "Codex Switch",
+  "extension.description": "複数のCodexアカウントを切り替え・管理します",
+  "configuration.title": "Codex Switch",
+  "configuration.debugLogging.description": "詳細ログを有効化します（トークンは出力しません）",
+  "configuration.activeProfileScope.description": "アクティブなプロファイル選択の保存先",
+  "command.login.title": "Codex Switch: ログインのヘルプ",
+  "command.profile.manage.title": "Codex Switch: プロファイル管理",
+  "command.profile.login.title": "Codex Switch: ログイン（Codex CLI）",
+  "command.profile.switch.title": "Codex Switch: プロファイル切り替え",
+  "command.profile.toggleLast.title": "Codex Switch: 直前のプロファイルへ切り替え",
+  "command.profile.addFromCodexAuthFile.title": "Codex Switch: ~/.codex/auth.json から追加",
+  "command.profile.addFromFile.title": "Codex Switch: ファイルからインポート",
+  "command.profile.rename.title": "Codex Switch: プロファイル名を変更",
+  "command.profile.delete.title": "Codex Switch: プロファイルを削除"
+}
+

@@ -1,0 +1,17 @@
+{
+  "extension.displayName": "Codex Switch",
+  "extension.description": "여러 Codex 계정을 전환하고 관리합니다",
+  "configuration.title": "Codex Switch",
+  "configuration.debugLogging.description": "자세한 로그를 활성화합니다(토큰은 출력하지 않음)",
+  "configuration.activeProfileScope.description": "활성 프로필 선택을 저장할 위치",
+  "command.login.title": "Codex Switch: 로그인 도움말",
+  "command.profile.manage.title": "Codex Switch: 프로필 관리",
+  "command.profile.login.title": "Codex Switch: 로그인 (Codex CLI)",
+  "command.profile.switch.title": "Codex Switch: 프로필 전환",
+  "command.profile.toggleLast.title": "Codex Switch: 마지막 프로필로 전환",
+  "command.profile.addFromCodexAuthFile.title": "Codex Switch: ~/.codex/auth.json 에서 추가",
+  "command.profile.addFromFile.title": "Codex Switch: 파일에서 가져오기",
+  "command.profile.rename.title": "Codex Switch: 프로필 이름 변경",
+  "command.profile.delete.title": "Codex Switch: 프로필 삭제"
+}
+

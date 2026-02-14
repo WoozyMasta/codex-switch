@@ -1,0 +1,17 @@
+{
+  "extension.displayName": "Codex Switch",
+  "extension.description": "切換並管理多個 Codex 帳號",
+  "configuration.title": "Codex Switch",
+  "configuration.debugLogging.description": "啟用詳細記錄（不會輸出權杖）",
+  "configuration.activeProfileScope.description": "儲存作用中設定檔選擇的位置",
+  "command.login.title": "Codex Switch: 登入說明",
+  "command.profile.manage.title": "Codex Switch: 管理設定檔",
+  "command.profile.login.title": "Codex Switch: 登入（Codex CLI）",
+  "command.profile.switch.title": "Codex Switch: 切換設定檔",
+  "command.profile.toggleLast.title": "Codex Switch: 切換到上一個設定檔",
+  "command.profile.addFromCodexAuthFile.title": "Codex Switch: 從 ~/.codex/auth.json 新增",
+  "command.profile.addFromFile.title": "Codex Switch: 從檔案匯入",
+  "command.profile.rename.title": "Codex Switch: 重新命名設定檔",
+  "command.profile.delete.title": "Codex Switch: 刪除設定檔"
+}
+

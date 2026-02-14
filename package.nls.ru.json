@@ -1,0 +1,17 @@
+{
+  "extension.displayName": "Codex Switch",
+  "extension.description": "Переключение и управление несколькими аккаунтами Codex",
+  "configuration.title": "Codex Switch",
+  "configuration.debugLogging.description": "Включить подробные логи (токены не выводятся)",
+  "configuration.activeProfileScope.description": "Где хранить выбор активного профиля",
+  "command.login.title": "Codex Switch: Помощь по входу",
+  "command.profile.manage.title": "Codex Switch: Управление профилями",
+  "command.profile.login.title": "Codex Switch: Войти (Codex CLI)",
+  "command.profile.switch.title": "Codex Switch: Переключить профиль",
+  "command.profile.toggleLast.title": "Codex Switch: Переключить на последний профиль",
+  "command.profile.addFromCodexAuthFile.title": "Codex Switch: Добавить из ~/.codex/auth.json",
+  "command.profile.addFromFile.title": "Codex Switch: Импортировать из файла",
+  "command.profile.rename.title": "Codex Switch: Переименовать профиль",
+  "command.profile.delete.title": "Codex Switch: Удалить профиль"
+}
+

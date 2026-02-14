@@ -4,7 +4,8 @@ Codex Switch is a VS Code extension that keeps
 multiple Codex accounts organized and makes switching between them fast
 (for example "work" and "personal").  
 It is a lightweight account manager and status bar selector.
-It does not modify `~/.codex/auth.json` when switching profiles.
+When you switch profiles,
+it updates `~/.codex/auth.json` so Codex CLI uses the active profile.
 
 Tokens are stored in VS Code SecretStorage.
 Profile metadata (name, email, plan) is stored in the extension global storage.

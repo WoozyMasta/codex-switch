@@ -3,6 +3,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { randomUUID } from 'crypto'
 import { AuthData, ProfileSummary } from '../types'
+import { getDefaultCodexAuthPath } from './auth-manager'
+import { syncCodexAuthFile } from './codex-auth-sync'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -26,6 +28,8 @@ const NEW_SECRET_PREFIX = 'codexSwitch.profile.'
 
 export class ProfileManager {
   constructor(private context: vscode.ExtensionContext) {}
+
+  private lastSyncedProfileId: string | undefined
 
   private normalizeEmail(email: string | undefined): string {
     return String(email || '').trim().toLowerCase()
@@ -130,6 +134,17 @@ export class ProfileManager {
     }
     await this.context.secrets.store(this.secretKey(profileId), JSON.stringify(tokens))
     return true
+  }
+
+  private async maybeSyncToCodexAuthFile(profileId: string): Promise<void> {
+    if (!profileId) return
+    if (this.lastSyncedProfileId === profileId) return
+
+    const authData = await this.loadAuthData(profileId)
+    if (!authData) return
+
+    syncCodexAuthFile(getDefaultCodexAuthPath(), authData)
+    this.lastSyncedProfileId = profileId
   }
 
   async createProfile(name: string, authData: AuthData): Promise<ProfileSummary> {
@@ -262,6 +277,10 @@ export class ProfileManager {
     }
     await bucket.update(ACTIVE_PROFILE_KEY, profileId)
     await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+
+    if (profileId) {
+      await this.maybeSyncToCodexAuthFile(profileId)
+    }
   }
 
   async getLastProfileId(): Promise<string | undefined> {
@@ -298,5 +317,11 @@ export class ProfileManager {
       await this.setLastProfileId(active)
     }
     return last
+  }
+
+  async syncActiveProfileToCodexAuthFile(): Promise<void> {
+    const active = await this.getActiveProfileId()
+    if (!active) return
+    await this.maybeSyncToCodexAuthFile(active)
   }
 }

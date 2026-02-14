@@ -5,6 +5,7 @@ export interface AuthData {
     accountId?: string;
     email: string;
     planType: string;
+    authJson?: Record<string, unknown>;
 }
 
 export interface ProfileSummary {

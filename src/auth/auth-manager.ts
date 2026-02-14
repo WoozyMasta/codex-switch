@@ -56,6 +56,7 @@ export async function loadAuthDataFromFile(
       planType:
         idTokenPayload['https://api.openai.com/auth']?.chatgpt_plan_type ||
         'Unknown',
+      authJson,
     }
   } catch (error) {
     errorLog('Error reading auth file:', error)

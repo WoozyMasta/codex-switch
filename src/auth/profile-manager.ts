@@ -8,7 +8,7 @@ import { syncCodexAuthFile } from './codex-auth-sync'
 
 type ProfileTokens = Pick<
   AuthData,
-  'idToken' | 'accessToken' | 'refreshToken' | 'accountId'
+  'idToken' | 'accessToken' | 'refreshToken' | 'accountId' | 'authJson'
 >
 
 interface ProfilesFileV1 {
@@ -224,6 +224,7 @@ export class ProfileManager {
       accessToken: authData.accessToken,
       refreshToken: authData.refreshToken,
       accountId: authData.accountId,
+      authJson: authData.authJson,
     }
     await this.context.secrets.store(this.secretKey(profileId), JSON.stringify(tokens))
     return true
@@ -263,6 +264,7 @@ export class ProfileManager {
       accessToken: authData.accessToken,
       refreshToken: authData.refreshToken,
       accountId: authData.accountId,
+      authJson: authData.authJson,
     }
     await this.context.secrets.store(this.secretKey(id), JSON.stringify(tokens))
 
@@ -317,6 +319,7 @@ export class ProfileManager {
         accountId: tokens.accountId,
         email: profile.email,
         planType: profile.planType,
+        authJson: tokens.authJson,
       }
     } catch {
       return null

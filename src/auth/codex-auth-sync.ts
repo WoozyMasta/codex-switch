@@ -12,14 +12,21 @@ function backupSuffix(now: Date): string {
 }
 
 export function buildCodexAuthJson(authData: AuthData): string {
-  // Keep the shape compatible with what we read in auth-manager.ts.
-  const payload: any = {
-    tokens: {
-      id_token: authData.idToken,
-      access_token: authData.accessToken,
-      refresh_token: authData.refreshToken,
-    },
+  // Preserve the full auth payload when available so other clients that rely on
+  // additional metadata (for example token_data/auth status fields) keep working.
+  const payload: any =
+    authData.authJson && typeof authData.authJson === 'object'
+      ? JSON.parse(JSON.stringify(authData.authJson))
+      : {}
+
+  if (!payload.tokens || typeof payload.tokens !== 'object') {
+    payload.tokens = {}
   }
+
+  payload.tokens.id_token = authData.idToken
+  payload.tokens.access_token = authData.accessToken
+  payload.tokens.refresh_token = authData.refreshToken
+
   if (authData.accountId) {
     payload.tokens.account_id = authData.accountId
   }
@@ -65,4 +72,3 @@ export function syncCodexAuthFile(authPath: string, authData: AuthData) {
     }
   }
 }
-

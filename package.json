@@ -98,6 +98,12 @@
           "type": "boolean",
           "default": false,
           "description": "%configuration.reloadWindowAfterProfileSwitch.description%"
+        },
+        "codexSwitch.maxAuthBackups": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "description": "%configuration.maxAuthBackups.description%"
         }
       }
     }

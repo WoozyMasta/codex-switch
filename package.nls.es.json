@@ -13,5 +13,6 @@
   "command.profile.addFromFile.title": "Codex Switch: Importar desde archivo",
   "command.profile.rename.title": "Codex Switch: Renombrar perfil",
   "command.profile.delete.title": "Codex Switch: Eliminar perfil",
+  "configuration.maxAuthBackups.description": "Cantidad maxima de copias de seguridad de auth.json a conservar (0 desactiva las copias)",
   "configuration.reloadWindowAfterProfileSwitch.description": "Recargar la ventana de VS Code despues de cambiar/importar un perfil correctamente para que la extension Codex vuelva a leer auth.json"
 }

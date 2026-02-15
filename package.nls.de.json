@@ -13,5 +13,6 @@
   "command.profile.addFromFile.title": "Codex Switch: Aus Datei importieren",
   "command.profile.rename.title": "Codex Switch: Profil umbenennen",
   "command.profile.delete.title": "Codex Switch: Profil loeschen",
+  "configuration.maxAuthBackups.description": "Maximale Anzahl der zu behaltenden auth.json-Backups (0 deaktiviert Backups)",
   "configuration.reloadWindowAfterProfileSwitch.description": "VS Code-Fenster nach erfolgreichem Profilwechsel/-import neu laden, damit die Codex-Erweiterung auth.json erneut einliest"
 }

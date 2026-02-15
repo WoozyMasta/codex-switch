@@ -13,5 +13,6 @@
   "command.profile.addFromFile.title": "Codex Switch: 파일에서 가져오기",
   "command.profile.rename.title": "Codex Switch: 프로필 이름 변경",
   "command.profile.delete.title": "Codex Switch: 프로필 삭제",
+  "configuration.maxAuthBackups.description": "유지할 auth.json 백업의 최대 개수(0이면 백업 비활성화)",
   "configuration.reloadWindowAfterProfileSwitch.description": "프로필 전환/가져오기에 성공한 후 Codex 확장이 auth.json을 다시 읽도록 VS Code 창을 다시 로드합니다"
 }

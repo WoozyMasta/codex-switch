@@ -13,5 +13,6 @@
   "command.profile.addFromFile.title": "Codex Switch: ファイルからインポート",
   "command.profile.rename.title": "Codex Switch: プロファイル名を変更",
   "command.profile.delete.title": "Codex Switch: プロファイルを削除",
+  "configuration.maxAuthBackups.description": "保持する auth.json バックアップの最大数 (0 でバックアップを無効化)",
   "configuration.reloadWindowAfterProfileSwitch.description": "プロファイルの切り替え/インポート成功後に VS Code ウィンドウを再読み込みして、Codex 拡張機能が auth.json を再読込するようにします"
 }

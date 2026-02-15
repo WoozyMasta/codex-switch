@@ -13,5 +13,6 @@
   "command.profile.addFromFile.title": "Codex Switch: 从文件导入",
   "command.profile.rename.title": "Codex Switch: 重命名配置文件",
   "command.profile.delete.title": "Codex Switch: 删除配置文件",
+  "configuration.maxAuthBackups.description": "保留的 auth.json 备份最大数量（0 表示禁用备份）",
   "configuration.reloadWindowAfterProfileSwitch.description": "在成功切换/导入配置后重新加载 VS Code 窗口，以便 Codex 扩展重新读取 auth.json"
 }

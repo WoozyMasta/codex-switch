@@ -116,7 +116,6 @@ export function registerCommands(
       const existing = await profileManager.findDuplicateProfile(authData)
       if (existing) {
         const replaceLabel = vscode.l10n.t('Replace')
-        const cancelLabel = vscode.l10n.t('Cancel')
         const pick = await vscode.window.showWarningMessage(
           vscode.l10n.t(
             'This account is already saved as profile "{0}". Replace it?',
@@ -124,7 +123,6 @@ export function registerCommands(
           ),
           { modal: true },
           replaceLabel,
-          cancelLabel,
         )
         if (pick !== replaceLabel) return
 
@@ -260,7 +258,6 @@ export function registerCommands(
       const existing = await profileManager.findDuplicateProfile(authData)
       if (existing) {
         const replaceLabel = vscode.l10n.t('Replace')
-        const cancelLabel = vscode.l10n.t('Cancel')
         const pick = await vscode.window.showWarningMessage(
           vscode.l10n.t(
             'This account is already saved as profile "{0}". Replace it?',
@@ -268,7 +265,6 @@ export function registerCommands(
           ),
           { modal: true },
           replaceLabel,
-          cancelLabel,
         )
         if (pick !== replaceLabel) return
 

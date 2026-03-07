@@ -44,9 +44,15 @@ export class ProfileManager {
     return String(email || '').trim().toLowerCase()
   }
 
+  private normalizeOrganizationId(id: string | undefined): string {
+    return String(id || '').trim()
+  }
+
   private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
     const pe = this.normalizeEmail(profile.email)
     const ae = this.normalizeEmail(authData.email)
+    const po = this.normalizeOrganizationId(profile.defaultOrganizationId)
+    const ao = this.normalizeOrganizationId(authData.defaultOrganizationId)
     const hasComparableEmail =
       Boolean(pe) &&
       Boolean(ae) &&
@@ -54,12 +60,38 @@ export class ProfileManager {
       ae !== 'unknown'
     const hasComparableAccountId =
       Boolean(authData.accountId) && Boolean(profile.accountId)
+    const hasComparableOrganizationId = Boolean(po) && Boolean(ao)
 
-    // When both identifiers are present, require both to match.
+    // When all identity signals are present, require all of them to match.
+    // This allows importing multiple workspaces under the same user/account
+    // while still avoiding false-positive duplicate detection.
+    if (
+      hasComparableEmail &&
+      hasComparableAccountId &&
+      hasComparableOrganizationId
+    ) {
+      return (
+        pe === ae &&
+        authData.accountId === profile.accountId &&
+        ao === po
+      )
+    }
+
+    // If we know only email+account, use those two together.
     // Team accounts can share accountId across different users, and the same
     // email can legitimately have multiple plans/accounts.
     if (hasComparableEmail && hasComparableAccountId) {
       return pe === ae && authData.accountId === profile.accountId
+    }
+
+    // If only account+workspace are known, use those together.
+    if (hasComparableAccountId && hasComparableOrganizationId) {
+      return authData.accountId === profile.accountId && ao === po
+    }
+
+    // If only email+workspace are known, use those together.
+    if (hasComparableEmail && hasComparableOrganizationId) {
+      return pe === ae && ao === po
     }
 
     if (hasComparableEmail) {
@@ -240,6 +272,8 @@ export class ProfileManager {
       email: authData.email,
       planType: authData.planType,
       accountId: authData.accountId,
+      defaultOrganizationId: authData.defaultOrganizationId,
+      defaultOrganizationTitle: authData.defaultOrganizationTitle,
       updatedAt: new Date().toISOString(),
     }
     this.writeProfilesFile(file)
@@ -278,6 +312,8 @@ export class ProfileManager {
       email: authData.email,
       planType: authData.planType,
       accountId: authData.accountId,
+      defaultOrganizationId: authData.defaultOrganizationId,
+      defaultOrganizationTitle: authData.defaultOrganizationTitle,
       createdAt: now,
       updatedAt: now,
     }
@@ -344,6 +380,8 @@ export class ProfileManager {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         accountId: tokens.accountId,
+        defaultOrganizationId: profile.defaultOrganizationId,
+        defaultOrganizationTitle: profile.defaultOrganizationTitle,
         email: profile.email,
         planType: profile.planType,
         authJson: tokens.authJson,

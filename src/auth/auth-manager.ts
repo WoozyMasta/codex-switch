@@ -21,6 +21,24 @@ function parseJWT(token: string): any {
   }
 }
 
+function getDefaultOrganization(authPayload: any): {
+  id?: string
+  title?: string
+} {
+  const organizations = authPayload?.['https://api.openai.com/auth']?.organizations
+  if (!Array.isArray(organizations)) {
+    return {}
+  }
+
+  const selected =
+    organizations.find((org: any) => org?.is_default) || organizations[0]
+
+  return {
+    id: typeof selected?.id === 'string' ? selected.id : undefined,
+    title: typeof selected?.title === 'string' ? selected.title : undefined,
+  }
+}
+
 /**
  * Resolve default Codex auth file path.
  */
@@ -46,12 +64,15 @@ export async function loadAuthDataFromFile(
 
     // Parse ID token to get user info
     const idTokenPayload = parseJWT(authJson.tokens.id_token)
+    const defaultOrganization = getDefaultOrganization(idTokenPayload)
 
     return {
       idToken: authJson.tokens.id_token,
       accessToken: authJson.tokens.access_token,
       refreshToken: authJson.tokens.refresh_token,
       accountId: authJson.tokens.account_id,
+      defaultOrganizationId: defaultOrganization.id,
+      defaultOrganizationTitle: defaultOrganization.title,
       email: idTokenPayload.email || 'Unknown',
       planType:
         idTokenPayload['https://api.openai.com/auth']?.chatgpt_plan_type ||

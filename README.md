@@ -20,6 +20,9 @@ it switches to a shared remote file store under `~/.codex-switch/`:
 The shared store is intended for teams who connect to the same remote host
 from different local machines and want profile switching to stay in sync.
 
+For a focused explanation of the SSH-specific shared store, see
+[SSH_REMOTE_STORAGE.md](./SSH_REMOTE_STORAGE.md).
+
 ## Setup
 
 To import an account, first get an `auth.json`

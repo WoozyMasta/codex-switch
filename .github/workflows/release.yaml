@@ -3,7 +3,7 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*'
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: write
@@ -49,21 +49,7 @@ jobs:
         run: npm ci
 
       - name: Build VSIX package
-        run: npm run vscode:package
-
-      - name: Resolve VSIX filename
-        id: vsix
-        run: |
-          NAME="$(node -p "require('./package.json').name")"
-          VERSION="$(node -p "require('./package.json').version")"
-          FILE="${NAME}-${VERSION}.vsix"
-          if [ ! -f "$FILE" ]; then
-            echo "Expected VSIX '$FILE' was not found."
-            echo "Available VSIX files:"
-            ls -1 *.vsix || true
-            exit 1
-          fi
-          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+        run: npm run vscode:package -- --out codex-switch.vsix
 
       - name: Generate release notes
         run: |
@@ -73,11 +59,7 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "VSCE_PAT secret is required to publish to VS Code Marketplace."
-            exit 1
-          fi
-          npx vsce publish --packagePath "${{ steps.vsix.outputs.file }}"
+          npm run vscode:publish -- --packagePath codex-switch.vsix
 
       - name: Create GitHub release
         uses: ncipollo/release-action@v1
@@ -85,4 +67,4 @@ jobs:
           tag: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           bodyFile: release.md
-          artifacts: ${{ steps.vsix.outputs.file }}
+          artifacts: codex-switch.vsix

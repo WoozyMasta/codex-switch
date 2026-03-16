@@ -4,7 +4,7 @@ Thanks for contributing to Codex Switch.
 
 ## Local Setup
 
-* Use Node.js 20.
+* Use Node.js 24.
 * Install dependencies with `npm ci`.
 
 ## Development Commands

@@ -23,7 +23,8 @@
     "watch": "tsc -watch -p ./"
   },
   "engines": {
-    "vscode": "^1.105.1"
+    "vscode": "^1.105.1",
+    "node": ">=24 <25"
   },
   "categories": [
     "Other"

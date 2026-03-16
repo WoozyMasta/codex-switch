@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -39,9 +39,45 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build VSIX package
+        run: npm run vscode:package
+
+      - name: Resolve VSIX filename
+        id: vsix
+        run: |
+          NAME="$(node -p "require('./package.json').name")"
+          VERSION="$(node -p "require('./package.json').version")"
+          FILE="${NAME}-${VERSION}.vsix"
+          if [ ! -f "$FILE" ]; then
+            echo "Expected VSIX '$FILE' was not found."
+            echo "Available VSIX files:"
+            ls -1 *.vsix || true
+            exit 1
+          fi
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
       - name: Generate release notes
         run: |
           awk -f release-notes.awk CHANGELOG.md > release.md
+
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "VSCE_PAT secret is required to publish to VS Code Marketplace."
+            exit 1
+          fi
+          npx vsce publish --packagePath "${{ steps.vsix.outputs.file }}"
 
       - name: Create GitHub release
         uses: ncipollo/release-action@v1
@@ -49,3 +85,4 @@ jobs:
           tag: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           bodyFile: release.md
+          artifacts: ${{ steps.vsix.outputs.file }}

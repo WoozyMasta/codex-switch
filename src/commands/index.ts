@@ -2,7 +2,11 @@ import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
 import { ProfileManager } from '../auth/profile-manager'
-import { getDefaultCodexAuthPath, loadAuthDataFromFile } from '../auth/auth-manager'
+import {
+  getDefaultCodexAuthPath,
+  loadAuthDataFromFile,
+  shouldUseWslAuthPath,
+} from '../auth/auth-manager'
 
 /**
  * Register all extension commands
@@ -20,16 +24,24 @@ export function registerCommands(
     await vscode.commands.executeCommand('workbench.action.reloadWindow')
   }
 
+  const getLoginCommandText = (): string =>
+    shouldUseWslAuthPath() ? 'wsl codex login' : 'codex login'
+
   // Login command
   const loginCommand = vscode.commands.registerCommand(
     'codex-switch.login',
     async () => {
+      const loginCommandText = getLoginCommandText()
+      const loginSequence = `${loginCommandText}\n`
       const manageLabel = vscode.l10n.t('Manage profiles')
       const openTerminalLabel = vscode.l10n.t('Open terminal')
       const copyCommandLabel = vscode.l10n.t('Copy command')
 
       const selection = await vscode.window.showInformationMessage(
-        vscode.l10n.t('Authentication required. Add a profile or run "codex login".'),
+        vscode.l10n.t(
+          'Authentication required. Add a profile or run "{0}".',
+          loginCommandText,
+        ),
         manageLabel,
         openTerminalLabel,
         copyCommandLabel,
@@ -43,14 +55,14 @@ export function registerCommands(
           vscode.commands.executeCommand(
             'workbench.action.terminal.sendSequence',
             {
-              text: 'codex login\n',
+              text: loginSequence,
             },
           )
         }, 500)
       } else if (selection === copyCommandLabel) {
-        vscode.env.clipboard.writeText('codex login')
+        vscode.env.clipboard.writeText(loginCommandText)
         vscode.window.showInformationMessage(
-          vscode.l10n.t('Command "codex login" copied to clipboard.'),
+          vscode.l10n.t('Command "{0}" copied to clipboard.', loginCommandText),
         )
       }
     },
@@ -85,14 +97,40 @@ export function registerCommands(
     },
   )
 
-  const toggleLastProfileCommand = vscode.commands.registerCommand(
-    'codex-switch.profile.toggleLast',
-    async () => {
-      const newId = await profileManager.toggleLastProfileId()
-      if (!newId) {
+  const activateProfileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.activate',
+    async (profileId?: string) => {
+      if (!profileId) {
         await vscode.commands.executeCommand('codex-switch.profile.switch')
         return
       }
+
+      const ok = await profileManager.setActiveProfileId(profileId)
+      if (!ok) return
+
+      await onAuthChanged()
+      await maybeReloadWindowAfterProfileSwitch()
+    },
+  )
+
+  const toggleLastProfileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.toggleLast',
+    async () => {
+      const profiles = await profileManager.listProfiles()
+      if (profiles.length === 0) {
+        await vscode.commands.executeCommand('codex-switch.profile.manage')
+        return
+      }
+
+      const activeId = await profileManager.getActiveProfileId()
+      const currentIndex = profiles.findIndex((p) => p.id === activeId)
+      const nextIndex =
+        currentIndex === -1
+          ? 0
+          : (currentIndex + 1) % profiles.length
+      const ok = await profileManager.setActiveProfileId(profiles[nextIndex].id)
+      if (!ok) return
+
       await onAuthChanged()
       await maybeReloadWindowAfterProfileSwitch()
     },
@@ -102,12 +140,14 @@ export function registerCommands(
     'codex-switch.profile.addFromCodexAuthFile',
     async () => {
       const authPath = getDefaultCodexAuthPath()
+      const loginCommandText = getLoginCommandText()
       const authData = await loadAuthDataFromFile(authPath)
       if (!authData) {
         vscode.window.showErrorMessage(
           vscode.l10n.t(
-            'Could not read auth from {0}. Run "codex login" first.',
+            'Could not read auth from {0}. Run "{1}" first.',
             authPath,
+            loginCommandText,
           ),
         )
         return
@@ -154,11 +194,12 @@ export function registerCommands(
     'codex-switch.profile.login',
     async () => {
       const authPath = getDefaultCodexAuthPath()
+      const loginSequence = `${getLoginCommandText()}\n`
 
       vscode.commands.executeCommand('workbench.action.terminal.new')
       setTimeout(() => {
         vscode.commands.executeCommand('workbench.action.terminal.sendSequence', {
-          text: 'codex login\n',
+          text: loginSequence,
         })
       }, 500)
 
@@ -184,7 +225,10 @@ export function registerCommands(
         cleanup()
         const importLabel = vscode.l10n.t('Import')
         const pick = await vscode.window.showInformationMessage(
-          vscode.l10n.t('Codex auth file detected. Import it as a profile?'),
+          vscode.l10n.t(
+            'Codex auth file detected at {0}. Import it as a profile?',
+            authPath,
+          ),
           importLabel,
         )
         if (pick === importLabel) {
@@ -218,7 +262,8 @@ export function registerCommands(
       const manageLabel = vscode.l10n.t('Manage profiles')
       const msg = await vscode.window.showInformationMessage(
         vscode.l10n.t(
-          'After completing the login flow, import ~/.codex/auth.json as a profile.',
+          'After completing the login flow, import the current environment auth.json from {0} as a profile.',
+          authPath,
         ),
         importNowLabel,
         manageLabel,
@@ -351,6 +396,7 @@ export function registerCommands(
   const manageProfilesCommand = vscode.commands.registerCommand(
     'codex-switch.profile.manage',
     async () => {
+      const authPath = getDefaultCodexAuthPath()
       const profiles = await profileManager.listProfiles()
       const hasProfiles = profiles.length > 0
 
@@ -369,7 +415,8 @@ export function registerCommands(
               ]
             : []),
           {
-            label: vscode.l10n.t('Add from ~/.codex/auth.json'),
+            label: vscode.l10n.t('Add from current auth.json'),
+            description: authPath,
             command: 'codex-switch.profile.addFromCodexAuthFile',
           },
           {
@@ -400,6 +447,7 @@ export function registerCommands(
   context.subscriptions.push(loginCommand)
   context.subscriptions.push(loginViaCliCommand)
   context.subscriptions.push(switchProfileCommand)
+  context.subscriptions.push(activateProfileCommand)
   context.subscriptions.push(toggleLastProfileCommand)
   context.subscriptions.push(manageProfilesCommand)
   context.subscriptions.push(addFromCodexAuthFileCommand)

@@ -2,6 +2,10 @@ import * as vscode from 'vscode'
 import { ProfileSummary } from '../types'
 import { escapeMarkdown } from '../utils/markdown'
 
+function buildCommandUri(command: string, args: unknown[]): string {
+  return `command:${command}?${encodeURIComponent(JSON.stringify(args))}`
+}
+
 export function createProfileTooltip(
   activeProfile: ProfileSummary | null,
   profiles: ProfileSummary[],
@@ -12,6 +16,7 @@ export function createProfileTooltip(
   tooltip.isTrusted = {
     enabledCommands: [
       'codex-switch.profile.manage',
+      'codex-switch.profile.activate',
     ],
   }
 
@@ -29,12 +34,13 @@ export function createProfileTooltip(
           ? vscode.l10n.t('Unknown')
           : rawPlan.toUpperCase()
       const plan = escapeMarkdown(planDisplay)
+      const switchUri = buildCommandUri('codex-switch.profile.activate', [p.id])
+      const label =
+        activeId && p.id === activeId
+          ? `$(check) **${name}** - ${plan}`
+          : `${name} - ${plan}`
 
-      if (activeId && p.id === activeId) {
-        tooltip.appendMarkdown(`* **${name}** - ${plan}\n`)
-      } else {
-        tooltip.appendMarkdown(`* ${name} - ${plan}\n`)
-      }
+      tooltip.appendMarkdown(`* [${label}](${switchUri})\n`)
     }
     tooltip.appendMarkdown('\n')
   }

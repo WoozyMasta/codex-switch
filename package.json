@@ -108,6 +108,19 @@
           "type": "boolean",
           "default": false,
           "description": "%configuration.reloadWindowAfterProfileSwitch.description%"
+        },
+        "codexSwitch.statusBarClickBehavior": {
+          "type": "string",
+          "enum": [
+            "cycle",
+            "toggleLast"
+          ],
+          "default": "cycle",
+          "description": "%configuration.statusBarClickBehavior.description%",
+          "enumDescriptions": [
+            "%configuration.statusBarClickBehavior.cycle%",
+            "%configuration.statusBarClickBehavior.toggleLast%"
+          ]
         }
       }
     }

@@ -16,6 +16,8 @@ export function registerCommands(
   profileManager: ProfileManager,
   onAuthChanged: () => Promise<void>,
 ) {
+  type StatusBarClickBehavior = 'cycle' | 'toggleLast'
+
   const maybeReloadWindowAfterProfileSwitch = async () => {
     const reloadAfterSwitch = vscode.workspace
       .getConfiguration('codexSwitch')
@@ -26,6 +28,13 @@ export function registerCommands(
 
   const getLoginCommandText = (): string =>
     shouldUseWslAuthPath() ? 'wsl codex login' : 'codex login'
+
+  const getStatusBarClickBehavior = (): StatusBarClickBehavior => {
+    const raw = vscode.workspace
+      .getConfiguration('codexSwitch')
+      .get<StatusBarClickBehavior>('statusBarClickBehavior', 'cycle')
+    return raw === 'toggleLast' ? 'toggleLast' : 'cycle'
+  }
 
   // Login command
   const loginCommand = vscode.commands.registerCommand(
@@ -116,6 +125,18 @@ export function registerCommands(
   const toggleLastProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.toggleLast',
     async () => {
+      const behavior = getStatusBarClickBehavior()
+      if (behavior === 'toggleLast') {
+        const newId = await profileManager.toggleLastProfileId()
+        if (!newId) {
+          await vscode.commands.executeCommand('codex-switch.profile.switch')
+          return
+        }
+        await onAuthChanged()
+        await maybeReloadWindowAfterProfileSwitch()
+        return
+      }
+
       const profiles = await profileManager.listProfiles()
       if (profiles.length === 0) {
         await vscode.commands.executeCommand('codex-switch.profile.manage')

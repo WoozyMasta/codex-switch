@@ -8,10 +8,13 @@
   "command.profile.manage.title": "Codex Switch: Administrar perfiles",
   "command.profile.login.title": "Codex Switch: Iniciar sesion (Codex CLI)",
   "command.profile.switch.title": "Codex Switch: Cambiar perfil",
-  "command.profile.toggleLast.title": "Codex Switch: Cambiar al ultimo perfil",
-  "command.profile.addFromCodexAuthFile.title": "Codex Switch: Agregar desde ~/.codex/auth.json",
+  "command.profile.toggleLast.title": "Codex Switch: Recorrer perfiles",
+  "command.profile.addFromCodexAuthFile.title": "Codex Switch: Agregar desde auth.json actual",
   "command.profile.addFromFile.title": "Codex Switch: Importar desde archivo",
   "command.profile.rename.title": "Codex Switch: Renombrar perfil",
   "command.profile.delete.title": "Codex Switch: Eliminar perfil",
-  "configuration.reloadWindowAfterProfileSwitch.description": "Recargar la ventana de VS Code despues de cambiar/importar un perfil correctamente para que la extension Codex vuelva a leer auth.json"
+  "configuration.reloadWindowAfterProfileSwitch.description": "Recargar la ventana de VS Code despues de cambiar/importar un perfil correctamente para que la extension Codex vuelva a leer auth.json",
+  "configuration.statusBarClickBehavior.description": "Comportamiento al hacer clic en el elemento de perfil de la barra de estado",
+  "configuration.statusBarClickBehavior.cycle": "Recorrer todos los perfiles guardados",
+  "configuration.statusBarClickBehavior.toggleLast": "Alternar entre el perfil actual y el anterior"
 }

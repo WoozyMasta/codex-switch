@@ -8,10 +8,13 @@
   "command.profile.manage.title": "Codex Switch: プロファイル管理",
   "command.profile.login.title": "Codex Switch: ログイン（Codex CLI）",
   "command.profile.switch.title": "Codex Switch: プロファイル切り替え",
-  "command.profile.toggleLast.title": "Codex Switch: 直前のプロファイルへ切り替え",
-  "command.profile.addFromCodexAuthFile.title": "Codex Switch: ~/.codex/auth.json から追加",
+  "command.profile.toggleLast.title": "Codex Switch: プロファイルを順番に切り替え",
+  "command.profile.addFromCodexAuthFile.title": "Codex Switch: 現在の auth.json から追加",
   "command.profile.addFromFile.title": "Codex Switch: ファイルからインポート",
   "command.profile.rename.title": "Codex Switch: プロファイル名を変更",
   "command.profile.delete.title": "Codex Switch: プロファイルを削除",
-  "configuration.reloadWindowAfterProfileSwitch.description": "プロファイルの切り替え/インポート成功後に VS Code ウィンドウを再読み込みして、Codex 拡張機能が auth.json を再読込するようにします"
+  "configuration.reloadWindowAfterProfileSwitch.description": "プロファイルの切り替え/インポート成功後に VS Code ウィンドウを再読み込みして、Codex 拡張機能が auth.json を再読込するようにします",
+  "configuration.statusBarClickBehavior.description": "ステータスバーのプロファイル項目をクリックしたときの動作",
+  "configuration.statusBarClickBehavior.cycle": "保存済みプロファイルを順番に切り替える",
+  "configuration.statusBarClickBehavior.toggleLast": "現在のプロファイルと前回のプロファイルを切り替える"
 }

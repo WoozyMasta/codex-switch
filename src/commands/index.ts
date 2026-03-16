@@ -22,7 +22,7 @@ export function registerCommands(
     const reloadAfterSwitch = vscode.workspace
       .getConfiguration('codexSwitch')
       .get<boolean>('reloadWindowAfterProfileSwitch', false)
-    if (!reloadAfterSwitch) return
+    if (!reloadAfterSwitch) { return }
     await vscode.commands.executeCommand('workbench.action.reloadWindow')
   }
 
@@ -98,9 +98,9 @@ export function registerCommands(
         { placeHolder: vscode.l10n.t('Switch profile') },
       )
 
-      if (!pick) return
+      if (!pick) { return }
       const ok = await profileManager.setActiveProfileId(pick.profileId)
-      if (!ok) return
+      if (!ok) { return }
       await onAuthChanged()
       await maybeReloadWindowAfterProfileSwitch()
     },
@@ -115,7 +115,7 @@ export function registerCommands(
       }
 
       const ok = await profileManager.setActiveProfileId(profileId)
-      if (!ok) return
+      if (!ok) { return }
 
       await onAuthChanged()
       await maybeReloadWindowAfterProfileSwitch()
@@ -150,7 +150,7 @@ export function registerCommands(
           ? 0
           : (currentIndex + 1) % profiles.length
       const ok = await profileManager.setActiveProfileId(profiles[nextIndex].id)
-      if (!ok) return
+      if (!ok) { return }
 
       await onAuthChanged()
       await maybeReloadWindowAfterProfileSwitch()
@@ -185,7 +185,7 @@ export function registerCommands(
           { modal: true },
           replaceLabel,
         )
-        if (pick !== replaceLabel) return
+        if (pick !== replaceLabel) { return }
 
         await profileManager.replaceProfileAuth(existing.id, authData)
         await profileManager.setActiveProfileId(existing.id)
@@ -202,7 +202,7 @@ export function registerCommands(
         prompt: vscode.l10n.t('Profile name (for example "work" or "personal")'),
         value: defaultName,
       })
-      if (!name) return
+      if (!name) { return }
 
       const profile = await profileManager.createProfile(name, authData)
       await profileManager.setActiveProfileId(profile.id)
@@ -231,7 +231,7 @@ export function registerCommands(
       let done = false
 
       const cleanup = () => {
-        if (done) return
+        if (done) { return }
         done = true
         if (watcher) {
           try {
@@ -264,8 +264,8 @@ export function registerCommands(
         const dir = path.dirname(authPath)
         if (fs.existsSync(dir)) {
           watcher = fs.watch(dir, { persistent: false }, async (_event, filename) => {
-            if (!filename) return
-            if (String(filename).toLowerCase() !== 'auth.json') return
+            if (!filename) { return }
+            if (String(filename).toLowerCase() !== 'auth.json') { return }
             if (Date.now() - start > maxWaitMs) {
               cleanup()
               return
@@ -311,7 +311,7 @@ export function registerCommands(
         openLabel: vscode.l10n.t('Import auth.json'),
         filters: { JSON: ['json'] },
       })
-      if (!uri || uri.length === 0) return
+      if (!uri || uri.length === 0) { return }
 
       const authData = await loadAuthDataFromFile(uri[0].fsPath)
       if (!authData) {
@@ -332,7 +332,7 @@ export function registerCommands(
           { modal: true },
           replaceLabel,
         )
-        if (pick !== replaceLabel) return
+        if (pick !== replaceLabel) { return }
 
         await profileManager.replaceProfileAuth(existing.id, authData)
         await profileManager.setActiveProfileId(existing.id)
@@ -349,7 +349,7 @@ export function registerCommands(
         prompt: vscode.l10n.t('Profile name'),
         value: defaultName,
       })
-      if (!name) return
+      if (!name) { return }
 
       const profile = await profileManager.createProfile(name, authData)
       await profileManager.setActiveProfileId(profile.id)
@@ -362,7 +362,7 @@ export function registerCommands(
     'codex-switch.profile.rename',
     async () => {
       const profiles = await profileManager.listProfiles()
-      if (profiles.length === 0) return
+      if (profiles.length === 0) { return }
 
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
@@ -372,13 +372,13 @@ export function registerCommands(
         })),
         { placeHolder: vscode.l10n.t('Rename profile') },
       )
-      if (!pick) return
+      if (!pick) { return }
 
       const newName = await vscode.window.showInputBox({
         prompt: vscode.l10n.t('New profile name'),
         value: pick.label,
       })
-      if (!newName) return
+      if (!newName) { return }
 
       await profileManager.renameProfile(pick.profileId, newName)
       await onAuthChanged()
@@ -389,7 +389,7 @@ export function registerCommands(
     'codex-switch.profile.delete',
     async () => {
       const profiles = await profileManager.listProfiles()
-      if (profiles.length === 0) return
+      if (profiles.length === 0) { return }
 
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
@@ -399,7 +399,7 @@ export function registerCommands(
         })),
         { placeHolder: vscode.l10n.t('Delete profile') },
       )
-      if (!pick) return
+      if (!pick) { return }
 
       const deleteLabel = vscode.l10n.t('Delete')
       const ok = await vscode.window.showWarningMessage(
@@ -407,7 +407,7 @@ export function registerCommands(
         { modal: true },
         deleteLabel,
       )
-      if (ok !== deleteLabel) return
+      if (ok !== deleteLabel) { return }
 
       await profileManager.deleteProfile(pick.profileId)
       await onAuthChanged()
@@ -459,7 +459,7 @@ export function registerCommands(
         ],
         { placeHolder: vscode.l10n.t('Manage profiles') },
       )
-      if (!action) return
+      if (!action) { return }
       await vscode.commands.executeCommand(action.command)
     },
   )

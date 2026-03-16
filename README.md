@@ -127,5 +127,7 @@ Useful commands:
 
 * `npm run compile`
 * `npm run watch`
+* `npm run lint:ts`
 * `npm run lint:md`
+* `npm run lint`
 * `npm run vscode:package`

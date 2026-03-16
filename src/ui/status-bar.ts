@@ -21,7 +21,7 @@ export function updateProfileStatus(
   profile: ProfileSummary | null,
   profiles: ProfileSummary[],
 ) {
-  if (!statusBarItem) return
+  if (!statusBarItem) { return }
 
   cachedProfiles = profiles || []
 

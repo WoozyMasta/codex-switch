@@ -82,7 +82,7 @@ export class ProfileManager {
   ): boolean | undefined {
     const p = this.normalizeIdentity(profileValue)
     const a = this.normalizeIdentity(authValue)
-    if (!p || !a) return undefined
+    if (!p || !a) { return undefined }
     return p === a
   }
 
@@ -104,10 +104,10 @@ export class ProfileManager {
     ].filter((v): v is boolean => v !== undefined)
 
     if (identityMatches.length > 0) {
-      if (identityMatches.some((v) => !v)) return false
+      if (identityMatches.some((v) => !v)) { return false }
       if (hasProfileOrganizationId || hasAuthOrganizationId) {
         // If workspace is known only on one side, avoid collapsing profiles.
-        if (organizationIdMatch === undefined) return false
+        if (organizationIdMatch === undefined) { return false }
         return organizationIdMatch
       }
       return true
@@ -212,7 +212,7 @@ export class ProfileManager {
     try {
       if (this.isRemoteFilesMode()) {
         const parsed = readJsonFile<any>(filePath)
-        if (parsed == null) return { version: 1, profiles: [] }
+        if (parsed == null) { return { version: 1, profiles: [] } }
         return this.parseProfilesFile(JSON.stringify(parsed))
       }
       const raw = fs.readFileSync(filePath, 'utf8')
@@ -244,12 +244,12 @@ export class ProfileManager {
   }
 
   private readSharedActiveProfile(): SharedActiveProfile | null {
-    if (!this.isRemoteFilesMode()) return null
+    if (!this.isRemoteFilesMode()) { return null }
     return readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
   }
 
   private writeSharedActiveProfile(profileId: string): void {
-    if (!this.isRemoteFilesMode()) return
+    if (!this.isRemoteFilesMode()) { return }
     writeJsonFile(getSharedActiveProfilePath(), {
       profileId,
       updatedAt: new Date().toISOString(),
@@ -257,7 +257,7 @@ export class ProfileManager {
   }
 
   private deleteSharedActiveProfile(): void {
-    if (!this.isRemoteFilesMode()) return
+    if (!this.isRemoteFilesMode()) { return }
     deleteFileIfExists(getSharedActiveProfilePath())
   }
 
@@ -273,7 +273,7 @@ export class ProfileManager {
     const raw =
       (await this.context.secrets.get(this.secretKey(profileId))) ||
       (await this.context.secrets.get(this.legacySecretKey(profileId)))
-    if (!raw) return null
+    if (!raw) { return null }
 
     try {
       return JSON.parse(raw) as ProfileTokens
@@ -308,7 +308,7 @@ export class ProfileManager {
   }
 
   private async tryMigrateLegacyProfilesOnce(): Promise<void> {
-    if (this.context.globalState.get<boolean>(MIGRATED_LEGACY_KEY)) return
+    if (this.context.globalState.get<boolean>(MIGRATED_LEGACY_KEY)) { return }
 
     const current = await this.readProfilesFile()
     if (current.profiles.length > 0) {
@@ -328,10 +328,10 @@ export class ProfileManager {
     try {
       const entries = fs.readdirSync(root, { withFileTypes: true })
       for (const e of entries) {
-        if (!e.isDirectory()) continue
+        if (!e.isDirectory()) { continue }
         const name = e.name
-        if (name === currentDirName) continue
-        if (!name.endsWith('.codex-switch') && !name.endsWith('.codex-stats')) continue
+        if (name === currentDirName) { continue }
+        if (!name.endsWith('.codex-switch') && !name.endsWith('.codex-stats')) { continue }
         candidates.push(name)
       }
     } catch {
@@ -342,8 +342,8 @@ export class ProfileManager {
     // Prefer older ids we used during development.
     candidates.sort((a, b) => {
       const rank = (n: string) => {
-        if (n.toLowerCase().includes('codex-switch')) return 0
-        if (n.toLowerCase().includes('codex-stats')) return 1
+        if (n.toLowerCase().includes('codex-switch')) { return 0 }
+        if (n.toLowerCase().includes('codex-stats')) { return 1 }
         return 2
       }
       return rank(a) - rank(b)
@@ -351,12 +351,12 @@ export class ProfileManager {
 
     for (const dirName of candidates) {
       const legacyProfilesPath = path.join(root, dirName, PROFILES_FILENAME)
-      if (!fs.existsSync(legacyProfilesPath)) continue
+      if (!fs.existsSync(legacyProfilesPath)) { continue }
 
       try {
         const raw = fs.readFileSync(legacyProfilesPath, 'utf8')
         const legacy = this.parseProfilesFile(raw)
-        if (!legacy.profiles || legacy.profiles.length === 0) continue
+        if (!legacy.profiles || legacy.profiles.length === 0) { continue }
 
         // Only migrate the profile list. Tokens are stored in SecretStorage and cannot be
         // read across extension ids.
@@ -389,7 +389,7 @@ export class ProfileManager {
 
   private async inferActiveProfileIdFromAuthFile(): Promise<string | undefined> {
     const authData = await loadAuthDataFromFile(getDefaultCodexAuthPath())
-    if (!authData) return undefined
+    if (!authData) { return undefined }
 
     const file = await this.readProfilesFile()
     const match = file.profiles.find((p) => this.matchesAuth(p, authData))
@@ -455,7 +455,7 @@ export class ProfileManager {
   async replaceProfileAuth(profileId: string, authData: AuthData): Promise<boolean> {
     const file = await this.readProfilesFile()
     const idx = file.profiles.findIndex((p) => p.id === profileId)
-    if (idx === -1) return false
+    if (idx === -1) { return false }
 
     file.profiles[idx] = {
       ...file.profiles[idx],
@@ -483,11 +483,11 @@ export class ProfileManager {
   }
 
   private async maybeSyncToCodexAuthFile(profileId: string): Promise<void> {
-    if (!profileId) return
-    if (this.lastSyncedProfileId === profileId) return
+    if (!profileId) { return }
+    if (this.lastSyncedProfileId === profileId) { return }
 
     const authData = await this.loadAuthData(profileId)
-    if (!authData) return
+    if (!authData) { return }
 
     syncCodexAuthFile(getDefaultCodexAuthPath(), authData)
     this.lastSyncedProfileId = profileId
@@ -531,7 +531,7 @@ export class ProfileManager {
   async renameProfile(profileId: string, newName: string): Promise<boolean> {
     const file = await this.readProfilesFile()
     const idx = file.profiles.findIndex((p) => p.id === profileId)
-    if (idx === -1) return false
+    if (idx === -1) { return false }
     file.profiles[idx] = {
       ...file.profiles[idx],
       name: newName,
@@ -545,7 +545,7 @@ export class ProfileManager {
     const file = await this.readProfilesFile()
     const before = file.profiles.length
     file.profiles = file.profiles.filter((p) => p.id !== profileId)
-    if (file.profiles.length === before) return false
+    if (file.profiles.length === before) { return false }
     this.writeProfilesFile(file)
 
     await this.deleteStoredTokens(profileId)
@@ -553,17 +553,17 @@ export class ProfileManager {
     // Clean up active/last if they point to deleted profile.
     const active = await this.getActiveProfileId()
     const last = await this.getLastProfileId()
-    if (active === profileId) await this.setActiveProfileId(undefined)
-    if (last === profileId) await this.setLastProfileId(undefined)
+    if (active === profileId) { await this.setActiveProfileId(undefined) }
+    if (last === profileId) { await this.setLastProfileId(undefined) }
     return true
   }
 
   async loadAuthData(profileId: string): Promise<AuthData | null> {
     const profile = await this.getProfile(profileId)
-    if (!profile) return null
+    if (!profile) { return null }
 
     const tokens = await this.readStoredTokens(profileId)
-    if (!tokens) return null
+    if (!tokens) { return null }
 
     return {
       idToken: tokens.idToken,
@@ -616,7 +616,7 @@ export class ProfileManager {
 
     const bucket = this.getStateBucket()
     const v = bucket.get<string>(ACTIVE_PROFILE_KEY)
-    if (v) return v
+    if (v) { return v }
 
     // Migrate old key lazily.
     const legacyBucket = this.getLegacyStateBucket()
@@ -645,7 +645,7 @@ export class ProfileManager {
       authData = await this.loadAuthData(profileId)
       if (!authData) {
         authData = await this.recoverMissingTokens(profileId)
-        if (!authData) return false
+        if (!authData) { return false }
       }
     }
 
@@ -675,7 +675,7 @@ export class ProfileManager {
   async getLastProfileId(): Promise<string | undefined> {
     const bucket = this.getStateBucket()
     const v = bucket.get<string>(LAST_PROFILE_KEY)
-    if (v) return v
+    if (v) { return v }
 
     const legacyBucket = this.getLegacyStateBucket()
     const old =
@@ -699,7 +699,7 @@ export class ProfileManager {
   async toggleLastProfileId(): Promise<string | undefined> {
     const active = await this.getActiveProfileId()
     const last = await this.getLastProfileId()
-    if (!last) return undefined
+    if (!last) { return undefined }
 
     const ok = await this.setActiveProfileId(last)
     if (ok && active) {
@@ -711,7 +711,7 @@ export class ProfileManager {
 
   async syncActiveProfileToCodexAuthFile(): Promise<void> {
     const active = await this.getActiveProfileId()
-    if (!active) return
+    if (!active) { return }
     await this.maybeSyncToCodexAuthFile(active)
   }
 

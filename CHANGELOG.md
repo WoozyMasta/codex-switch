@@ -23,7 +23,9 @@ and this project adheres to [Semantic Versioning][].
   (PR #9 by @iqdoctor)
 * Direct profile activation from tooltip.
   (PR #8 by @iqdoctor)
-* Configurable status-bar click behavior with `cycle` and `toggleLast`.
+* Added `Codex Switch: Export Profiles` and `Codex Switch: Import Profiles`
+  for full profile backup/restore, including credentials and active/previous
+  profile selection.
 
 ### Changed
 
@@ -34,6 +36,9 @@ and this project adheres to [Semantic Versioning][].
   (PR #10 by @panella87)
 * Duplicate detection is workspace-aware while preserving identity-first logic.
   (follow-up changes on `master`; aligns with PR #5 by @iqdoctor)
+* Status-bar click behavior is explicitly configurable via
+  `codexSwitch.statusBarClickBehavior`:
+  `cycle` (cycle all profiles) or `toggleLast` (switch current/previous).
 
 ### Fixed
 

@@ -12,6 +12,37 @@ function asNonEmptyString(value: unknown): string | undefined {
   return v ? v : undefined
 }
 
+function getDefaultOrganization(authPayload: any): {
+  id?: string
+  title?: string
+} {
+  const directId =
+    asNonEmptyString(authPayload?.selected_organization_id) ||
+    asNonEmptyString(authPayload?.default_organization_id)
+
+  const organizations = Array.isArray(authPayload?.organizations)
+    ? authPayload.organizations
+    : []
+
+  if (directId) {
+    const match = organizations.find((org: any) => asNonEmptyString(org?.id) === directId)
+    return {
+      id: directId,
+      title: asNonEmptyString(match?.title),
+    }
+  }
+
+  if (organizations.length === 0) {
+    return {}
+  }
+
+  const selected = organizations.find((org: any) => org?.is_default) || organizations[0]
+  return {
+    id: asNonEmptyString(selected?.id),
+    title: asNonEmptyString(selected?.title),
+  }
+}
+
 /**
  * Parse JWT token to extract payload
  */
@@ -88,12 +119,15 @@ export async function loadAuthDataFromFile(
     // Parse ID token to get user info
     const idTokenPayload = parseJWT(authJson.tokens.id_token)
     const authPayload = idTokenPayload['https://api.openai.com/auth']
+    const defaultOrganization = getDefaultOrganization(authPayload)
 
     return {
       idToken: authJson.tokens.id_token,
       accessToken: authJson.tokens.access_token,
       refreshToken: authJson.tokens.refresh_token,
       accountId: authJson.tokens.account_id,
+      defaultOrganizationId: defaultOrganization.id,
+      defaultOrganizationTitle: defaultOrganization.title,
       chatgptUserId: asNonEmptyString(authPayload?.chatgpt_user_id),
       userId: asNonEmptyString(authPayload?.user_id),
       subject: asNonEmptyString(idTokenPayload.sub),

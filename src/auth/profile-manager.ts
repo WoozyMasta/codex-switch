@@ -87,25 +87,72 @@ export class ProfileManager {
   }
 
   private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
-    // Team/Business tenants can share account_id across different users.
-    // Match by user identity fields first, then email as a final fallback.
-    const chatgptUserIdMatch = this.compareIdentityField(
-      profile.chatgptUserId,
-      authData.chatgptUserId,
+    const hasProfileOrganizationId = Boolean(this.normalizeIdentity(profile.defaultOrganizationId))
+    const hasAuthOrganizationId = Boolean(this.normalizeIdentity(authData.defaultOrganizationId))
+    const organizationIdMatch = this.compareIdentityField(
+      profile.defaultOrganizationId,
+      authData.defaultOrganizationId,
     )
-    if (chatgptUserIdMatch !== undefined) return chatgptUserIdMatch
 
-    const userIdMatch = this.compareIdentityField(profile.userId, authData.userId)
-    if (userIdMatch !== undefined) return userIdMatch
+    // Team/Business tenants can share account_id across different users.
+    // Match by user identity fields first.
+    // If identity matches and both sides know the selected workspace/org, require it too.
+    const identityMatches = [
+      this.compareIdentityField(profile.chatgptUserId, authData.chatgptUserId),
+      this.compareIdentityField(profile.userId, authData.userId),
+      this.compareIdentityField(profile.subject, authData.subject),
+    ].filter((v): v is boolean => v !== undefined)
 
-    const subjectMatch = this.compareIdentityField(profile.subject, authData.subject)
-    if (subjectMatch !== undefined) return subjectMatch
+    if (identityMatches.length > 0) {
+      if (identityMatches.some((v) => !v)) return false
+      if (hasProfileOrganizationId || hasAuthOrganizationId) {
+        // If workspace is known only on one side, avoid collapsing profiles.
+        if (organizationIdMatch === undefined) return false
+        return organizationIdMatch
+      }
+      return true
+    }
 
     const pe = this.normalizeEmail(profile.email)
     const ae = this.normalizeEmail(authData.email)
-    if (!pe || !ae) return false
-    if (pe === 'unknown' || ae === 'unknown') return false
-    return pe === ae
+    const hasComparableEmail =
+      Boolean(pe) &&
+      Boolean(ae) &&
+      pe !== 'unknown' &&
+      ae !== 'unknown'
+    const hasComparableAccountId =
+      Boolean(authData.accountId) && Boolean(profile.accountId)
+    const accountIdMatch = hasComparableAccountId
+      ? authData.accountId === profile.accountId
+      : false
+    const hasComparableOrganizationId = organizationIdMatch !== undefined
+
+    if ((hasProfileOrganizationId || hasAuthOrganizationId) && !hasComparableOrganizationId) {
+      // Workspace is known only on one side: treat as distinct to avoid false matches.
+      return false
+    }
+
+    if (hasComparableEmail && hasComparableAccountId && hasComparableOrganizationId) {
+      return pe === ae && accountIdMatch && organizationIdMatch === true
+    }
+
+    if (hasComparableEmail && hasComparableOrganizationId) {
+      return pe === ae && organizationIdMatch === true
+    }
+
+    if (hasComparableEmail && hasComparableAccountId) {
+      return pe === ae && accountIdMatch
+    }
+
+    if (hasComparableAccountId && hasComparableOrganizationId) {
+      return accountIdMatch && organizationIdMatch === true
+    }
+
+    if (hasComparableEmail) {
+      return pe === ae
+    }
+
+    return false
   }
 
   private getStorageDir(): string {
@@ -415,6 +462,8 @@ export class ProfileManager {
       email: authData.email,
       planType: authData.planType,
       accountId: authData.accountId,
+      defaultOrganizationId: authData.defaultOrganizationId,
+      defaultOrganizationTitle: authData.defaultOrganizationTitle,
       chatgptUserId: authData.chatgptUserId,
       userId: authData.userId,
       subject: authData.subject,
@@ -454,6 +503,8 @@ export class ProfileManager {
       email: authData.email,
       planType: authData.planType,
       accountId: authData.accountId,
+      defaultOrganizationId: authData.defaultOrganizationId,
+      defaultOrganizationTitle: authData.defaultOrganizationTitle,
       chatgptUserId: authData.chatgptUserId,
       userId: authData.userId,
       subject: authData.subject,
@@ -519,6 +570,8 @@ export class ProfileManager {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       accountId: tokens.accountId || profile.accountId,
+      defaultOrganizationId: profile.defaultOrganizationId,
+      defaultOrganizationTitle: profile.defaultOrganizationTitle,
       chatgptUserId: profile.chatgptUserId,
       userId: profile.userId,
       subject: profile.subject,

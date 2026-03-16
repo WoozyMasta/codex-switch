@@ -3,6 +3,8 @@ export interface AuthData {
     accessToken: string;
     refreshToken: string;
     accountId?: string;
+    defaultOrganizationId?: string;
+    defaultOrganizationTitle?: string;
     chatgptUserId?: string;
     userId?: string;
     subject?: string;
@@ -19,6 +21,8 @@ export interface ProfileSummary {
     email: string;
     planType: string;
     accountId?: string;
+    defaultOrganizationId?: string;
+    defaultOrganizationTitle?: string;
     chatgptUserId?: string;
     userId?: string;
     subject?: string;

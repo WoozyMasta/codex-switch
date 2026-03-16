@@ -44,7 +44,35 @@ export class ProfileManager {
     return String(email || '').trim().toLowerCase()
   }
 
+  private normalizeIdentity(value: string | undefined): string {
+    return String(value || '').trim()
+  }
+
+  private compareIdentityField(
+    profileValue: string | undefined,
+    authValue: string | undefined,
+  ): boolean | undefined {
+    const p = this.normalizeIdentity(profileValue)
+    const a = this.normalizeIdentity(authValue)
+    if (!p || !a) return undefined
+    return p === a
+  }
+
   private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
+    // Team/Business tenants can share account_id across different users.
+    // Match by user identity fields first, then email as a final fallback.
+    const chatgptUserIdMatch = this.compareIdentityField(
+      profile.chatgptUserId,
+      authData.chatgptUserId,
+    )
+    if (chatgptUserIdMatch !== undefined) return chatgptUserIdMatch
+
+    const userIdMatch = this.compareIdentityField(profile.userId, authData.userId)
+    if (userIdMatch !== undefined) return userIdMatch
+
+    const subjectMatch = this.compareIdentityField(profile.subject, authData.subject)
+    if (subjectMatch !== undefined) return subjectMatch
+
     const pe = this.normalizeEmail(profile.email)
     const ae = this.normalizeEmail(authData.email)
     const hasComparableEmail =
@@ -240,6 +268,9 @@ export class ProfileManager {
       email: authData.email,
       planType: authData.planType,
       accountId: authData.accountId,
+      chatgptUserId: authData.chatgptUserId,
+      userId: authData.userId,
+      subject: authData.subject,
       updatedAt: new Date().toISOString(),
     }
     this.writeProfilesFile(file)
@@ -278,6 +309,9 @@ export class ProfileManager {
       email: authData.email,
       planType: authData.planType,
       accountId: authData.accountId,
+      chatgptUserId: authData.chatgptUserId,
+      userId: authData.userId,
+      subject: authData.subject,
       createdAt: now,
       updatedAt: now,
     }
@@ -343,7 +377,10 @@ export class ProfileManager {
         idToken: tokens.idToken,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        accountId: tokens.accountId,
+        accountId: tokens.accountId || profile.accountId,
+        chatgptUserId: profile.chatgptUserId,
+        userId: profile.userId,
+        subject: profile.subject,
         email: profile.email,
         planType: profile.planType,
         authJson: tokens.authJson,

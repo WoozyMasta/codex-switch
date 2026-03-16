@@ -5,7 +5,9 @@ multiple Codex accounts organized and makes switching between them fast
 (for example "work" and "personal").  
 It is a lightweight account manager and status bar selector.
 When you switch profiles,
-it updates `~/.codex/auth.json` so Codex CLI uses the active profile.
+it updates the current environment `auth.json` so Codex CLI uses the active profile.
+On Windows, if `chatgpt.runCodexInWindowsSubsystemForLinux` is enabled, this uses
+the WSL-side `~/.codex/auth.json`; otherwise it uses the Windows/local one.
 
 Tokens are stored in VS Code SecretStorage.
 Profile metadata (name, email, plan) is stored in the extension global storage.
@@ -13,15 +15,20 @@ Profile metadata (name, email, plan) is stored in the extension global storage.
 ## Setup
 
 To import an account, first get an `auth.json`
-(the easiest way is `codex login` which creates `~/.codex/auth.json`).
+(the easiest way is `codex login` in your current Codex environment, or
+`wsl codex login` on Windows when `chatgpt.runCodexInWindowsSubsystemForLinux` is enabled).
 Then run `Codex Switch: Manage Profiles` and choose
-"Add From ~/.codex/auth.json" or "Import From File...".
+"Add From Current auth.json" or "Import From File...".
 
 ## Usage
 
 The status bar shows `$(account) <profile>`.
 Click it to toggle to the last used profile,
 or use `Codex Switch: Manage Profiles` to switch, rename, or delete profiles.
+
+Duplicate detection matches user identity (`chatgptUserId`, `userId`, JWT `sub`,
+then email fallback), so different users in the same Team/Business account can
+coexist as separate profiles.
 
 ## Settings
 

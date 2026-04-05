@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
+## [1.3.1][] - 2026-04-05
+
+### Added
+
+* Automatic publishing to <https://open-vsx.org/> in the release workflow.
+
+[1.3.1]: https://github.com/WoozyMasta/codex-switch/compare/v1.3.0...v1.3.1
+
 ## [1.3.0][] - 2026-03-16
 
 ### Added

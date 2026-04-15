@@ -18,6 +18,9 @@ export function registerCommands(
   onAuthChanged: () => Promise<void>,
 ) {
   type StatusBarClickBehavior = 'cycle' | 'toggleLast'
+  const codexExtensionId = 'openai.chatgpt'
+  const reloadWindowCommand = 'workbench.action.reloadWindow'
+  const restartExtensionHostCommand = 'workbench.action.restartExtensionHost'
 
   const maybeReloadWindowAfterProfileSwitch = async () => {
     const reloadAfterSwitch = vscode.workspace
@@ -26,7 +29,15 @@ export function registerCommands(
     if (!reloadAfterSwitch) {
       return
     }
-    await vscode.commands.executeCommand('workbench.action.reloadWindow')
+    if (!vscode.extensions.getExtension(codexExtensionId)) {
+      return
+    }
+
+    try {
+      await vscode.commands.executeCommand(restartExtensionHostCommand)
+    } catch {
+      await vscode.commands.executeCommand(reloadWindowCommand)
+    }
   }
 
   const getLoginCommandText = (): string =>

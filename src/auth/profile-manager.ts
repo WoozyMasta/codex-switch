@@ -908,7 +908,21 @@ export class ProfileManager {
     const bucket = this.getStateBucket()
     const v = bucket.get<string>(ACTIVE_PROFILE_KEY)
     if (v) {
-      return v
+      const existing = await this.getProfile(v)
+      if (existing) {
+        return v
+      }
+
+      const inferred = await this.inferActiveProfileIdFromAuthFile()
+      if (inferred && inferred !== v) {
+        await bucket.update(ACTIVE_PROFILE_KEY, inferred)
+        await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+        return inferred
+      }
+
+      await bucket.update(ACTIVE_PROFILE_KEY, undefined)
+      await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+      return undefined
     }
 
     // Migrate old key lazily.
@@ -917,11 +931,28 @@ export class ProfileManager {
       bucket.get<string>(OLD_ACTIVE_PROFILE_KEY) ||
       legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
     if (old) {
-      await bucket.update(ACTIVE_PROFILE_KEY, old)
+      const existing = await this.getProfile(old)
+      if (existing) {
+        await bucket.update(ACTIVE_PROFILE_KEY, old)
+        await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+        await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+        return old
+      }
+
+      const inferred = await this.inferActiveProfileIdFromAuthFile()
+      await bucket.update(ACTIVE_PROFILE_KEY, inferred)
       await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
       await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-      return old
+      return inferred
     }
+
+    const inferred = await this.inferActiveProfileIdFromAuthFile()
+    if (inferred) {
+      await bucket.update(ACTIVE_PROFILE_KEY, inferred)
+      await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+      return inferred
+    }
+
     return undefined
   }
 

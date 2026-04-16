@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import { ProfileSummary } from '../types'
+import { buildProfileMetaDisplay } from './profile-display'
 import { escapeMarkdown } from '../utils/markdown'
 
 function buildCommandUri(command: string, args: unknown[]): string {
@@ -21,6 +22,7 @@ export function createProfileTooltip(
     enabledCommands: [
       'codex-switch.profile.manage',
       'codex-switch.profile.activate',
+      'codex-switch.profile.refresh',
     ],
   }
 
@@ -32,10 +34,9 @@ export function createProfileTooltip(
     const activeId = activeProfile?.id
     for (const p of profiles) {
       const name = escapeMarkdown(p.name)
-      const rawPlan = p.planType || 'Unknown'
-      const planDisplay =
-        rawPlan === 'Unknown' ? vscode.l10n.t('Unknown') : rawPlan.toUpperCase()
-      const plan = escapeMarkdown(planDisplay)
+      const meta = escapeMarkdown(
+        buildProfileMetaDisplay(p.planType, p.rateLimits),
+      )
       const switchUri = buildCommandUri('codex-switch.profile.activate', [p.id])
       const emailDisplay =
         p.email && p.email !== 'Unknown' ? p.email : vscode.l10n.t('Unknown')
@@ -48,10 +49,10 @@ export function createProfileTooltip(
       if (isActive) {
         const activeLabel = escapeMarkdown(vscode.l10n.t('Active'))
         tooltip.appendMarkdown(
-          `* ${linkedName} - ${plan} <span style="color: var(--vscode-textLink-activeForeground); font-weight: 600;">(${activeLabel})</span>\n`,
+          `* ${linkedName} - ${meta} <span style="color: var(--vscode-textLink-activeForeground); font-weight: 600;">(${activeLabel})</span>\n`,
         )
       } else {
-        tooltip.appendMarkdown(`* ${linkedName} - ${plan}\n`)
+        tooltip.appendMarkdown(`* ${linkedName} - ${meta}\n`)
       }
     }
     tooltip.appendMarkdown('\n')
@@ -59,7 +60,7 @@ export function createProfileTooltip(
 
   tooltip.appendMarkdown('---\n\n')
   tooltip.appendMarkdown(
-    `[${vscode.l10n.t('Manage profiles')}](command:codex-switch.profile.manage)\n\n`,
+    `[${vscode.l10n.t('Manage profiles')}](command:codex-switch.profile.manage) · [${vscode.l10n.t('Refresh limits')}](command:codex-switch.profile.refresh)\n\n`,
   )
   return tooltip
 }

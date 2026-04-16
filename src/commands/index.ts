@@ -3,11 +3,13 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import { ProfileManager } from '../auth/profile-manager'
+import { ProfileRateLimitService } from '../auth/profile-rate-limit-service'
 import {
   getDefaultCodexAuthPath,
   loadAuthDataFromFile,
   shouldUseWslAuthPath,
 } from '../auth/auth-manager'
+import { buildProfileMetaDisplay } from '../ui/profile-display'
 
 /**
  * Register all extension commands
@@ -15,7 +17,8 @@ import {
 export function registerCommands(
   context: vscode.ExtensionContext,
   profileManager: ProfileManager,
-  onAuthChanged: () => Promise<void>,
+  profileRateLimitService: ProfileRateLimitService,
+  onAuthChanged: (options?: { forceRateLimitRefresh?: boolean }) => Promise<void>,
 ) {
   type StatusBarClickBehavior = 'cycle' | 'toggleLast'
 
@@ -89,7 +92,11 @@ export function registerCommands(
   const switchProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.switch',
     async () => {
-      const profiles = await profileManager.listProfiles()
+      const rawProfiles = await profileManager.listProfiles()
+      const profiles = await profileRateLimitService.decorateProfiles(
+        profileManager,
+        rawProfiles,
+      )
       if (profiles.length === 0) {
         await vscode.commands.executeCommand('codex-switch.profile.manage')
         return
@@ -99,8 +106,13 @@ export function registerCommands(
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
           label: p.name,
-          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
-          detail: p.id === activeId ? vscode.l10n.t('Active') : undefined,
+          description: buildProfileMetaDisplay(p.planType, p.rateLimits),
+          detail: [
+            p.email && p.email !== 'Unknown' ? p.email : undefined,
+            p.id === activeId ? vscode.l10n.t('Active') : undefined,
+          ]
+            .filter((value): value is string => Boolean(value))
+            .join(' • '),
           profileId: p.id,
         })),
         { placeHolder: vscode.l10n.t('Switch profile') },
@@ -115,6 +127,13 @@ export function registerCommands(
       }
       await onAuthChanged()
       await maybeReloadWindowAfterProfileSwitch()
+    },
+  )
+
+  const refreshRateLimitsCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.refresh',
+    async () => {
+      await onAuthChanged({ forceRateLimitRefresh: true })
     },
   )
 
@@ -604,6 +623,7 @@ export function registerCommands(
   // Register all commands
   context.subscriptions.push(loginCommand)
   context.subscriptions.push(loginViaCliCommand)
+  context.subscriptions.push(refreshRateLimitsCommand)
   context.subscriptions.push(switchProfileCommand)
   context.subscriptions.push(activateProfileCommand)
   context.subscriptions.push(toggleLastProfileCommand)

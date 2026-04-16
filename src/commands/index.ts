@@ -18,26 +18,29 @@ export function registerCommands(
   onAuthChanged: () => Promise<void>,
 ) {
   type StatusBarClickBehavior = 'cycle' | 'toggleLast'
-  const codexExtensionId = 'openai.chatgpt'
-  const reloadWindowCommand = 'workbench.action.reloadWindow'
-  const restartExtensionHostCommand = 'workbench.action.restartExtensionHost'
+  const restartExtensionHostCommandId =
+    'workbench.action.restartExtensionHost'
+  const reloadWindowCommandId = 'workbench.action.reloadWindow'
 
-  const maybeReloadWindowAfterProfileSwitch = async () => {
+  const maybeRestartAfterProfileSwitch = async () => {
     const reloadAfterSwitch = vscode.workspace
       .getConfiguration('codexSwitch')
       .get<boolean>('reloadWindowAfterProfileSwitch', false)
     if (!reloadAfterSwitch) {
       return
     }
-    if (!vscode.extensions.getExtension(codexExtensionId)) {
-      return
+
+    const commandIds = await vscode.commands.getCommands(true)
+    if (commandIds.includes(restartExtensionHostCommandId)) {
+      try {
+        await vscode.commands.executeCommand(restartExtensionHostCommandId)
+        return
+      } catch {
+        // Fall back to full window reload on older or restricted hosts.
+      }
     }
 
-    try {
-      await vscode.commands.executeCommand(restartExtensionHostCommand)
-    } catch {
-      await vscode.commands.executeCommand(reloadWindowCommand)
-    }
+    await vscode.commands.executeCommand(reloadWindowCommandId)
   }
 
   const getLoginCommandText = (): string =>
@@ -125,7 +128,7 @@ export function registerCommands(
         return
       }
       await onAuthChanged()
-      await maybeReloadWindowAfterProfileSwitch()
+      await maybeRestartAfterProfileSwitch()
     },
   )
 
@@ -143,7 +146,7 @@ export function registerCommands(
       }
 
       await onAuthChanged()
-      await maybeReloadWindowAfterProfileSwitch()
+      await maybeRestartAfterProfileSwitch()
     },
   )
 
@@ -158,7 +161,7 @@ export function registerCommands(
           return
         }
         await onAuthChanged()
-        await maybeReloadWindowAfterProfileSwitch()
+        await maybeRestartAfterProfileSwitch()
         return
       }
 
@@ -178,7 +181,7 @@ export function registerCommands(
       }
 
       await onAuthChanged()
-      await maybeReloadWindowAfterProfileSwitch()
+      await maybeRestartAfterProfileSwitch()
     },
   )
 
@@ -217,7 +220,7 @@ export function registerCommands(
         await profileManager.replaceProfileAuth(existing.id, authData)
         await profileManager.setActiveProfileId(existing.id)
         await onAuthChanged()
-        await maybeReloadWindowAfterProfileSwitch()
+        await maybeRestartAfterProfileSwitch()
         return
       }
 
@@ -239,7 +242,7 @@ export function registerCommands(
       const profile = await profileManager.createProfile(name, authData)
       await profileManager.setActiveProfileId(profile.id)
       await onAuthChanged()
-      await maybeReloadWindowAfterProfileSwitch()
+      await maybeRestartAfterProfileSwitch()
     },
   )
 
@@ -388,7 +391,7 @@ export function registerCommands(
         await profileManager.replaceProfileAuth(existing.id, authData)
         await profileManager.setActiveProfileId(existing.id)
         await onAuthChanged()
-        await maybeReloadWindowAfterProfileSwitch()
+        await maybeRestartAfterProfileSwitch()
         return
       }
 
@@ -408,7 +411,7 @@ export function registerCommands(
       const profile = await profileManager.createProfile(name, authData)
       await profileManager.setActiveProfileId(profile.id)
       await onAuthChanged()
-      await maybeReloadWindowAfterProfileSwitch()
+      await maybeRestartAfterProfileSwitch()
     },
   )
 
@@ -463,7 +466,7 @@ export function registerCommands(
       try {
         const result = await profileManager.importProfilesFromTransfer(payload)
         await onAuthChanged()
-        await maybeReloadWindowAfterProfileSwitch()
+        await maybeRestartAfterProfileSwitch()
         vscode.window.showInformationMessage(
           vscode.l10n.t(
             'Import completed: created {0}, updated {1}, skipped {2}.',

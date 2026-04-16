@@ -5,7 +5,7 @@
   "configuration.debugLogging.description": "Enable verbose logging (never prints tokens)",
   "configuration.activeProfileScope.description": "Where to store active profile selection",
   "configuration.storageMode.description": "Where profile credentials are stored. In auto mode, SSH remote sessions use a shared remote file store and local sessions use SecretStorage",
-  "configuration.reloadWindowAfterProfileSwitch.description": "Restart the extension host after successful profile switch/import so Codex re-reads auth.json without reloading the full VS Code window",
+  "configuration.reloadWindowAfterProfileSwitch.description": "Restart the VS Code extension host after successful profile switch/import; fall back to reloading the window so the Codex extension re-reads auth.json",
   "configuration.statusBarClickBehavior.description": "Behavior when clicking the status bar profile item",
   "configuration.statusBarClickBehavior.cycle": "Cycle through all saved profiles",
   "configuration.statusBarClickBehavior.toggleLast": "Toggle between current and previous profile",

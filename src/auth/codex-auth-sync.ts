@@ -2,26 +2,38 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { AuthData } from '../types'
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object'
+}
+
+function requireNonEmptyString(value: unknown, fieldName: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`Cannot build Codex auth payload: missing ${fieldName}`)
+  }
+  return value
+}
+
 export function buildCodexAuthJson(authData: AuthData): string {
-  // Preserve the full auth payload when available so other clients that rely on
-  // additional metadata (for example token_data/auth status fields) keep working.
-  const payload: any =
-    authData.authJson && typeof authData.authJson === 'object'
-      ? JSON.parse(JSON.stringify(authData.authJson))
-      : {}
-
-  if (!payload.tokens || typeof payload.tokens !== 'object') {
-    payload.tokens = {}
+  if (isObjectRecord(authData.authJson)) {
+    const payload = JSON.parse(JSON.stringify(authData.authJson))
+    return `${JSON.stringify(payload, null, 2)}\n`
   }
 
-  payload.tokens.id_token = authData.idToken
-  payload.tokens.access_token = authData.accessToken
-  payload.tokens.refresh_token = authData.refreshToken
+  const idToken = requireNonEmptyString(authData.idToken, 'idToken')
+  const accessToken = requireNonEmptyString(authData.accessToken, 'accessToken')
+  const refreshToken = requireNonEmptyString(authData.refreshToken, 'refreshToken')
 
-  if (authData.accountId) {
-    payload.tokens.account_id = authData.accountId
+  const tokens: Record<string, string> = {
+    id_token: idToken,
+    access_token: accessToken,
+    refresh_token: refreshToken,
   }
-  return `${JSON.stringify(payload, null, 2)}\n`
+
+  if (typeof authData.accountId === 'string' && authData.accountId.trim()) {
+    tokens.account_id = authData.accountId
+  }
+
+  return `${JSON.stringify({ tokens }, null, 2)}\n`
 }
 
 export function syncCodexAuthFile(authPath: string, authData: AuthData) {

@@ -6,6 +6,13 @@ import { execFileSync } from 'child_process'
 import { AuthData } from '../types'
 import { errorLog } from '../utils/log'
 
+function asObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+  return value as Record<string, unknown>
+}
+
 function asNonEmptyString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
@@ -65,6 +72,44 @@ function parseJWT(token: string): any {
   }
 }
 
+export function extractAuthDataFromAuthJson(
+  authJson: unknown,
+): Partial<AuthData> | null {
+  const root = asObjectRecord(authJson)
+  if (!root) {
+    return null
+  }
+
+  const tokens = asObjectRecord(root.tokens)
+  if (!tokens) {
+    return null
+  }
+
+  const idToken = asNonEmptyString(tokens.id_token)
+  const accessToken = asNonEmptyString(tokens.access_token)
+  const refreshToken = asNonEmptyString(tokens.refresh_token)
+  const accountId = asNonEmptyString(tokens.account_id)
+
+  const idTokenPayload = idToken ? parseJWT(idToken) : {}
+  const authPayload = asObjectRecord(idTokenPayload['https://api.openai.com/auth'])
+  const defaultOrganization = getDefaultOrganization(authPayload)
+
+  return {
+    idToken,
+    accessToken,
+    refreshToken,
+    accountId,
+    defaultOrganizationId: defaultOrganization.id,
+    defaultOrganizationTitle: defaultOrganization.title,
+    chatgptUserId: asNonEmptyString(authPayload?.chatgpt_user_id),
+    userId: asNonEmptyString(authPayload?.user_id),
+    subject: asNonEmptyString(idTokenPayload.sub),
+    email: asNonEmptyString(idTokenPayload.email),
+    planType: asNonEmptyString(authPayload?.chatgpt_plan_type),
+    authJson: root,
+  }
+}
+
 /**
  * Resolve default Codex home path.
  */
@@ -119,30 +164,28 @@ export async function loadAuthDataFromFile(
     }
 
     const authContent = fs.readFileSync(authPath, 'utf8')
-    const authJson = JSON.parse(authContent)
-
-    if (!authJson.tokens) {
+    const authJson = JSON.parse(authContent) as unknown
+    const extracted = extractAuthDataFromAuthJson(authJson)
+    if (!extracted) {
+      return null
+    }
+    if (!extracted.idToken || !extracted.accessToken || !extracted.refreshToken) {
       return null
     }
 
-    // Parse ID token to get user info
-    const idTokenPayload = parseJWT(authJson.tokens.id_token)
-    const authPayload = idTokenPayload['https://api.openai.com/auth']
-    const defaultOrganization = getDefaultOrganization(authPayload)
-
     return {
-      idToken: authJson.tokens.id_token,
-      accessToken: authJson.tokens.access_token,
-      refreshToken: authJson.tokens.refresh_token,
-      accountId: authJson.tokens.account_id,
-      defaultOrganizationId: defaultOrganization.id,
-      defaultOrganizationTitle: defaultOrganization.title,
-      chatgptUserId: asNonEmptyString(authPayload?.chatgpt_user_id),
-      userId: asNonEmptyString(authPayload?.user_id),
-      subject: asNonEmptyString(idTokenPayload.sub),
-      email: idTokenPayload.email || 'Unknown',
-      planType: authPayload?.chatgpt_plan_type || 'Unknown',
-      authJson,
+      idToken: extracted.idToken,
+      accessToken: extracted.accessToken,
+      refreshToken: extracted.refreshToken,
+      accountId: extracted.accountId,
+      defaultOrganizationId: extracted.defaultOrganizationId,
+      defaultOrganizationTitle: extracted.defaultOrganizationTitle,
+      chatgptUserId: extracted.chatgptUserId,
+      userId: extracted.userId,
+      subject: extracted.subject,
+      email: extracted.email || 'Unknown',
+      planType: extracted.planType || 'Unknown',
+      authJson: extracted.authJson,
     }
   } catch (error) {
     errorLog('Error reading auth file:', error)

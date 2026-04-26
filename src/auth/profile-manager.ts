@@ -1,10 +1,14 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
-import { getDefaultCodexAuthPath, loadAuthDataFromFile } from './auth-manager'
-import { syncCodexAuthFile } from './codex-auth-sync'
+import {
+  extractAuthDataFromAuthJson,
+  getDefaultCodexAuthPath,
+  loadAuthDataFromFile,
+} from './auth-manager'
+import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
 import {
   SharedActiveProfile,
   SHARED_ACTIVE_PROFILE_FILENAME,
@@ -85,6 +89,7 @@ export class ProfileManager {
   constructor(private context: vscode.ExtensionContext) {}
 
   private lastSyncedProfileId: string | undefined
+  private lastSyncedAuthHash: string | undefined
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = vscode.workspace.getConfiguration('codexSwitch')
@@ -113,6 +118,24 @@ export class ProfileManager {
     return String(email || '')
       .trim()
       .toLowerCase()
+  }
+
+  private asNonEmptyString(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
+  }
+
+  private pickNonEmptyString(...values: unknown[]): string | undefined {
+    for (const value of values) {
+      const v = this.asNonEmptyString(value)
+      if (v) {
+        return v
+      }
+    }
+    return undefined
   }
 
   private normalizeIdentity(value: string | undefined): string {
@@ -210,6 +233,200 @@ export class ProfileManager {
     }
 
     return false
+  }
+
+  private matchesPreservationIdentity(
+    storedIdentity: {
+      chatgptUserId?: string
+      userId?: string
+      subject?: string
+    },
+    liveAuth: AuthData,
+  ): boolean {
+    const fields: Array<'chatgptUserId' | 'userId' | 'subject'> = [
+      'chatgptUserId',
+      'userId',
+      'subject',
+    ]
+
+    let comparedFieldCount = 0
+    let matchedFieldCount = 0
+    for (const field of fields) {
+      const storedValue = this.normalizeIdentity(storedIdentity[field])
+      const liveValue = this.normalizeIdentity(liveAuth[field])
+      if (!storedValue || !liveValue) {
+        continue
+      }
+
+      comparedFieldCount += 1
+      if (storedValue !== liveValue) {
+        return false
+      }
+      matchedFieldCount += 1
+    }
+
+    return comparedFieldCount > 0 && matchedFieldCount > 0
+  }
+
+  private getStoredPreservationIdentity(
+    profile: ProfileSummary,
+    storedAuth: AuthData | null,
+  ): {
+    chatgptUserId?: string
+    userId?: string
+    subject?: string
+  } {
+    return {
+      chatgptUserId: this.pickNonEmptyString(
+        storedAuth?.chatgptUserId,
+        profile.chatgptUserId,
+      ),
+      userId: this.pickNonEmptyString(storedAuth?.userId, profile.userId),
+      subject: this.pickNonEmptyString(storedAuth?.subject, profile.subject),
+    }
+  }
+
+  private matchesPreservationIdentityForProfile(
+    profile: ProfileSummary,
+    liveAuth: AuthData,
+    storedAuth: AuthData | null,
+  ): boolean {
+    const storedIdentity = this.getStoredPreservationIdentity(profile, storedAuth)
+    return this.matchesPreservationIdentity(storedIdentity, liveAuth)
+  }
+
+  private async loadLiveCodexAuthData(): Promise<AuthData | null> {
+    return loadAuthDataFromFile(getDefaultCodexAuthPath())
+  }
+
+  private parseLastRefreshValue(value: unknown): number | undefined {
+    if (typeof value === 'number') {
+      if (Number.isFinite(value)) {
+        return value
+      }
+      return undefined
+    }
+
+    if (typeof value !== 'string') {
+      return undefined
+    }
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return undefined
+    }
+
+    const parsedNumber = Number(trimmed)
+    if (Number.isFinite(parsedNumber)) {
+      return parsedNumber
+    }
+
+    const parsedDate = Date.parse(trimmed)
+    if (Number.isFinite(parsedDate)) {
+      return parsedDate
+    }
+
+    return undefined
+  }
+
+  private getAuthLastRefresh(authData: AuthData | null): number | undefined {
+    if (!authData || !authData.authJson || typeof authData.authJson !== 'object') {
+      return undefined
+    }
+    return this.parseLastRefreshValue(
+      (authData.authJson as Record<string, unknown>).last_refresh,
+    )
+  }
+
+  private hasCanonicalAuthJson(authData: AuthData | null): boolean {
+    return !!authData && !!authData.authJson && typeof authData.authJson === 'object'
+  }
+
+  private shouldReplaceStoredProfileAuthWithLive(
+    storedAuth: AuthData | null,
+    liveAuth: AuthData,
+  ): boolean {
+    if (!this.hasCanonicalAuthJson(liveAuth)) {
+      return false
+    }
+    if (!storedAuth) {
+      return true
+    }
+    if (!this.hasCanonicalAuthJson(storedAuth)) {
+      return true
+    }
+
+    const storedRefresh = this.getAuthLastRefresh(storedAuth)
+    const liveRefresh = this.getAuthLastRefresh(liveAuth)
+
+    if (storedRefresh === undefined) {
+      return true
+    }
+    if (liveRefresh === undefined) {
+      return false
+    }
+    return liveRefresh > storedRefresh
+  }
+
+  private async maybeReplaceProfileAuthWithLive(
+    profile: ProfileSummary,
+    liveAuth: AuthData,
+  ): Promise<boolean> {
+    const storedAuth = await this.loadAuthData(profile.id)
+    if (!this.matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)) {
+      return false
+    }
+
+    if (!this.shouldReplaceStoredProfileAuthWithLive(storedAuth, liveAuth)) {
+      return false
+    }
+    return this.replaceProfileAuth(profile.id, liveAuth)
+  }
+
+  private async findProfileByPreservationIdentity(
+    liveAuth: AuthData,
+    preferredProfileId?: string,
+  ): Promise<ProfileSummary | undefined> {
+    const profiles = await this.listProfiles()
+    const orderedProfiles = preferredProfileId
+      ? [
+          ...profiles.filter((p) => p.id === preferredProfileId),
+          ...profiles.filter((p) => p.id !== preferredProfileId),
+        ]
+      : profiles
+
+    for (const profile of orderedProfiles) {
+      const storedAuth = await this.loadAuthData(profile.id)
+      if (this.matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)) {
+        return profile
+      }
+    }
+    return undefined
+  }
+
+  private computeHash(content: string): string {
+    return createHash('sha256').update(content).digest('hex')
+  }
+
+  private readAuthFileHash(authPath: string): string | undefined {
+    try {
+      if (!fs.existsSync(authPath)) {
+        return undefined
+      }
+      const content = fs.readFileSync(authPath, 'utf8')
+      return this.computeHash(content)
+    } catch {
+      return undefined
+    }
+  }
+
+  private syncProfileAuthToCodexAuthFile(
+    profileId: string,
+    authData: AuthData,
+  ): void {
+    const content = buildCodexAuthJson(authData)
+    syncCodexAuthFile(getDefaultCodexAuthPath(), authData)
+    this.lastSyncedProfileId = profileId
+    this.lastSyncedAuthHash = this.computeHash(content)
   }
 
   private getStorageDir(): string {
@@ -759,8 +976,47 @@ export class ProfileManager {
       return
     }
 
-    syncCodexAuthFile(getDefaultCodexAuthPath(), authData)
-    this.lastSyncedProfileId = profileId
+    this.syncProfileAuthToCodexAuthFile(profileId, authData)
+  }
+
+  private async preserveStoredProfileAuthFromLive(profileId: string): Promise<void> {
+    try {
+      const profile = await this.getProfile(profileId)
+      if (!profile) {
+        return
+      }
+
+      const liveAuth = await this.loadLiveCodexAuthData()
+      if (!liveAuth) {
+        return
+      }
+
+      await this.maybeReplaceProfileAuthWithLive(profile, liveAuth)
+    } catch {
+      // Best-effort preservation; switching should continue.
+    }
+  }
+
+  private async captureLiveAuthForMatchingProfile(authPath: string): Promise<void> {
+    const hash = this.readAuthFileHash(authPath)
+    if (!hash) {
+      return
+    }
+    if (hash === this.lastSyncedAuthHash) {
+      return
+    }
+
+    const liveAuth = await this.loadLiveCodexAuthData()
+    if (!liveAuth) {
+      return
+    }
+
+    const matchingProfile = await this.findProfileByPreservationIdentity(liveAuth)
+    if (!matchingProfile) {
+      return
+    }
+
+    await this.maybeReplaceProfileAuthWithLive(matchingProfile, liveAuth)
   }
 
   async createProfile(
@@ -850,19 +1106,54 @@ export class ProfileManager {
       return null
     }
 
+    const extracted = extractAuthDataFromAuthJson(tokens.authJson)
+    const idToken = this.pickNonEmptyString(extracted?.idToken, tokens.idToken)
+    const accessToken = this.pickNonEmptyString(
+      extracted?.accessToken,
+      tokens.accessToken,
+    )
+    const refreshToken = this.pickNonEmptyString(
+      extracted?.refreshToken,
+      tokens.refreshToken,
+    )
+    if (!idToken || !accessToken || !refreshToken) {
+      return null
+    }
+    const emailFromAuth = this.pickNonEmptyString(extracted?.email, profile.email)
+    const planTypeFromAuth = this.pickNonEmptyString(
+      extracted?.planType,
+      profile.planType,
+    )
+    if (!emailFromAuth || !planTypeFromAuth) {
+      return null
+    }
+
     return {
-      idToken: tokens.idToken,
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-      accountId: tokens.accountId || profile.accountId,
-      defaultOrganizationId: profile.defaultOrganizationId,
-      defaultOrganizationTitle: profile.defaultOrganizationTitle,
-      chatgptUserId: profile.chatgptUserId,
-      userId: profile.userId,
-      subject: profile.subject,
-      email: profile.email,
-      planType: profile.planType,
-      authJson: tokens.authJson,
+      idToken,
+      accessToken,
+      refreshToken,
+      accountId: this.pickNonEmptyString(
+        extracted?.accountId,
+        tokens.accountId,
+        profile.accountId,
+      ),
+      defaultOrganizationId: this.pickNonEmptyString(
+        extracted?.defaultOrganizationId,
+        profile.defaultOrganizationId,
+      ),
+      defaultOrganizationTitle: this.pickNonEmptyString(
+        extracted?.defaultOrganizationTitle,
+        profile.defaultOrganizationTitle,
+      ),
+      chatgptUserId: this.pickNonEmptyString(
+        extracted?.chatgptUserId,
+        profile.chatgptUserId,
+      ),
+      userId: this.pickNonEmptyString(extracted?.userId, profile.userId),
+      subject: this.pickNonEmptyString(extracted?.subject, profile.subject),
+      email: emailFromAuth,
+      planType: planTypeFromAuth,
+      authJson: extracted?.authJson ? extracted.authJson : tokens.authJson,
     }
   }
 
@@ -956,12 +1247,25 @@ export class ProfileManager {
     return undefined
   }
 
-  async setActiveProfileId(profileId: string | undefined): Promise<boolean> {
+  private async setActiveProfileIdInState(
+    profileId: string | undefined,
+  ): Promise<void> {
+    if (this.isRemoteFilesMode()) {
+      if (profileId) {
+        this.writeSharedActiveProfile(profileId)
+      } else {
+        this.deleteSharedActiveProfile()
+      }
+      return
+    }
+
     const bucket = this.getStateBucket()
-    const prev = this.isRemoteFilesMode()
-      ? await this.getActiveProfileId()
-      : bucket.get<string>(ACTIVE_PROFILE_KEY) ||
-        bucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
+    await bucket.update(ACTIVE_PROFILE_KEY, profileId)
+    await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+  }
+
+  async setActiveProfileId(profileId: string | undefined): Promise<boolean> {
+    const prev = await this.getActiveProfileId()
 
     let authData: AuthData | null = null
     if (profileId) {
@@ -974,25 +1278,40 @@ export class ProfileManager {
       }
     }
 
+    if (prev && profileId && prev === profileId) {
+      if (!authData) {
+        return false
+      }
+      const selectedProfile = await this.getProfile(profileId)
+      const liveAuth = await this.loadLiveCodexAuthData()
+      if (selectedProfile && liveAuth) {
+        if (
+          this.matchesPreservationIdentityForProfile(
+            selectedProfile,
+            liveAuth,
+            authData,
+          )
+        ) {
+          if (this.shouldReplaceStoredProfileAuthWithLive(authData, liveAuth)) {
+            await this.replaceProfileAuth(selectedProfile.id, liveAuth)
+          }
+          return true
+        }
+      }
+      this.syncProfileAuthToCodexAuthFile(profileId, authData)
+      return true
+    }
+
     if (prev && profileId && prev !== profileId) {
+      await this.preserveStoredProfileAuthFromLive(prev)
       await this.setLastProfileId(prev)
     }
 
-    if (this.isRemoteFilesMode()) {
-      if (profileId) {
-        this.writeSharedActiveProfile(profileId)
-      } else {
-        this.deleteSharedActiveProfile()
-      }
-    } else {
-      await bucket.update(ACTIVE_PROFILE_KEY, profileId)
-      await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-    }
+    await this.setActiveProfileIdInState(profileId)
 
     if (profileId && authData) {
       // We already validated tokens above; avoid a second secret read.
-      syncCodexAuthFile(getDefaultCodexAuthPath(), authData)
-      this.lastSyncedProfileId = profileId
+      this.syncProfileAuthToCodexAuthFile(profileId, authData)
     }
     return true
   }
@@ -1038,6 +1357,46 @@ export class ProfileManager {
     return ok ? last : undefined
   }
 
+  async reconcileActiveProfileWithCodexAuthFile(): Promise<void> {
+    const activeId = await this.getActiveProfileId()
+    const activeProfile = activeId ? await this.getProfile(activeId) : undefined
+    const liveAuth = await this.loadLiveCodexAuthData()
+
+    if (liveAuth) {
+      const activeStoredAuth = activeProfile
+        ? await this.loadAuthData(activeProfile.id)
+        : null
+      if (
+        activeProfile &&
+        this.matchesPreservationIdentityForProfile(
+          activeProfile,
+          liveAuth,
+          activeStoredAuth,
+        )
+      ) {
+        await this.maybeReplaceProfileAuthWithLive(activeProfile, liveAuth)
+        return
+      }
+
+      const matched = await this.findProfileByPreservationIdentity(
+        liveAuth,
+        activeProfile ? activeProfile.id : undefined,
+      )
+      if (matched) {
+        if (activeProfile && activeId && activeId !== matched.id) {
+          await this.setLastProfileId(activeId)
+        }
+        await this.setActiveProfileIdInState(matched.id)
+        await this.maybeReplaceProfileAuthWithLive(matched, liveAuth)
+      }
+      return
+    }
+
+    if (activeId) {
+      await this.maybeSyncToCodexAuthFile(activeId)
+    }
+  }
+
   async syncActiveProfileToCodexAuthFile(): Promise<void> {
     const active = await this.getActiveProfileId()
     if (!active) {
@@ -1056,12 +1415,38 @@ export class ProfileManager {
       }
     }
 
-    const authDir = path.dirname(getDefaultCodexAuthPath())
+    const authPath = getDefaultCodexAuthPath()
+    let authDebounceTimer: ReturnType<typeof setTimeout> | undefined
+    const scheduleAuthCapture = () => {
+      if (authDebounceTimer) {
+        clearTimeout(authDebounceTimer)
+      }
+      authDebounceTimer = setTimeout(() => {
+        void (async () => {
+          try {
+            await this.captureLiveAuthForMatchingProfile(authPath)
+          } catch {
+            // Best-effort capture.
+          }
+          fire()
+        })()
+      }, 700)
+    }
+
+    disposables.push(
+      new vscode.Disposable(() => {
+        if (authDebounceTimer) {
+          clearTimeout(authDebounceTimer)
+        }
+      }),
+    )
+
+    const authDir = path.dirname(authPath)
     const authWatcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(vscode.Uri.file(authDir), 'auth.json'),
     )
-    authWatcher.onDidCreate(fire)
-    authWatcher.onDidChange(fire)
+    authWatcher.onDidCreate(scheduleAuthCapture)
+    authWatcher.onDidChange(scheduleAuthCapture)
     authWatcher.onDidDelete(fire)
     disposables.push(authWatcher)
 

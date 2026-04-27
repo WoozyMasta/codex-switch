@@ -43,5 +43,14 @@
   "Export profiles...": "匯出設定檔...",
   "Selected file is not a valid JSON profiles export.": "所選檔案不是有效的 JSON 設定檔匯出檔。",
   "Failed to import profiles: {0}": "匯入設定檔失敗：{0}",
-  "Add from current auth.json": "從目前的 auth.json 新增"
+  "Add from current auth.json": "從目前的 auth.json 新增",
+  "After completing the login flow, import the current environment auth.json from {0} as a profile.": "完成登入流程後，將位於 {0} 的目前環境 auth.json 匯入為設定檔。",
+  "Authentication required. Add a profile or run \"{0}\".": "需要驗證。請新增設定檔或執行「{0}」。",
+  "Codex auth file detected at {0}. Import it as a profile?": "在 {0} 偵測到 Codex auth 檔案。要將它匯入為設定檔嗎？",
+  "Command \"{0}\" copied to clipboard.": "指令「{0}」已複製到剪貼簿。",
+  "Could not read auth from {0}. Run \"{1}\" first.": "無法從 {0} 讀取 auth。請先執行「{1}」。",
+  "Delete broken profile": "刪除損壞的設定檔",
+  "Import current ~/.codex/auth.json": "匯入目前的 ~/.codex/auth.json",
+  "Profile \"{0}\" is missing tokens. Restore it before switching.": "設定檔「{0}」缺少權杖。請先還原後再切換。",
+  "Recover from remote store": "從遠端儲存還原"
 }

@@ -43,5 +43,14 @@
   "Export profiles...": "Esporta profili...",
   "Selected file is not a valid JSON profiles export.": "Il file selezionato non e un export JSON dei profili valido.",
   "Failed to import profiles: {0}": "Impossibile importare i profili: {0}",
-  "Add from current auth.json": "Aggiungi da auth.json corrente"
+  "Add from current auth.json": "Aggiungi da auth.json corrente",
+  "After completing the login flow, import the current environment auth.json from {0} as a profile.": "Dopo aver completato il login, importa l'auth.json dell'ambiente corrente da {0} come profilo.",
+  "Authentication required. Add a profile or run \"{0}\".": "Autenticazione richiesta. Aggiungi un profilo o esegui \"{0}\".",
+  "Codex auth file detected at {0}. Import it as a profile?": "File auth di Codex rilevato in {0}. Importarlo come profilo?",
+  "Command \"{0}\" copied to clipboard.": "Comando \"{0}\" copiato negli appunti.",
+  "Could not read auth from {0}. Run \"{1}\" first.": "Impossibile leggere auth da {0}. Esegui prima \"{1}\".",
+  "Delete broken profile": "Elimina profilo danneggiato",
+  "Import current ~/.codex/auth.json": "Importa ~/.codex/auth.json corrente",
+  "Profile \"{0}\" is missing tokens. Restore it before switching.": "Nel profilo \"{0}\" mancano i token. Ripristinali prima di cambiare.",
+  "Recover from remote store": "Recupera da archivio remoto"
 }

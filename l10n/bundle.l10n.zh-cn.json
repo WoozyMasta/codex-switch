@@ -43,5 +43,14 @@
   "Export profiles...": "导出配置文件...",
   "Selected file is not a valid JSON profiles export.": "所选文件不是有效的 JSON 配置文件导出。",
   "Failed to import profiles: {0}": "导入配置文件失败：{0}",
-  "Add from current auth.json": "从当前 auth.json 添加"
+  "Add from current auth.json": "从当前 auth.json 添加",
+  "After completing the login flow, import the current environment auth.json from {0} as a profile.": "完成登录流程后，将位于 {0} 的当前环境 auth.json 作为配置文件导入。",
+  "Authentication required. Add a profile or run \"{0}\".": "需要身份验证。请添加配置文件或运行“{0}”。",
+  "Codex auth file detected at {0}. Import it as a profile?": "在 {0} 检测到 Codex auth 文件。要将其导入为配置文件吗？",
+  "Command \"{0}\" copied to clipboard.": "命令“{0}”已复制到剪贴板。",
+  "Could not read auth from {0}. Run \"{1}\" first.": "无法从 {0} 读取 auth。请先运行“{1}”。",
+  "Delete broken profile": "删除损坏的配置文件",
+  "Import current ~/.codex/auth.json": "导入当前 ~/.codex/auth.json",
+  "Profile \"{0}\" is missing tokens. Restore it before switching.": "配置文件“{0}”缺少令牌。请先恢复后再切换。",
+  "Recover from remote store": "从远程存储恢复"
 }

@@ -175,7 +175,10 @@ function resolveWslDefaultCodexAuthPath(): string | null {
     return p || null
   } catch (error) {
     const now = Date.now()
-    if (now - lastWslAuthResolveErrorAt >= WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS) {
+    if (
+      now - lastWslAuthResolveErrorAt >=
+      WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS
+    ) {
       lastWslAuthResolveErrorAt = now
       errorLog('Error resolving WSL auth file path:', error)
     }

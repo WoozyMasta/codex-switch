@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning][].
   (PR #14 by @hugodeco)
 * Preserve refreshed Codex auth across profile switches to avoid restoring
   stale `auth.json` snapshots after token refresh.
-  (PR #17 by @hugodeco)
+  (PR #17 by @panella87)
 * Prevent duplicate import popups during `Login via Codex CLI` by guarding
   against repeated auth-file watcher events.
 * Cache WSL auth-path resolution and throttle repeated resolve-error logs to

@@ -13,6 +13,7 @@
   "command.profile.addFromFile.title": "Codex Switch: Importa da file",
   "command.profile.rename.title": "Codex Switch: Rinomina profilo",
   "command.profile.delete.title": "Codex Switch: Elimina profilo",
+  "command.profile.syncFromDefaultHome.title": "Codex Switch: Usa qui il profilo CODEX_HOME predefinito",
   "configuration.reloadWindowAfterProfileSwitch.description": "Riavviare l'extension host di VS Code dopo il cambio/importazione profilo riuscito; se non disponibile, ricaricare la finestra affinche l'estensione Codex rilegga auth.json",
   "configuration.statusBarClickBehavior.description": "Comportamento al clic sull'elemento profilo nella barra di stato",
   "configuration.statusBarClickBehavior.cycle": "Scorri tutti i profili salvati",
@@ -20,5 +21,7 @@
   "configuration.statusBarClickBehavior.selector": "Apri il menu di selezione del profilo",
   "command.profile.exportSettings.title": "Codex Switch: Esporta profili",
   "command.profile.importSettings.title": "Codex Switch: Importa profili",
-  "configuration.storageMode.description": "Dove vengono archiviate le credenziali del profilo. In modalita auto, le sessioni SSH remote usano un archivio file remoto condiviso e le sessioni locali usano SecretStorage"
+  "configuration.storageMode.description": "Dove vengono archiviate le credenziali del profilo. In modalita auto, le sessioni SSH remote usano un archivio file remoto condiviso e le sessioni locali usano SecretStorage",
+  "configuration.codexHome.enabled.description": "Mantieni separata la selezione del profilo attivo e precedente per ogni CODEX_HOME con cui e stato avviato VS Code",
+  "configuration.codexHome.inheritDefaultProfileWhenEmpty.description": "Quando lo stato per CODEX_HOME e abilitato, eredita il profilo attivo del CODEX_HOME predefinito solo se il CODEX_HOME corrente non ha ancora auth.json"
 }

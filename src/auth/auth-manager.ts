@@ -126,17 +126,25 @@ export function getDefaultCodexHomePath(): string {
   return process.env.CODEX_HOME || path.join(os.homedir(), '.codex')
 }
 
-/**
- * Resolve default Codex auth file path.
- */
-export function getDefaultCodexAuthPath(): string {
-  const localPath = path.join(getDefaultCodexHomePath(), 'auth.json')
+export function getCodexAuthPathForHome(codexHomePath: string): string {
+  return path.join(codexHomePath, 'auth.json')
+}
+
+export function getDefaultCodexAuthPathForHome(codexHomePath: string): string {
+  const localPath = getCodexAuthPathForHome(codexHomePath)
   if (!shouldUseWslAuthPath()) {
     return localPath
   }
 
   const wslPath = getCachedWslDefaultCodexAuthPath()
   return wslPath || localPath
+}
+
+/**
+ * Resolve default Codex auth file path.
+ */
+export function getDefaultCodexAuthPath(): string {
+  return getDefaultCodexAuthPathForHome(getDefaultCodexHomePath())
 }
 
 export function shouldUseWslAuthPath(): boolean {

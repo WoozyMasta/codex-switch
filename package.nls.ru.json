@@ -10,6 +10,8 @@
   "configuration.statusBarClickBehavior.cycle": "Переключать все сохраненные профили по кругу",
   "configuration.statusBarClickBehavior.toggleLast": "Переключаться между текущим и предыдущим профилем",
   "configuration.statusBarClickBehavior.selector": "Открыть меню выбора профиля",
+  "configuration.codexHome.enabled.description": "Хранить активный и предыдущий профиль отдельно для каждого CODEX_HOME, с которым запущен VS Code",
+  "configuration.codexHome.inheritDefaultProfileWhenEmpty.description": "Когда включено состояние по CODEX_HOME, наследовать активный профиль из стандартного CODEX_HOME только если в текущем CODEX_HOME еще нет auth.json",
   "command.login.title": "Codex Switch: Помощь по входу",
   "command.profile.manage.title": "Codex Switch: Управление профилями",
   "command.profile.login.title": "Codex Switch: Войти (Codex CLI)",
@@ -19,6 +21,7 @@
   "command.profile.addFromFile.title": "Codex Switch: Импортировать из файла",
   "command.profile.rename.title": "Codex Switch: Переименовать профиль",
   "command.profile.delete.title": "Codex Switch: Удалить профиль",
+  "command.profile.syncFromDefaultHome.title": "Codex Switch: Использовать здесь профиль из стандартного CODEX_HOME",
   "command.profile.exportSettings.title": "Codex Switch: Экспорт профилей",
   "command.profile.importSettings.title": "Codex Switch: Импорт профилей"
 }

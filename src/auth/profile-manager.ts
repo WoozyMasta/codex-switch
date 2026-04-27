@@ -5,16 +5,17 @@ import { createHash, randomUUID } from 'crypto'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import {
   extractAuthDataFromAuthJson,
-  getDefaultCodexAuthPath,
   loadAuthDataFromFile,
 } from './auth-manager'
 import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
 import {
   SharedActiveProfile,
+  getSharedActiveProfilesDir,
   SHARED_ACTIVE_PROFILE_FILENAME,
   deleteFileIfExists,
   ensureSharedStoreDirs,
   getSharedActiveProfilePath,
+  getSharedActiveProfilePathForHome,
   getSharedProfileSecretsPath,
   getSharedProfilesDir,
   getSharedProfilesPath,
@@ -22,6 +23,7 @@ import {
   readJsonFile,
   writeJsonFile,
 } from './shared-profile-store'
+import { CodexHomeManager } from '../codex-home/codex-home-manager'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -86,7 +88,10 @@ function asOptionalString(value: unknown): string | undefined {
 }
 
 export class ProfileManager {
-  constructor(private context: vscode.ExtensionContext) {}
+  constructor(
+    private context: vscode.ExtensionContext,
+    private codexHomeManager: CodexHomeManager,
+  ) {}
 
   private lastSyncedProfileId: string | undefined
   private lastSyncedAuthHash: string | undefined
@@ -299,7 +304,7 @@ export class ProfileManager {
   }
 
   private async loadLiveCodexAuthData(): Promise<AuthData | null> {
-    return loadAuthDataFromFile(getDefaultCodexAuthPath())
+    return loadAuthDataFromFile(this.getActiveCodexAuthPath())
   }
 
   private parseLastRefreshValue(value: unknown): number | undefined {
@@ -424,6 +429,18 @@ export class ProfileManager {
     return createHash('sha256').update(content).digest('hex')
   }
 
+  private getActiveCodexHome() {
+    return this.codexHomeManager.ensureActiveHome()
+  }
+
+  getActiveCodexAuthPath(): string {
+    return this.getActiveCodexHome().authPath
+  }
+
+  getActiveCodexHomeSummary() {
+    return this.getActiveCodexHome()
+  }
+
   private readAuthFileHash(authPath: string): string | undefined {
     try {
       if (!fs.existsSync(authPath)) {
@@ -441,7 +458,7 @@ export class ProfileManager {
     authData: AuthData,
   ): void {
     const content = buildCodexAuthJson(authData)
-    syncCodexAuthFile(getDefaultCodexAuthPath(), authData)
+    syncCodexAuthFile(this.getActiveCodexAuthPath(), authData)
     this.lastSyncedProfileId = profileId
     this.lastSyncedAuthHash = this.computeHash(content)
   }
@@ -544,24 +561,42 @@ export class ProfileManager {
     if (!this.isRemoteFilesMode()) {
       return null
     }
-    return readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
+    const home = this.getActiveCodexHome()
+    const perHome = readJsonFile<SharedActiveProfile>(
+      getSharedActiveProfilePathForHome(home.id),
+    )
+    if (perHome) {
+      return perHome
+    }
+
+    // Compatibility fallback for existing users. Only the default home may
+    // inherit the old single active-profile marker.
+    if (home.isDefault) {
+      return readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
+    }
+    return null
   }
 
   private writeSharedActiveProfile(profileId: string): void {
     if (!this.isRemoteFilesMode()) {
       return
     }
-    writeJsonFile(getSharedActiveProfilePath(), {
-      profileId,
-      updatedAt: new Date().toISOString(),
-    } satisfies SharedActiveProfile)
+    writeJsonFile(
+      getSharedActiveProfilePathForHome(this.getActiveCodexHome().id),
+      {
+        profileId,
+        updatedAt: new Date().toISOString(),
+      } satisfies SharedActiveProfile,
+    )
   }
 
   private deleteSharedActiveProfile(): void {
     if (!this.isRemoteFilesMode()) {
       return
     }
-    deleteFileIfExists(getSharedActiveProfilePath())
+    deleteFileIfExists(
+      getSharedActiveProfilePathForHome(this.getActiveCodexHome().id),
+    )
   }
 
   private readRemoteProfileTokens(profileId: string): ProfileTokens | null {
@@ -875,7 +910,7 @@ export class ProfileManager {
   private async inferActiveProfileIdFromAuthFile(): Promise<
     string | undefined
   > {
-    const authData = await loadAuthDataFromFile(getDefaultCodexAuthPath())
+    const authData = await loadAuthDataFromFile(this.getActiveCodexAuthPath())
     if (!authData) {
       return undefined
     }
@@ -924,12 +959,12 @@ export class ProfileManager {
     }
 
     if (pick === importLabel) {
-      const authData = await loadAuthDataFromFile(getDefaultCodexAuthPath())
+      const authData = await loadAuthDataFromFile(this.getActiveCodexAuthPath())
       if (!authData) {
         void vscode.window.showErrorMessage(
           vscode.l10n.t(
             'Could not read auth from {0}. Run "codex login" first.',
-            getDefaultCodexAuthPath(),
+            this.getActiveCodexAuthPath(),
           ),
         )
         return null
@@ -1206,6 +1241,81 @@ export class ProfileManager {
       : this.context.globalState
   }
 
+  private activeProfileKey(): string {
+    return `${ACTIVE_PROFILE_KEY}.${this.getActiveCodexHome().id}`
+  }
+
+  private lastProfileKey(): string {
+    return `${LAST_PROFILE_KEY}.${this.getActiveCodexHome().id}`
+  }
+
+  private shouldMigrateLegacyProfileState(): boolean {
+    const home = this.getActiveCodexHome()
+    return !home.usesPerHomeState || home.isDefault
+  }
+
+  private shouldInheritDefaultProfileWhenEmpty(): boolean {
+    const cfg = vscode.workspace.getConfiguration('codexSwitch')
+    return cfg.get<boolean>('codexHome.inheritDefaultProfileWhenEmpty', true)
+  }
+
+  private isNonDefaultPerHomeState(): boolean {
+    const home = this.getActiveCodexHome()
+    return home.usesPerHomeState && !home.isDefault
+  }
+
+  private isActiveCodexAuthFileMissing(): boolean {
+    return !fs.existsSync(this.getActiveCodexAuthPath())
+  }
+
+  private async getDefaultHomeActiveProfileId(): Promise<string | undefined> {
+    if (this.isRemoteFilesMode()) {
+      return (
+        readJsonFile<SharedActiveProfile>(
+          getSharedActiveProfilePathForHome('default'),
+        )?.profileId ||
+        readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
+          ?.profileId
+      )
+    }
+
+    const bucket = this.getStateBucket()
+    const legacyBucket = this.getLegacyStateBucket()
+    return (
+      bucket.get<string>(`${ACTIVE_PROFILE_KEY}.default`) ||
+      bucket.get<string>(ACTIVE_PROFILE_KEY) ||
+      bucket.get<string>(OLD_ACTIVE_PROFILE_KEY) ||
+      legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
+    )
+  }
+
+  private async inheritDefaultProfileIfCurrentHomeIsEmpty(): Promise<
+    string | undefined
+  > {
+    if (!this.isNonDefaultPerHomeState()) {
+      return undefined
+    }
+    if (!this.shouldInheritDefaultProfileWhenEmpty()) {
+      return undefined
+    }
+    if (!this.isActiveCodexAuthFileMissing()) {
+      return undefined
+    }
+
+    const defaultProfileId = await this.getDefaultHomeActiveProfileId()
+    if (!defaultProfileId) {
+      return undefined
+    }
+    const existing = await this.getProfile(defaultProfileId)
+    if (!existing) {
+      return undefined
+    }
+
+    await this.setActiveProfileIdInState(defaultProfileId)
+    this.codexHomeManager.setActiveProfileId(defaultProfileId)
+    return defaultProfileId
+  }
+
   async getActiveProfileId(): Promise<string | undefined> {
     if (this.isRemoteFilesMode()) {
       const explicit = this.readSharedActiveProfile()?.profileId
@@ -1215,61 +1325,80 @@ export class ProfileManager {
         if (explicit !== inferred) {
           this.writeSharedActiveProfile(inferred)
         }
+        this.codexHomeManager.setActiveProfileId(inferred)
         return inferred
       }
 
-      return explicit
+      if (explicit) {
+        this.codexHomeManager.setActiveProfileId(explicit)
+      }
+      return explicit || this.inheritDefaultProfileIfCurrentHomeIsEmpty()
     }
 
     const bucket = this.getStateBucket()
-    const v = bucket.get<string>(ACTIVE_PROFILE_KEY)
+    const activeKey = this.activeProfileKey()
+    const v = bucket.get<string>(activeKey)
     if (v) {
       const existing = await this.getProfile(v)
       if (existing) {
+        this.codexHomeManager.setActiveProfileId(v)
         return v
       }
 
       const inferred = await this.inferActiveProfileIdFromAuthFile()
       if (inferred && inferred !== v) {
-        await bucket.update(ACTIVE_PROFILE_KEY, inferred)
+        await bucket.update(activeKey, inferred)
         await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+        this.codexHomeManager.setActiveProfileId(inferred)
         return inferred
       }
 
-      await bucket.update(ACTIVE_PROFILE_KEY, undefined)
+      await bucket.update(activeKey, undefined)
       await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
       return undefined
     }
 
-    // Migrate old key lazily.
-    const legacyBucket = this.getLegacyStateBucket()
-    const old =
-      bucket.get<string>(OLD_ACTIVE_PROFILE_KEY) ||
-      legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
-    if (old) {
-      const existing = await this.getProfile(old)
-      if (existing) {
-        await bucket.update(ACTIVE_PROFILE_KEY, old)
-        await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-        await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-        return old
-      }
+    if (this.shouldMigrateLegacyProfileState()) {
+      // Migrate old key lazily only for the default home. A non-default
+      // external CODEX_HOME should not inherit the user's previous global
+      // active profile and write it into a fresh auth.json.
+      const legacyBucket = this.getLegacyStateBucket()
+      const old =
+        bucket.get<string>(ACTIVE_PROFILE_KEY) ||
+        bucket.get<string>(OLD_ACTIVE_PROFILE_KEY) ||
+        legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
+      if (old) {
+        const existing = await this.getProfile(old)
+        if (existing) {
+          await bucket.update(activeKey, old)
+          await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+          await bucket.update(ACTIVE_PROFILE_KEY, undefined)
+          await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+          this.codexHomeManager.setActiveProfileId(old)
+          return old
+        }
 
-      const inferred = await this.inferActiveProfileIdFromAuthFile()
-      await bucket.update(ACTIVE_PROFILE_KEY, inferred)
-      await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-      await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-      return inferred
+        const inferred = await this.inferActiveProfileIdFromAuthFile()
+        await bucket.update(activeKey, inferred)
+        await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+        await bucket.update(ACTIVE_PROFILE_KEY, undefined)
+        await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+        if (inferred) {
+          this.codexHomeManager.setActiveProfileId(inferred)
+        }
+        return inferred
+      }
     }
 
     const inferred = await this.inferActiveProfileIdFromAuthFile()
     if (inferred) {
-      await bucket.update(ACTIVE_PROFILE_KEY, inferred)
+      await bucket.update(activeKey, inferred)
       await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+      this.codexHomeManager.setActiveProfileId(inferred)
       return inferred
     }
 
-    return undefined
+    return this.inheritDefaultProfileIfCurrentHomeIsEmpty()
   }
 
   private async setActiveProfileIdInState(
@@ -1285,7 +1414,7 @@ export class ProfileManager {
     }
 
     const bucket = this.getStateBucket()
-    await bucket.update(ACTIVE_PROFILE_KEY, profileId)
+    await bucket.update(this.activeProfileKey(), profileId)
     await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
   }
 
@@ -1332,6 +1461,7 @@ export class ProfileManager {
       await this.setLastProfileId(prev)
     }
 
+    this.codexHomeManager.setActiveProfileId(profileId)
     await this.setActiveProfileIdInState(profileId)
 
     if (profileId && authData) {
@@ -1341,29 +1471,43 @@ export class ProfileManager {
     return true
   }
 
+  async syncActiveProfileFromDefaultHome(): Promise<string | undefined> {
+    const defaultProfileId = await this.getDefaultHomeActiveProfileId()
+    if (!defaultProfileId) {
+      return undefined
+    }
+    const ok = await this.setActiveProfileId(defaultProfileId)
+    return ok ? defaultProfileId : undefined
+  }
+
   async getLastProfileId(): Promise<string | undefined> {
     const bucket = this.getStateBucket()
-    const v = bucket.get<string>(LAST_PROFILE_KEY)
+    const lastKey = this.lastProfileKey()
+    const v = bucket.get<string>(lastKey)
     if (v) {
       return v
     }
 
-    const legacyBucket = this.getLegacyStateBucket()
-    const old =
-      bucket.get<string>(OLD_LAST_PROFILE_KEY) ||
-      legacyBucket.get<string>(OLD_LAST_PROFILE_KEY)
-    if (old) {
-      await bucket.update(LAST_PROFILE_KEY, old)
-      await bucket.update(OLD_LAST_PROFILE_KEY, undefined)
-      await legacyBucket.update(OLD_LAST_PROFILE_KEY, undefined)
-      return old
+    if (this.shouldMigrateLegacyProfileState()) {
+      const legacyBucket = this.getLegacyStateBucket()
+      const old =
+        bucket.get<string>(LAST_PROFILE_KEY) ||
+        bucket.get<string>(OLD_LAST_PROFILE_KEY) ||
+        legacyBucket.get<string>(OLD_LAST_PROFILE_KEY)
+      if (old) {
+        await bucket.update(lastKey, old)
+        await bucket.update(OLD_LAST_PROFILE_KEY, undefined)
+        await bucket.update(LAST_PROFILE_KEY, undefined)
+        await legacyBucket.update(OLD_LAST_PROFILE_KEY, undefined)
+        return old
+      }
     }
     return undefined
   }
 
   private async setLastProfileId(profileId: string | undefined): Promise<void> {
     const bucket = this.getStateBucket()
-    await bucket.update(LAST_PROFILE_KEY, profileId)
+    await bucket.update(this.lastProfileKey(), profileId)
     await bucket.update(OLD_LAST_PROFILE_KEY, undefined)
   }
 
@@ -1440,7 +1584,7 @@ export class ProfileManager {
       }
     }
 
-    const authPath = getDefaultCodexAuthPath()
+    const authPath = this.getActiveCodexAuthPath()
     let authDebounceTimer: ReturnType<typeof setTimeout> | undefined
     const scheduleAuthCapture = () => {
       if (authDebounceTimer) {
@@ -1489,14 +1633,25 @@ export class ProfileManager {
 
       const activeWatcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(
-          vscode.Uri.file(getSharedStoreRoot()),
-          SHARED_ACTIVE_PROFILE_FILENAME,
+          vscode.Uri.file(getSharedActiveProfilesDir()),
+          '*.json',
         ),
       )
       activeWatcher.onDidCreate(fire)
       activeWatcher.onDidChange(fire)
       activeWatcher.onDidDelete(fire)
       disposables.push(activeWatcher)
+
+      const legacyActiveWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(
+          vscode.Uri.file(getSharedStoreRoot()),
+          SHARED_ACTIVE_PROFILE_FILENAME,
+        ),
+      )
+      legacyActiveWatcher.onDidCreate(fire)
+      legacyActiveWatcher.onDidChange(fire)
+      legacyActiveWatcher.onDidDelete(fire)
+      disposables.push(legacyActiveWatcher)
 
       const tokenWatcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(

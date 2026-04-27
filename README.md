@@ -51,6 +51,33 @@ If disabled, it uses the Windows-local path.
 
 This prevents importing from one environment and switching in another.
 
+## CODEX_HOME-Aware State
+
+Codex Switch can separate active profile state by the `CODEX_HOME`
+that VS Code was launched with.
+This is useful when several VS Code windows
+are opened from different launchers or shells,
+each with its own `CODEX_HOME` and Codex account.
+
+This feature is off by default.
+Enable `codexSwitch.codexHome.enabled` to make active
+and previous profile selection local to the resolved `CODEX_HOME`.
+
+When a new non-default `CODEX_HOME` has no `auth.json` yet,
+Codex Switch can bootstrap it from the default home active profile.
+If `auth.json` already exists, Codex Switch leaves it untouched
+and tries to match it to a saved profile instead.
+This bootstrap behavior is controlled by
+`codexSwitch.codexHome.inheritDefaultProfileWhenEmpty`.
+
+Codex Switch does not change `CODEX_HOME` for an already running IDE.
+Start each VS Code window with the desired environment value instead,
+for example:
+
+```sh
+CODEX_HOME="$HOME/.codex-client-a" code .
+```
+
 ## Profile Matching
 
 Duplicate detection is identity-first.
@@ -75,7 +102,8 @@ In `remoteFiles` mode, data lives under `~/.codex-switch/`:
 
 * `profiles.json` stores profile metadata.
 * `profiles/<profile-id>.json` stores per-profile auth payloads.
-* `active-profile.json` stores shared active-profile state.
+* `active-profiles/<home-id>.json` stores shared active-profile state per
+  Codex home.
 
 Directories are created with `0700`, files with `0600`.
 
@@ -85,8 +113,8 @@ while credentials stay in SecretStorage.
 
 ## SSH Shared Mode
 
-In `remoteFiles` mode, active state is reconciled from both
-`~/.codex/auth.json` and `active-profile.json`.
+In `remoteFiles` mode, active state is reconciled from both the active
+Codex home's `auth.json` and its per-home active-profile marker.
 If current auth clearly matches a saved profile,
 that match wins and the shared active marker is updated.
 
@@ -111,6 +139,8 @@ Main settings:
 * `codexSwitch.storageMode` (`auto`, `secretStorage`, `remoteFiles`)
 * `codexSwitch.reloadWindowAfterProfileSwitch`
 * `codexSwitch.statusBarClickBehavior` (`cycle`, `toggleLast` or `selector`)
+* `codexSwitch.codexHome.enabled`
+* `codexSwitch.codexHome.inheritDefaultProfileWhenEmpty`
 
 When `codexSwitch.reloadWindowAfterProfileSwitch` is enabled, the extension
 tries to restart only the extension host after a successful switch or import.

@@ -13,6 +13,7 @@
   "command.profile.addFromFile.title": "Codex Switch: 파일에서 가져오기",
   "command.profile.rename.title": "Codex Switch: 프로필 이름 변경",
   "command.profile.delete.title": "Codex Switch: 프로필 삭제",
+  "command.profile.syncFromDefaultHome.title": "Codex Switch: 여기에서 기본 CODEX_HOME 프로필 사용",
   "configuration.reloadWindowAfterProfileSwitch.description": "프로필 전환/가져오기에 성공한 후 VS Code 확장 호스트를 다시 시작하고, 사용할 수 없으면 Codex 확장이 auth.json을 다시 읽도록 창을 다시 로드합니다",
   "configuration.statusBarClickBehavior.description": "상태 표시줄의 프로필 항목 클릭 동작",
   "configuration.statusBarClickBehavior.cycle": "저장된 모든 프로필을 순환 전환",
@@ -20,5 +21,7 @@
   "configuration.statusBarClickBehavior.selector": "프로필 선택 메뉴 열기",
   "command.profile.exportSettings.title": "Codex Switch: 프로필 내보내기",
   "command.profile.importSettings.title": "Codex Switch: 프로필 가져오기",
-  "configuration.storageMode.description": "프로필 자격 증명을 저장할 위치입니다. auto 모드에서는 SSH 원격 세션이 공유 원격 파일 저장소를 사용하고 로컬 세션은 SecretStorage를 사용합니다"
+  "configuration.storageMode.description": "프로필 자격 증명을 저장할 위치입니다. auto 모드에서는 SSH 원격 세션이 공유 원격 파일 저장소를 사용하고 로컬 세션은 SecretStorage를 사용합니다",
+  "configuration.codexHome.enabled.description": "VS Code가 실행될 때 사용된 각 CODEX_HOME별로 활성 및 이전 프로필 선택을 분리해 유지합니다",
+  "configuration.codexHome.inheritDefaultProfileWhenEmpty.description": "CODEX_HOME별 상태가 활성화된 경우, 현재 CODEX_HOME에 아직 auth.json이 없을 때만 기본 CODEX_HOME의 활성 프로필을 상속합니다"
 }

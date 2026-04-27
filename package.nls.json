@@ -10,6 +10,8 @@
   "configuration.statusBarClickBehavior.cycle": "Cycle through all saved profiles",
   "configuration.statusBarClickBehavior.toggleLast": "Toggle between current and previous profile",
   "configuration.statusBarClickBehavior.selector": "Open the profile selector menu",
+  "configuration.codexHome.enabled.description": "Keep active and previous profile selection separate for each CODEX_HOME that VS Code was launched with",
+  "configuration.codexHome.inheritDefaultProfileWhenEmpty.description": "When CODEX_HOME-scoped state is enabled, inherit the default CODEX_HOME active profile only if the current CODEX_HOME has no auth.json yet",
   "command.login.title": "Codex Switch: Login Help",
   "command.profile.manage.title": "Codex Switch: Manage Profiles",
   "command.profile.login.title": "Codex Switch: Login (Codex CLI)",
@@ -20,5 +22,6 @@
   "command.profile.exportSettings.title": "Codex Switch: Export Profiles",
   "command.profile.importSettings.title": "Codex Switch: Import Profiles",
   "command.profile.rename.title": "Codex Switch: Rename Profile",
-  "command.profile.delete.title": "Codex Switch: Delete Profile"
+  "command.profile.delete.title": "Codex Switch: Delete Profile",
+  "command.profile.syncFromDefaultHome.title": "Codex Switch: Use Default CODEX_HOME Profile Here"
 }

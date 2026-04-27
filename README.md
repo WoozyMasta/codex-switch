@@ -111,6 +111,8 @@ Main settings:
 * `codexSwitch.reloadWindowAfterProfileSwitch`
 * `codexSwitch.statusBarClickBehavior` (`cycle` or `toggleLast`)
 
+When `codexSwitch.reloadWindowAfterProfileSwitch` is enabled, the extension now tries to restart only the extension host after a successful switch/import so Codex re-reads `auth.json` without reloading the full VS Code window. If that command is unavailable, it falls back to a full window reload.
+
 ## Security Notes
 
 For local single-client use, `secretStorage` is the safer default.

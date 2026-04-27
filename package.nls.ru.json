@@ -5,7 +5,7 @@
   "configuration.debugLogging.description": "Включить подробные логи (токены не выводятся)",
   "configuration.activeProfileScope.description": "Где хранить выбор активного профиля",
   "configuration.storageMode.description": "Где хранить учетные данные профилей. В режиме auto для SSH remote используется общее файловое хранилище на сервере, а локально используется SecretStorage",
-  "configuration.reloadWindowAfterProfileSwitch.description": "Перезагружать окно VS Code после успешного переключения/импорта профиля, чтобы расширение Codex перечитало auth.json",
+  "configuration.reloadWindowAfterProfileSwitch.description": "После успешного переключения/импорта профиля перезапускать host расширений VS Code. Если действие недоступно, перезагружать окно, чтобы расширение Codex перечитало auth.json",
   "configuration.statusBarClickBehavior.description": "Поведение при клике по элементу профиля в статус-баре",
   "configuration.statusBarClickBehavior.cycle": "Переключать все сохраненные профили по кругу",
   "configuration.statusBarClickBehavior.toggleLast": "Переключаться между текущим и предыдущим профилем",

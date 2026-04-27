@@ -13,7 +13,7 @@
   "command.profile.addFromFile.title": "Codex Switch: 从文件导入",
   "command.profile.rename.title": "Codex Switch: 重命名配置文件",
   "command.profile.delete.title": "Codex Switch: 删除配置文件",
-  "configuration.reloadWindowAfterProfileSwitch.description": "在成功切换/导入配置后重新加载 VS Code 窗口，以便 Codex 扩展重新读取 auth.json",
+  "configuration.reloadWindowAfterProfileSwitch.description": "成功切换/导入配置后重启 VS Code 扩展主机；如果不可用，则重新加载窗口，以便 Codex 扩展重新读取 auth.json",
   "configuration.statusBarClickBehavior.description": "点击状态栏配置文件项时的行为",
   "configuration.statusBarClickBehavior.cycle": "循环切换所有已保存的配置文件",
   "configuration.statusBarClickBehavior.toggleLast": "在当前配置文件与上一个配置文件之间切换",

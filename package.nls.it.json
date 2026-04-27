@@ -13,7 +13,7 @@
   "command.profile.addFromFile.title": "Codex Switch: Importa da file",
   "command.profile.rename.title": "Codex Switch: Rinomina profilo",
   "command.profile.delete.title": "Codex Switch: Elimina profilo",
-  "configuration.reloadWindowAfterProfileSwitch.description": "Ricarica la finestra di VS Code dopo il cambio/importazione profilo riuscito, cosi l'estensione Codex rilegge auth.json",
+  "configuration.reloadWindowAfterProfileSwitch.description": "Riavviare l'extension host di VS Code dopo il cambio/importazione profilo riuscito; se non disponibile, ricaricare la finestra affinche l'estensione Codex rilegga auth.json",
   "configuration.statusBarClickBehavior.description": "Comportamento al clic sull'elemento profilo nella barra di stato",
   "configuration.statusBarClickBehavior.cycle": "Scorri tutti i profili salvati",
   "configuration.statusBarClickBehavior.toggleLast": "Alterna tra profilo corrente e precedente",

@@ -19,7 +19,9 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   profileManager: ProfileManager,
   profileRateLimitService: ProfileRateLimitService,
-  onAuthChanged: (options?: { forceRateLimitRefresh?: boolean }) => Promise<void>,
+  onAuthChanged: (options?: {
+    forceRateLimitRefresh?: boolean
+  }) => Promise<void>,
 ) {
   type StatusBarClickBehavior = 'cycle' | 'toggleLast' | 'selector'
   const restartExtensionHostCommandId = 'workbench.action.restartExtensionHost'
@@ -114,7 +116,11 @@ export function registerCommands(
 
     await vscode.workspace
       .getConfiguration('codexSwitch')
-      .update('codexCliPath', selection[0].fsPath, vscode.ConfigurationTarget.Global)
+      .update(
+        'codexCliPath',
+        selection[0].fsPath,
+        vscode.ConfigurationTarget.Global,
+      )
     vscode.window.showInformationMessage(vscode.l10n.t('Codex CLI path saved.'))
     return true
   }

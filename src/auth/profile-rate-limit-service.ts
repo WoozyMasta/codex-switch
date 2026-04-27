@@ -57,7 +57,10 @@ interface RateLimitSnapshotPayload {
 
 interface RateLimitResponsePayload {
   rateLimits: RateLimitSnapshotPayload | null
-  rateLimitsByLimitId: Record<string, RateLimitSnapshotPayload | undefined> | null
+  rateLimitsByLimitId: Record<
+    string,
+    RateLimitSnapshotPayload | undefined
+  > | null
 }
 
 interface CacheEntry {
@@ -138,7 +141,9 @@ class CodexAppServerClient {
   }
 
   async readRateLimits(): Promise<RateLimitResponsePayload> {
-    return (await this.sendRequest('account/rateLimits/read')) as RateLimitResponsePayload
+    return (await this.sendRequest(
+      'account/rateLimits/read',
+    )) as RateLimitResponsePayload
   }
 
   async dispose(): Promise<void> {
@@ -161,7 +166,10 @@ class CodexAppServerClient {
     ])
   }
 
-  private async sendRequest(method: string, params?: unknown): Promise<unknown> {
+  private async sendRequest(
+    method: string,
+    params?: unknown,
+  ): Promise<unknown> {
     const id = this.nextRequestId++
 
     return await new Promise((resolve, reject) => {
@@ -194,7 +202,10 @@ class CodexAppServerClient {
       return
     }
 
-    let message: JsonRpcSuccessResponse | JsonRpcErrorResponse | { id?: JsonRpcId; method?: string }
+    let message:
+      | JsonRpcSuccessResponse
+      | JsonRpcErrorResponse
+      | { id?: JsonRpcId; method?: string }
     try {
       message = JSON.parse(trimmed)
     } catch (error) {
@@ -220,7 +231,9 @@ class CodexAppServerClient {
     }
 
     if (!('result' in message)) {
-      pending.reject(new Error('Codex app-server returned an invalid response.'))
+      pending.reject(
+        new Error('Codex app-server returned an invalid response.'),
+      )
       return
     }
 
@@ -247,7 +260,10 @@ class CodexAppServerClient {
 
 export class ProfileRateLimitService {
   private readonly cache = new Map<string, CacheEntry>()
-  private readonly inflight = new Map<string, Promise<ProfileRateLimits | null>>()
+  private readonly inflight = new Map<
+    string,
+    Promise<ProfileRateLimits | null>
+  >()
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
     return profiles.map((profile) => ({
@@ -452,8 +468,9 @@ function findWindowByDuration(
   targetDurationMins: number,
 ): RateLimitWindowPayload | null {
   return (
-    windows.find((window) => getWindowDurationMins(window) === targetDurationMins) ||
-    null
+    windows.find(
+      (window) => getWindowDurationMins(window) === targetDurationMins,
+    ) || null
   )
 }
 

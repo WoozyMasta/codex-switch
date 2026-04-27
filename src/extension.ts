@@ -105,7 +105,11 @@ export function activate(context: vscode.ExtensionContext) {
   resetAutoRefreshTimer()
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('codexSwitch.rateLimitAutoRefreshIntervalSeconds')) {
+      if (
+        event.affectsConfiguration(
+          'codexSwitch.rateLimitAutoRefreshIntervalSeconds',
+        )
+      ) {
         resetAutoRefreshTimer()
       }
     }),

@@ -47,7 +47,10 @@ function createCodexCommand(
   executable: string,
   options: { useShellForWindowsCommandName?: boolean } = {},
 ): CodexCliCommand {
-  if (process.platform === 'win32' && executable.toLowerCase().endsWith('.cmd')) {
+  if (
+    process.platform === 'win32' &&
+    executable.toLowerCase().endsWith('.cmd')
+  ) {
     return {
       command: process.env.ComSpec || 'cmd.exe',
       args: ['/d', '/s', '/c', `"${executable}" app-server`],
@@ -103,11 +106,18 @@ function addCommonCodexSearchDirectories(
   addDir(path.join(os.homedir(), '.cargo', 'bin'))
 
   if (process.platform === 'win32') {
-    addDir(process.env.APPDATA && path.join(process.env.APPDATA, NPM_BIN_DIRECTORY))
-    addDir(process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, NPM_BIN_DIRECTORY))
+    addDir(
+      process.env.APPDATA && path.join(process.env.APPDATA, NPM_BIN_DIRECTORY),
+    )
+    addDir(
+      process.env.LOCALAPPDATA &&
+        path.join(process.env.LOCALAPPDATA, NPM_BIN_DIRECTORY),
+    )
     addDir(path.join(os.homedir(), 'AppData', 'Roaming', NPM_BIN_DIRECTORY))
     addDir(path.join(os.homedir(), 'AppData', 'Local', NPM_BIN_DIRECTORY))
-    addDir(process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'nodejs'))
+    addDir(
+      process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'nodejs'),
+    )
     addDir(
       process.env['ProgramFiles(x86)'] &&
         path.join(process.env['ProgramFiles(x86)'], 'nodejs'),

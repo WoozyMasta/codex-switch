@@ -59,7 +59,9 @@ export function createProfileTooltip(
     for (const p of profiles) {
       const name = escapeTableCell(p.name)
       const plan = escapeTableCell(getProfilePlanDisplay(p.planType))
-      const fiveHour = escapeTableCell(formatRateLimitCell(p.rateLimits?.fiveHour))
+      const fiveHour = escapeTableCell(
+        formatRateLimitCell(p.rateLimits?.fiveHour),
+      )
       const weekly = escapeTableCell(formatRateLimitCell(p.rateLimits?.weekly))
       const switchUri = buildCommandUri('codex-switch.profile.activate', [p.id])
       const emailDisplay =

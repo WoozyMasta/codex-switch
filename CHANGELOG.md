@@ -40,7 +40,7 @@ and this project adheres to [Semantic Versioning][].
 * Escape HTML-significant characters in tooltip markdown values to prevent
   unintended HTML rendering from imported profile data.
 
-[1.3.2]: https://github.com/WoozyMasta/codex-switch/compare/v1.3.1...v1.3.2
+[1.3.2]: https://github.com/WoozyMasta/codex-switch/compare/1.3.1...1.3.2
 
 ## [1.3.1][] - 2026-04-05
 
@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning][].
 
 * Automatic publishing to <https://open-vsx.org/> in the release workflow.
 
-[1.3.1]: https://github.com/WoozyMasta/codex-switch/compare/v1.3.0...v1.3.1
+[1.3.1]: https://github.com/WoozyMasta/codex-switch/compare/1.3.0...1.3.1
 
 ## [1.3.0][] - 2026-03-16
 
@@ -89,7 +89,7 @@ and this project adheres to [Semantic Versioning][].
 * Removed `auth.json.bak.*` backup creation during sync.
   (PR #7 by @iqdoctor)
 
-[1.3.0]: https://github.com/WoozyMasta/codex-switch/compare/v1.2.0...v1.3.0
+[1.3.0]: https://github.com/WoozyMasta/codex-switch/compare/1.2.0...1.3.0
 
 ## [1.2.0][] - 2026-02-15
 
@@ -97,8 +97,8 @@ and this project adheres to [Semantic Versioning][].
 
 * First public release
 
-[1.2.0]: https://github.com/WoozyMasta/codex-switch/tree/v1.2.0
+[1.2.0]: https://github.com/WoozyMasta/codex-switch/tree/1.2.0
 
 <!--links-->
 [Keep a Changelog]: https://keepachangelog.com/en/1.1.0/
-[Semantic Versioning]: https://semver.org/spec/v2.0.0.html
+[Semantic Versioning]: https://semver.org/spec/2.0.0.html

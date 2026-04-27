@@ -30,7 +30,9 @@ export function activate(context: vscode.ExtensionContext) {
   registerCommands(context, profileManager, refreshUi)
   context.subscriptions.push(
     ...profileManager.createWatchers(() => {
-      void refreshUi()
+      void profileManager
+        ?.syncCurrentAuthToActiveProfileIfMatching()
+        .finally(() => void refreshUi())
     }),
   )
   void refreshUi()

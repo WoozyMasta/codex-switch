@@ -763,6 +763,53 @@ export class ProfileManager {
     this.lastSyncedProfileId = profileId
   }
 
+  private authJsonEqual(
+    left: Record<string, unknown> | undefined,
+    right: Record<string, unknown> | undefined,
+  ): boolean {
+    if (!left && !right) {
+      return true
+    }
+    if (!left || !right) {
+      return false
+    }
+    try {
+      return JSON.stringify(left) === JSON.stringify(right)
+    } catch {
+      return false
+    }
+  }
+
+  private async syncAuthFileToProfileIfMatching(
+    profileId: string,
+  ): Promise<boolean> {
+    const profile = await this.getProfile(profileId)
+    if (!profile) {
+      return false
+    }
+
+    const authData = await loadAuthDataFromFile(getDefaultCodexAuthPath())
+    if (!authData || !this.matchesAuth(profile, authData)) {
+      return false
+    }
+
+    const tokens = await this.readStoredTokens(profileId)
+    const hasChanged =
+      !tokens ||
+      tokens.idToken !== authData.idToken ||
+      tokens.accessToken !== authData.accessToken ||
+      tokens.refreshToken !== authData.refreshToken ||
+      tokens.accountId !== authData.accountId ||
+      !this.authJsonEqual(tokens.authJson, authData.authJson)
+
+    if (hasChanged) {
+      await this.replaceProfileAuth(profileId, authData)
+    }
+
+    this.lastSyncedProfileId = profileId
+    return true
+  }
+
   async createProfile(
     name: string,
     authData: AuthData,
@@ -1012,7 +1059,19 @@ export class ProfileManager {
     if (!active) {
       return
     }
+    const syncedFromAuth = await this.syncAuthFileToProfileIfMatching(active)
+    if (syncedFromAuth) {
+      return
+    }
     await this.maybeSyncToCodexAuthFile(active)
+  }
+
+  async syncCurrentAuthToActiveProfileIfMatching(): Promise<void> {
+    const active = await this.getActiveProfileId()
+    if (!active) {
+      return
+    }
+    await this.syncAuthFileToProfileIfMatching(active)
   }
 
   createWatchers(onChanged: () => void): vscode.Disposable[] {

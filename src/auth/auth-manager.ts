@@ -6,6 +6,13 @@ import { execFileSync } from 'child_process'
 import { AuthData } from '../types'
 import { errorLog } from '../utils/log'
 
+const WSL_AUTH_PATH_CACHE_TTL_MS = 60 * 1000
+const WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS = 60 * 1000
+
+let cachedWslAuthPath: string | null | undefined
+let cachedWslAuthPathAt = 0
+let lastWslAuthResolveErrorAt = 0
+
 function asObjectRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object') {
     return undefined
@@ -128,7 +135,7 @@ export function getDefaultCodexAuthPath(): string {
     return localPath
   }
 
-  const wslPath = resolveWslDefaultCodexAuthPath()
+  const wslPath = getCachedWslDefaultCodexAuthPath()
   return wslPath || localPath
 }
 
@@ -139,6 +146,21 @@ export function shouldUseWslAuthPath(): boolean {
   return !!vscode.workspace
     .getConfiguration('chatgpt')
     .get<boolean>('runCodexInWindowsSubsystemForLinux', false)
+}
+
+function getCachedWslDefaultCodexAuthPath(): string | null {
+  const now = Date.now()
+  if (
+    cachedWslAuthPath !== undefined &&
+    now - cachedWslAuthPathAt < WSL_AUTH_PATH_CACHE_TTL_MS
+  ) {
+    return cachedWslAuthPath
+  }
+
+  const resolved = resolveWslDefaultCodexAuthPath()
+  cachedWslAuthPath = resolved
+  cachedWslAuthPathAt = now
+  return resolved
 }
 
 function resolveWslDefaultCodexAuthPath(): string | null {
@@ -152,7 +174,11 @@ function resolveWslDefaultCodexAuthPath(): string | null {
     const p = String(out || '').trim()
     return p || null
   } catch (error) {
-    errorLog('Error resolving WSL auth file path:', error)
+    const now = Date.now()
+    if (now - lastWslAuthResolveErrorAt >= WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS) {
+      lastWslAuthResolveErrorAt = now
+      errorLog('Error resolving WSL auth file path:', error)
+    }
     return null
   }
 }

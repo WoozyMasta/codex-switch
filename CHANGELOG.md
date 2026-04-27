@@ -13,6 +13,35 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
+## [1.3.2][] - 2026-04-27
+
+### Changed
+
+* When `codexSwitch.reloadWindowAfterProfileSwitch` is enabled, profile
+  switch/import now prefers restarting only the extension host and falls back
+  to full window reload if restart is unavailable or fails.
+  (PR #13 by @hugodeco)
+* Added `selector` behavior for `codexSwitch.statusBarClickBehavior` to open
+  the profile picker from status bar click.
+* Updated localization and docs for the reload-after-switch behavior.
+
+### Fixed
+
+* Recover active profile from current `auth.json` when saved active profile id
+  is missing or points to an orphaned profile.
+  (PR #14 by @hugodeco)
+* Preserve refreshed Codex auth across profile switches to avoid restoring
+  stale `auth.json` snapshots after token refresh.
+  (PR #17 by @hugodeco)
+* Prevent duplicate import popups during `Login via Codex CLI` by guarding
+  against repeated auth-file watcher events.
+* Cache WSL auth-path resolution and throttle repeated resolve-error logs to
+  reduce extension-host stalls and log noise on Windows + WSL setups.
+* Escape HTML-significant characters in tooltip markdown values to prevent
+  unintended HTML rendering from imported profile data.
+
+[1.3.2]: https://github.com/WoozyMasta/codex-switch/compare/v1.3.1...v1.3.2
+
 ## [1.3.1][] - 2026-04-05
 
 ### Added

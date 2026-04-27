@@ -1,6 +1,5 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
 import { once } from 'events'
-import { existsSync } from 'fs'
 import * as fs from 'fs/promises'
 import * as os from 'os'
 import * as path from 'path'
@@ -13,15 +12,14 @@ import {
   ProfileRateLimits,
   ProfileSummary,
 } from '../types'
+import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
 import { debugLog } from '../utils/log'
 
 const RATE_LIMIT_CACHE_TTL_MS = 60 * 1000
-const APP_SERVER_REQUEST_TIMEOUT_MS = 8_000
+const APP_SERVER_REQUEST_TIMEOUT_MS = 5_000
 const APP_SERVER_EXIT_TIMEOUT_MS = 2_000
 const FIVE_HOUR_WINDOW_MINUTES = 5 * 60
 const WEEKLY_WINDOW_MINUTES = 7 * 24 * 60
-const WINDOWS_CLI_DIRECTORY = 'npm'
-const WINDOWS_CLI_FILENAME = 'codex.cmd'
 const CODEX_LIMIT_ID = 'codex'
 
 type JsonRpcId = number | string
@@ -43,9 +41,13 @@ interface JsonRpcErrorResponse {
 }
 
 interface RateLimitWindowPayload {
-  usedPercent: number
-  windowDurationMins: number | null
-  resetsAt: number | null
+  usedPercent?: number
+  used_percent?: number
+  windowDurationMins?: number | null
+  window_minutes?: number | null
+  resetsAt?: number | null
+  resets_at?: number | null
+  resets_in_seconds?: number | null
 }
 
 interface RateLimitSnapshotPayload {
@@ -66,6 +68,7 @@ interface CacheEntry {
 
 interface DecorateProfilesOptions {
   forceRefresh?: boolean
+  forceRefreshProfileIds?: readonly string[]
 }
 
 class CodexAppServerClient {
@@ -258,13 +261,15 @@ export class ProfileRateLimitService {
     profiles: ProfileSummary[],
     options: DecorateProfilesOptions = {},
   ): Promise<ProfileSummary[]> {
+    const forceRefreshIds = new Set(options.forceRefreshProfileIds || [])
+
     return await Promise.all(
       profiles.map(async (profile) => ({
         ...profile,
         rateLimits: await this.getRateLimits(
           profileManager,
           profile,
-          options.forceRefresh === true,
+          options.forceRefresh === true || forceRefreshIds.has(profile.id),
         ),
       })),
     )
@@ -297,7 +302,9 @@ export class ProfileRateLimitService {
       }
     }
 
-    const inflightKey = `${profile.id}:${profile.updatedAt}`
+    const inflightKey = `${profile.id}:${profile.updatedAt}:${
+      forceRefresh ? 'force' : 'cached'
+    }`
     const existing = this.inflight.get(inflightKey)
     if (existing) {
       return await existing
@@ -365,7 +372,11 @@ async function queryRateLimitsViaTemporaryCodexHome(
   const authFilePath = path.join(tempHomePath, 'auth.json')
 
   try {
-    await fs.writeFile(authFilePath, buildCodexAuthJson(authData), 'utf8')
+    await fs.chmod(tempHomePath, 0o700).catch(() => undefined)
+    await fs.writeFile(authFilePath, buildCodexAuthJson(authData), {
+      encoding: 'utf8',
+      mode: 0o600,
+    })
 
     const client = new CodexAppServerClient(tempHomePath)
     try {
@@ -376,12 +387,36 @@ async function queryRateLimitsViaTemporaryCodexHome(
       await client.dispose()
     }
   } finally {
+    await removeTemporaryCodexHome(tempHomePath, authFilePath)
+  }
+}
+
+async function removeTemporaryCodexHome(
+  tempHomePath: string,
+  authFilePath: string,
+): Promise<void> {
+  try {
+    await fs.unlink(authFilePath)
+  } catch {
+    try {
+      await fs.writeFile(authFilePath, '{}', 'utf8')
+    } catch {
+      // Best effort: avoid leaving token-bearing temp files behind.
+    }
+  }
+
+  try {
     await fs.rm(tempHomePath, {
       recursive: true,
       force: true,
-      maxRetries: 2,
-      retryDelay: 100,
+      maxRetries: 5,
+      retryDelay: 250,
     })
+  } catch (error) {
+    debugLog(
+      `Could not remove temporary Codex home ${tempHomePath}:`,
+      error instanceof Error ? error.message : error,
+    )
   }
 }
 
@@ -417,7 +452,7 @@ function findWindowByDuration(
   targetDurationMins: number,
 ): RateLimitWindowPayload | null {
   return (
-    windows.find((window) => window.windowDurationMins === targetDurationMins) ||
+    windows.find((window) => getWindowDurationMins(window) === targetDurationMins) ||
     null
   )
 }
@@ -425,16 +460,49 @@ function findWindowByDuration(
 function normalizeWindow(
   window: RateLimitWindowPayload | null | undefined,
 ): ProfileRateLimitWindow | null {
-  if (!window || typeof window.usedPercent !== 'number') {
+  const usedPercent = getWindowUsedPercent(window)
+  if (usedPercent === null) {
     return null
   }
 
-  const usedPercent = clampPercent(window.usedPercent)
   return {
     usedPercent,
     remainingPercent: clampPercent(100 - usedPercent),
-    resetsAt: window.resetsAt,
+    resetsAt: getWindowResetTimestamp(window),
   }
+}
+
+function getWindowUsedPercent(
+  window: RateLimitWindowPayload | null | undefined,
+): number | null {
+  const usedPercent = window?.usedPercent ?? window?.used_percent
+  return typeof usedPercent === 'number' ? clampPercent(usedPercent) : null
+}
+
+function getWindowDurationMins(window: RateLimitWindowPayload): number | null {
+  return window.windowDurationMins ?? window.window_minutes ?? null
+}
+
+function getWindowResetTimestamp(
+  window: RateLimitWindowPayload | null | undefined,
+): number | null {
+  if (!window) {
+    return null
+  }
+
+  if (typeof window.resetsAt === 'number') {
+    return window.resetsAt
+  }
+
+  if (typeof window.resets_at === 'number') {
+    return window.resets_at
+  }
+
+  if (typeof window.resets_in_seconds === 'number') {
+    return Math.floor(Date.now() / 1000) + window.resets_in_seconds
+  }
+
+  return null
 }
 
 function clampPercent(value: number): number {
@@ -444,30 +512,19 @@ function clampPercent(value: number): number {
 function spawnAppServer(
   env: Record<string, string | undefined>,
 ): ChildProcessWithoutNullStreams {
-  if (process.platform === 'win32') {
-    const codexCommand = resolveWindowsCodexCommand()
-    return spawn(codexCommand, ['app-server'], {
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      windowsHide: true,
-      shell: true,
-    })
+  const codexCommand = resolveCodexCliCommand()
+  if (!codexCommand) {
+    throw new Error(
+      'Codex CLI was not found. Configure codexSwitch.codexCliPath or make codex available in PATH.',
+    )
   }
 
-  return spawn('codex', ['app-server'], {
+  return spawn(codexCommand.command, codexCommand.args, {
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+    shell: codexCommand.useShell,
   })
-}
-
-function resolveWindowsCodexCommand(): string {
-  const appData = process.env.APPDATA
-  if (!appData) {
-    return WINDOWS_CLI_FILENAME
-  }
-
-  const candidate = path.join(appData, WINDOWS_CLI_DIRECTORY, WINDOWS_CLI_FILENAME)
-  return existsSync(candidate) ? candidate : WINDOWS_CLI_FILENAME
 }
 
 function formatExitReason(code: number | null, signal: string | null): string {

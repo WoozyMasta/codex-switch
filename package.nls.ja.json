@@ -14,6 +14,8 @@
   "command.profile.rename.title": "Codex Switch: プロファイル名を変更",
   "command.profile.delete.title": "Codex Switch: プロファイルを削除",
   "configuration.reloadWindowAfterProfileSwitch.description": "プロファイルの切り替え/インポート成功後に VS Code の拡張機能ホストを再起動し、利用できない場合はウィンドウを再読み込みして Codex 拡張機能が auth.json を再読込するようにします",
+  "configuration.codexCliPath.description": "アカウントのレート制限に使用する Codex CLI バイナリのパスです。空のままにすると自動検出します",
+  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "VS Code ウィンドウにフォーカスがある間、Codex アカウントのレート制限を自動更新する間隔です。手動更新のみにするには 0 を設定します",
   "configuration.statusBarClickBehavior.description": "ステータスバーのプロファイル項目をクリックしたときの動作",
   "configuration.statusBarClickBehavior.cycle": "保存済みプロファイルを順番に切り替える",
   "configuration.statusBarClickBehavior.toggleLast": "現在のプロファイルと前回のプロファイルを切り替える",

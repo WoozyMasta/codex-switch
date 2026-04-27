@@ -14,6 +14,8 @@
   "command.profile.rename.title": "Codex Switch: Renomear perfil",
   "command.profile.delete.title": "Codex Switch: Excluir perfil",
   "configuration.reloadWindowAfterProfileSwitch.description": "Reiniciar o extension host do VS Code apos trocar/importar perfil com sucesso; se nao estiver disponivel, recarregar a janela para que a extensao Codex releia o auth.json",
+  "configuration.codexCliPath.description": "Caminho para o binario do Codex CLI usado para os limites da conta. Deixe vazio para detectar automaticamente",
+  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "Com que frequencia os limites da conta Codex sao atualizados automaticamente enquanto a janela do VS Code esta em foco. Defina como 0 para atualizar apenas manualmente",
   "configuration.statusBarClickBehavior.description": "Comportamento ao clicar no item de perfil da barra de status",
   "configuration.statusBarClickBehavior.cycle": "Alternar em ciclo por todos os perfis salvos",
   "configuration.statusBarClickBehavior.toggleLast": "Alternar entre o perfil atual e o anterior",

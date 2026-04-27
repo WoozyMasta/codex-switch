@@ -294,6 +294,9 @@ export function registerCommands(
       }
 
       const promptImport = async () => {
+        if (done) {
+          return
+        }
         cleanup()
         const importLabel = vscode.l10n.t('Import')
         const pick = await vscode.window.showInformationMessage(
@@ -318,6 +321,9 @@ export function registerCommands(
             dir,
             { persistent: false },
             async (_event, filename) => {
+              if (done) {
+                return
+              }
               if (!filename) {
                 return
               }

@@ -17,6 +17,7 @@
   "configuration.statusBarClickBehavior.description": "点击状态栏配置文件项时的行为",
   "configuration.statusBarClickBehavior.cycle": "循环切换所有已保存的配置文件",
   "configuration.statusBarClickBehavior.toggleLast": "在当前配置文件与上一个配置文件之间切换",
+  "configuration.statusBarClickBehavior.selector": "打开配置文件选择菜单",
   "command.profile.exportSettings.title": "Codex Switch: 导出配置文件",
   "command.profile.importSettings.title": "Codex Switch: 导入配置文件"
 }

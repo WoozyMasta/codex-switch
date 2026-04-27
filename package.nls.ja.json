@@ -17,6 +17,7 @@
   "configuration.statusBarClickBehavior.description": "ステータスバーのプロファイル項目をクリックしたときの動作",
   "configuration.statusBarClickBehavior.cycle": "保存済みプロファイルを順番に切り替える",
   "configuration.statusBarClickBehavior.toggleLast": "現在のプロファイルと前回のプロファイルを切り替える",
+  "configuration.statusBarClickBehavior.selector": "プロファイル選択メニューを開く",
   "command.profile.exportSettings.title": "Codex Switch: プロファイルをエクスポート",
   "command.profile.importSettings.title": "Codex Switch: プロファイルをインポート"
 }

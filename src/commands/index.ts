@@ -18,8 +18,7 @@ export function registerCommands(
   onAuthChanged: () => Promise<void>,
 ) {
   type StatusBarClickBehavior = 'cycle' | 'toggleLast'
-  const restartExtensionHostCommandId =
-    'workbench.action.restartExtensionHost'
+  const restartExtensionHostCommandId = 'workbench.action.restartExtensionHost'
   const reloadWindowCommandId = 'workbench.action.reloadWindow'
 
   const maybeRestartAfterProfileSwitch = async () => {

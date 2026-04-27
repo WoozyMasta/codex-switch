@@ -17,6 +17,7 @@
   "configuration.statusBarClickBehavior.description": "상태 표시줄의 프로필 항목 클릭 동작",
   "configuration.statusBarClickBehavior.cycle": "저장된 모든 프로필을 순환 전환",
   "configuration.statusBarClickBehavior.toggleLast": "현재 프로필과 이전 프로필 간 전환",
+  "configuration.statusBarClickBehavior.selector": "프로필 선택 메뉴 열기",
   "command.profile.exportSettings.title": "Codex Switch: 프로필 내보내기",
   "command.profile.importSettings.title": "Codex Switch: 프로필 가져오기"
 }

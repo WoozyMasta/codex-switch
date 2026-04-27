@@ -9,6 +9,7 @@
   "configuration.statusBarClickBehavior.description": "Поведение при клике по элементу профиля в статус-баре",
   "configuration.statusBarClickBehavior.cycle": "Переключать все сохраненные профили по кругу",
   "configuration.statusBarClickBehavior.toggleLast": "Переключаться между текущим и предыдущим профилем",
+  "configuration.statusBarClickBehavior.selector": "Открыть меню выбора профиля",
   "command.login.title": "Codex Switch: Помощь по входу",
   "command.profile.manage.title": "Codex Switch: Управление профилями",
   "command.profile.login.title": "Codex Switch: Войти (Codex CLI)",

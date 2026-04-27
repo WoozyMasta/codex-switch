@@ -17,7 +17,7 @@ export function registerCommands(
   profileManager: ProfileManager,
   onAuthChanged: () => Promise<void>,
 ) {
-  type StatusBarClickBehavior = 'cycle' | 'toggleLast'
+  type StatusBarClickBehavior = 'cycle' | 'toggleLast' | 'selector'
   const restartExtensionHostCommandId = 'workbench.action.restartExtensionHost'
   const reloadWindowCommandId = 'workbench.action.reloadWindow'
 
@@ -49,7 +49,14 @@ export function registerCommands(
     const raw = vscode.workspace
       .getConfiguration('codexSwitch')
       .get<StatusBarClickBehavior>('statusBarClickBehavior', 'cycle')
-    return raw === 'toggleLast' ? 'toggleLast' : 'cycle'
+
+    if (raw === 'toggleLast') {
+      return 'toggleLast'
+    }
+    if (raw === 'selector') {
+      return 'selector'
+    }
+    return 'cycle'
   }
 
   const getDefaultSettingsExportUri = (): vscode.Uri => {
@@ -153,6 +160,11 @@ export function registerCommands(
     'codex-switch.profile.toggleLast',
     async () => {
       const behavior = getStatusBarClickBehavior()
+      if (behavior === 'selector') {
+        await vscode.commands.executeCommand('codex-switch.profile.switch')
+        return
+      }
+
       if (behavior === 'toggleLast') {
         const newId = await profileManager.toggleLastProfileId()
         if (!newId) {

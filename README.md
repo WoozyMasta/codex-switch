@@ -33,6 +33,7 @@ Click behavior is configurable:
 
 * `cycle`: switch through all saved profiles in order.
 * `toggleLast`: switch between current and previous profile.
+* `selector`: open the profile picker menu.
 
 After a successful switch,
 Codex Switch writes the chosen auth data into the active auth file,
@@ -109,7 +110,7 @@ Main settings:
 * `codexSwitch.activeProfileScope` (`global` or `workspace`)
 * `codexSwitch.storageMode` (`auto`, `secretStorage`, `remoteFiles`)
 * `codexSwitch.reloadWindowAfterProfileSwitch`
-* `codexSwitch.statusBarClickBehavior` (`cycle` or `toggleLast`)
+* `codexSwitch.statusBarClickBehavior` (`cycle`, `toggleLast` or `selector`)
 
 When `codexSwitch.reloadWindowAfterProfileSwitch` is enabled, the extension
 tries to restart only the extension host after a successful switch or import.

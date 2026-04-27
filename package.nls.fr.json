@@ -17,6 +17,7 @@
   "configuration.statusBarClickBehavior.description": "Comportement lors du clic sur l'element de profil dans la barre d'etat",
   "configuration.statusBarClickBehavior.cycle": "Parcourir tous les profils enregistres",
   "configuration.statusBarClickBehavior.toggleLast": "Basculer entre le profil actuel et le precedent",
+  "configuration.statusBarClickBehavior.selector": "Ouvrir le menu de selection des profils",
   "command.profile.exportSettings.title": "Codex Switch: Exporter les profils",
   "command.profile.importSettings.title": "Codex Switch: Importer les profils"
 }

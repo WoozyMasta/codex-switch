@@ -9,6 +9,7 @@
   "configuration.statusBarClickBehavior.description": "Behavior when clicking the status bar profile item",
   "configuration.statusBarClickBehavior.cycle": "Cycle through all saved profiles",
   "configuration.statusBarClickBehavior.toggleLast": "Toggle between current and previous profile",
+  "configuration.statusBarClickBehavior.selector": "Open the profile selector menu",
   "command.login.title": "Codex Switch: Login Help",
   "command.profile.manage.title": "Codex Switch: Manage Profiles",
   "command.profile.login.title": "Codex Switch: Login (Codex CLI)",

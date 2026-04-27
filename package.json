@@ -138,13 +138,15 @@
           "type": "string",
           "enum": [
             "cycle",
-            "toggleLast"
+            "toggleLast",
+            "selector"
           ],
           "default": "cycle",
           "description": "%configuration.statusBarClickBehavior.description%",
           "enumDescriptions": [
             "%configuration.statusBarClickBehavior.cycle%",
-            "%configuration.statusBarClickBehavior.toggleLast%"
+            "%configuration.statusBarClickBehavior.toggleLast%",
+            "%configuration.statusBarClickBehavior.selector%"
           ]
         }
       }

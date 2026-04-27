@@ -33,8 +33,11 @@ export function activate(context: vscode.ExtensionContext) {
       void refreshUi()
     }),
   )
-  void refreshUi()
-  void profileManager.syncActiveProfileToCodexAuthFile()
+
+  void (async () => {
+    await profileManager.reconcileActiveProfileWithCodexAuthFile()
+    await refreshUi()
+  })()
 }
 
 async function refreshProfileUi() {

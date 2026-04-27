@@ -13,6 +13,24 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
+## Unreleased
+
+### Added
+
+* Added optional `CODEX_HOME`-aware active profile state.
+  When enabled, VS Code windows launched with different `CODEX_HOME`
+  values keep separate active and previous profile selections.
+* Added `codexSwitch.codexHome.inheritDefaultProfileWhenEmpty`
+  to bootstrap an empty non-default `CODEX_HOME`
+  from the default home active profile.
+* Added `Codex Switch: Use Default CODEX_HOME Profile Here`
+  for manually syncing the current home to the default home active profile.
+
+### Changed
+
+* Active and previous profile state can now be stored per resolved `CODEX_HOME`,
+  including per-home shared active-profile files in `remoteFiles` mode.
+
 ## [1.3.2][] - 2026-04-27
 
 ### Changed

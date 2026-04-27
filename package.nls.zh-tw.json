@@ -13,6 +13,7 @@
   "command.profile.addFromFile.title": "Codex Switch: 從檔案匯入",
   "command.profile.rename.title": "Codex Switch: 重新命名設定檔",
   "command.profile.delete.title": "Codex Switch: 刪除設定檔",
+  "command.profile.syncFromDefaultHome.title": "Codex Switch: 在此使用預設 CODEX_HOME 設定檔",
   "configuration.reloadWindowAfterProfileSwitch.description": "在成功切換/匯入設定檔後重新啟動 VS Code 擴充功能主機；若不可用，則重新載入視窗，讓 Codex 擴充功能重新讀取 auth.json",
   "configuration.statusBarClickBehavior.description": "點擊狀態列設定檔項目時的行為",
   "configuration.statusBarClickBehavior.cycle": "循環切換所有已儲存的設定檔",
@@ -20,5 +21,7 @@
   "configuration.statusBarClickBehavior.selector": "開啟設定檔選擇選單",
   "command.profile.exportSettings.title": "Codex Switch: 匯出設定檔",
   "command.profile.importSettings.title": "Codex Switch: 匯入設定檔",
-  "configuration.storageMode.description": "設定檔憑證的儲存位置。在 auto 模式下，SSH 遠端工作階段使用共用的遠端檔案儲存，本機工作階段使用 SecretStorage"
+  "configuration.storageMode.description": "設定檔憑證的儲存位置。在 auto 模式下，SSH 遠端工作階段使用共用的遠端檔案儲存，本機工作階段使用 SecretStorage",
+  "configuration.codexHome.enabled.description": "針對啟動 VS Code 時使用的每個 CODEX_HOME，分別保留作用中與上一個設定檔選擇",
+  "configuration.codexHome.inheritDefaultProfileWhenEmpty.description": "啟用依 CODEX_HOME 分離狀態時，只有在目前 CODEX_HOME 尚無 auth.json 時，才繼承預設 CODEX_HOME 的作用中設定檔"
 }

@@ -13,6 +13,7 @@
   "command.profile.addFromFile.title": "Codex Switch: ファイルからインポート",
   "command.profile.rename.title": "Codex Switch: プロファイル名を変更",
   "command.profile.delete.title": "Codex Switch: プロファイルを削除",
+  "command.profile.syncFromDefaultHome.title": "Codex Switch: 既定の CODEX_HOME プロファイルをここで使用",
   "configuration.reloadWindowAfterProfileSwitch.description": "プロファイルの切り替え/インポート成功後に VS Code の拡張機能ホストを再起動し、利用できない場合はウィンドウを再読み込みして Codex 拡張機能が auth.json を再読込するようにします",
   "configuration.statusBarClickBehavior.description": "ステータスバーのプロファイル項目をクリックしたときの動作",
   "configuration.statusBarClickBehavior.cycle": "保存済みプロファイルを順番に切り替える",
@@ -20,5 +21,7 @@
   "configuration.statusBarClickBehavior.selector": "プロファイル選択メニューを開く",
   "command.profile.exportSettings.title": "Codex Switch: プロファイルをエクスポート",
   "command.profile.importSettings.title": "Codex Switch: プロファイルをインポート",
-  "configuration.storageMode.description": "プロファイル資格情報の保存場所。auto モードでは、SSH リモート セッションは共有リモートファイル ストアを使用し、ローカル セッションは SecretStorage を使用します"
+  "configuration.storageMode.description": "プロファイル資格情報の保存場所。auto モードでは、SSH リモート セッションは共有リモートファイル ストアを使用し、ローカル セッションは SecretStorage を使用します",
+  "configuration.codexHome.enabled.description": "VS Code の起動時に使用された CODEX_HOME ごとに、アクティブおよび前回のプロファイル選択を分離して保持します",
+  "configuration.codexHome.inheritDefaultProfileWhenEmpty.description": "CODEX_HOME ごとの状態が有効な場合、現在の CODEX_HOME に auth.json がまだないときだけ、既定の CODEX_HOME のアクティブ プロファイルを継承します"
 }

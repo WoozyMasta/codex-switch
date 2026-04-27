@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { ProfileSummary } from '../types'
+import { ProfileSummary, ResolvedCodexHome } from '../types'
 import { escapeMarkdown } from '../utils/markdown'
 
 function buildCommandUri(command: string, args: unknown[]): string {
@@ -13,6 +13,7 @@ function escapeLinkTitle(text: string): string {
 export function createProfileTooltip(
   activeProfile: ProfileSummary | null,
   profiles: ProfileSummary[],
+  home?: ResolvedCodexHome,
 ): vscode.MarkdownString {
   const tooltip = new vscode.MarkdownString()
   tooltip.supportThemeIcons = true
@@ -55,6 +56,16 @@ export function createProfileTooltip(
       }
     }
     tooltip.appendMarkdown('\n')
+  }
+
+  if (home) {
+    tooltip.appendMarkdown('---\n\n')
+    tooltip.appendMarkdown(
+      `${escapeMarkdown(vscode.l10n.t('Active home'))}: **${escapeMarkdown(home.name)}**\n\n`,
+    )
+    tooltip.appendMarkdown(
+      `${escapeMarkdown(vscode.l10n.t('Path'))}: ${escapeMarkdown(home.fsPath)}\n\n`,
+    )
   }
 
   tooltip.appendMarkdown('---\n\n')

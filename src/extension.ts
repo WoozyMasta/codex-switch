@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import { ProfileManager } from './auth/profile-manager'
+import { CodexHomeManager } from './codex-home/codex-home-manager'
 import {
   createStatusBarItem,
   getStatusBarItem,
@@ -9,6 +10,7 @@ import { registerCommands } from './commands'
 import { debugLog, errorLog } from './utils/log'
 
 let profileManager: ProfileManager | undefined
+let codexHomeManager: CodexHomeManager | undefined
 
 export function activate(context: vscode.ExtensionContext) {
   debugLog('Codex Switch activated')
@@ -16,7 +18,8 @@ export function activate(context: vscode.ExtensionContext) {
   const statusBarItem = createStatusBarItem()
   context.subscriptions.push(statusBarItem)
 
-  profileManager = new ProfileManager(context)
+  codexHomeManager = new CodexHomeManager()
+  profileManager = new ProfileManager(context, codexHomeManager)
 
   const refreshUi = async () => {
     try {
@@ -27,7 +30,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  registerCommands(context, profileManager, refreshUi)
+  registerCommands(context, profileManager, codexHomeManager, refreshUi)
   context.subscriptions.push(
     ...profileManager.createWatchers(() => {
       void refreshUi()
@@ -41,26 +44,29 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function refreshProfileUi() {
-  if (!profileManager) {
+  if (!profileManager || !codexHomeManager) {
     updateProfileStatus(null, [])
     return
   }
 
   const profiles = await profileManager.listProfiles()
   const activeId = await profileManager.getActiveProfileId()
+  const home = codexHomeManager.isEnabled()
+    ? codexHomeManager.getActiveHome()
+    : undefined
   if (!activeId) {
-    updateProfileStatus(null, profiles)
+    updateProfileStatus(null, profiles, home)
     return
   }
 
   const profile = await profileManager.getProfile(activeId)
   if (!profile) {
     await profileManager.setActiveProfileId(undefined)
-    updateProfileStatus(null, profiles)
+    updateProfileStatus(null, profiles, home)
     return
   }
 
-  updateProfileStatus(profile, profiles)
+  updateProfileStatus(profile, profiles, home)
 }
 
 export function deactivate() {

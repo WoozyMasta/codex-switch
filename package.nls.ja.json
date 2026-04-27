@@ -19,5 +19,6 @@
   "configuration.statusBarClickBehavior.toggleLast": "現在のプロファイルと前回のプロファイルを切り替える",
   "configuration.statusBarClickBehavior.selector": "プロファイル選択メニューを開く",
   "command.profile.exportSettings.title": "Codex Switch: プロファイルをエクスポート",
-  "command.profile.importSettings.title": "Codex Switch: プロファイルをインポート"
+  "command.profile.importSettings.title": "Codex Switch: プロファイルをインポート",
+  "configuration.storageMode.description": "プロファイル資格情報の保存場所。auto モードでは、SSH リモート セッションは共有リモートファイル ストアを使用し、ローカル セッションは SecretStorage を使用します"
 }

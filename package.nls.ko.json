@@ -19,5 +19,6 @@
   "configuration.statusBarClickBehavior.toggleLast": "현재 프로필과 이전 프로필 간 전환",
   "configuration.statusBarClickBehavior.selector": "프로필 선택 메뉴 열기",
   "command.profile.exportSettings.title": "Codex Switch: 프로필 내보내기",
-  "command.profile.importSettings.title": "Codex Switch: 프로필 가져오기"
+  "command.profile.importSettings.title": "Codex Switch: 프로필 가져오기",
+  "configuration.storageMode.description": "프로필 자격 증명을 저장할 위치입니다. auto 모드에서는 SSH 원격 세션이 공유 원격 파일 저장소를 사용하고 로컬 세션은 SecretStorage를 사용합니다"
 }

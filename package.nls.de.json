@@ -19,5 +19,6 @@
   "configuration.statusBarClickBehavior.toggleLast": "Zwischen aktuellem und vorherigem Profil wechseln",
   "configuration.statusBarClickBehavior.selector": "Profilauswahlmenu oeffnen",
   "command.profile.exportSettings.title": "Codex Switch: Profile exportieren",
-  "command.profile.importSettings.title": "Codex Switch: Profile importieren"
+  "command.profile.importSettings.title": "Codex Switch: Profile importieren",
+  "configuration.storageMode.description": "Wo Profil-Anmeldedaten gespeichert werden. Im Modus auto verwenden SSH-Remote-Sitzungen einen gemeinsamen Remote-Dateispeicher, und lokale Sitzungen verwenden SecretStorage"
 }

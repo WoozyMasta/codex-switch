@@ -19,5 +19,6 @@
   "configuration.statusBarClickBehavior.toggleLast": "在目前與上一個設定檔之間切換",
   "configuration.statusBarClickBehavior.selector": "開啟設定檔選擇選單",
   "command.profile.exportSettings.title": "Codex Switch: 匯出設定檔",
-  "command.profile.importSettings.title": "Codex Switch: 匯入設定檔"
+  "command.profile.importSettings.title": "Codex Switch: 匯入設定檔",
+  "configuration.storageMode.description": "設定檔憑證的儲存位置。在 auto 模式下，SSH 遠端工作階段使用共用的遠端檔案儲存，本機工作階段使用 SecretStorage"
 }

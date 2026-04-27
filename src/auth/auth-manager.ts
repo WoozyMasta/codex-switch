@@ -91,7 +91,9 @@ export function extractAuthDataFromAuthJson(
   const accountId = asNonEmptyString(tokens.account_id)
 
   const idTokenPayload = idToken ? parseJWT(idToken) : {}
-  const authPayload = asObjectRecord(idTokenPayload['https://api.openai.com/auth'])
+  const authPayload = asObjectRecord(
+    idTokenPayload['https://api.openai.com/auth'],
+  )
   const defaultOrganization = getDefaultOrganization(authPayload)
 
   return {
@@ -169,7 +171,11 @@ export async function loadAuthDataFromFile(
     if (!extracted) {
       return null
     }
-    if (!extracted.idToken || !extracted.accessToken || !extracted.refreshToken) {
+    if (
+      !extracted.idToken ||
+      !extracted.accessToken ||
+      !extracted.refreshToken
+    ) {
       return null
     }
 

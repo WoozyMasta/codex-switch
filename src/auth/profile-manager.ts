@@ -291,7 +291,10 @@ export class ProfileManager {
     liveAuth: AuthData,
     storedAuth: AuthData | null,
   ): boolean {
-    const storedIdentity = this.getStoredPreservationIdentity(profile, storedAuth)
+    const storedIdentity = this.getStoredPreservationIdentity(
+      profile,
+      storedAuth,
+    )
     return this.matchesPreservationIdentity(storedIdentity, liveAuth)
   }
 
@@ -329,7 +332,11 @@ export class ProfileManager {
   }
 
   private getAuthLastRefresh(authData: AuthData | null): number | undefined {
-    if (!authData || !authData.authJson || typeof authData.authJson !== 'object') {
+    if (
+      !authData ||
+      !authData.authJson ||
+      typeof authData.authJson !== 'object'
+    ) {
       return undefined
     }
     return this.parseLastRefreshValue(
@@ -338,7 +345,9 @@ export class ProfileManager {
   }
 
   private hasCanonicalAuthJson(authData: AuthData | null): boolean {
-    return !!authData && !!authData.authJson && typeof authData.authJson === 'object'
+    return (
+      !!authData && !!authData.authJson && typeof authData.authJson === 'object'
+    )
   }
 
   private shouldReplaceStoredProfileAuthWithLive(
@@ -372,7 +381,9 @@ export class ProfileManager {
     liveAuth: AuthData,
   ): Promise<boolean> {
     const storedAuth = await this.loadAuthData(profile.id)
-    if (!this.matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)) {
+    if (
+      !this.matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)
+    ) {
       return false
     }
 
@@ -396,7 +407,13 @@ export class ProfileManager {
 
     for (const profile of orderedProfiles) {
       const storedAuth = await this.loadAuthData(profile.id)
-      if (this.matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)) {
+      if (
+        this.matchesPreservationIdentityForProfile(
+          profile,
+          liveAuth,
+          storedAuth,
+        )
+      ) {
         return profile
       }
     }
@@ -979,7 +996,9 @@ export class ProfileManager {
     this.syncProfileAuthToCodexAuthFile(profileId, authData)
   }
 
-  private async preserveStoredProfileAuthFromLive(profileId: string): Promise<void> {
+  private async preserveStoredProfileAuthFromLive(
+    profileId: string,
+  ): Promise<void> {
     try {
       const profile = await this.getProfile(profileId)
       if (!profile) {
@@ -997,7 +1016,9 @@ export class ProfileManager {
     }
   }
 
-  private async captureLiveAuthForMatchingProfile(authPath: string): Promise<void> {
+  private async captureLiveAuthForMatchingProfile(
+    authPath: string,
+  ): Promise<void> {
     const hash = this.readAuthFileHash(authPath)
     if (!hash) {
       return
@@ -1011,7 +1032,8 @@ export class ProfileManager {
       return
     }
 
-    const matchingProfile = await this.findProfileByPreservationIdentity(liveAuth)
+    const matchingProfile =
+      await this.findProfileByPreservationIdentity(liveAuth)
     if (!matchingProfile) {
       return
     }
@@ -1119,7 +1141,10 @@ export class ProfileManager {
     if (!idToken || !accessToken || !refreshToken) {
       return null
     }
-    const emailFromAuth = this.pickNonEmptyString(extracted?.email, profile.email)
+    const emailFromAuth = this.pickNonEmptyString(
+      extracted?.email,
+      profile.email,
+    )
     const planTypeFromAuth = this.pickNonEmptyString(
       extracted?.planType,
       profile.planType,

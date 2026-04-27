@@ -21,7 +21,10 @@ export function buildCodexAuthJson(authData: AuthData): string {
 
   const idToken = requireNonEmptyString(authData.idToken, 'idToken')
   const accessToken = requireNonEmptyString(authData.accessToken, 'accessToken')
-  const refreshToken = requireNonEmptyString(authData.refreshToken, 'refreshToken')
+  const refreshToken = requireNonEmptyString(
+    authData.refreshToken,
+    'refreshToken',
+  )
 
   const tokens: Record<string, string> = {
     id_token: idToken,

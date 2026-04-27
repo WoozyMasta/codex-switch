@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
+## Unreleased
+
+### Added
+
+* Added Codex account rate limits to the profile tooltip and switcher,
+  showing remaining 5-hour and weekly limits for saved profiles.
+* Added automatic focused-window limit refresh, a manual Refresh limits action,
+  and `codexSwitch.codexCliPath` for choosing a Codex CLI binary when needed.
+
 ## [1.3.2][] - 2026-04-28
 
 ### Changed

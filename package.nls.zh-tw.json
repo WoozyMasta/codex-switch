@@ -14,6 +14,8 @@
   "command.profile.rename.title": "Codex Switch: 重新命名設定檔",
   "command.profile.delete.title": "Codex Switch: 刪除設定檔",
   "configuration.reloadWindowAfterProfileSwitch.description": "在成功切換/匯入設定檔後重新啟動 VS Code 擴充功能主機；若不可用，則重新載入視窗，讓 Codex 擴充功能重新讀取 auth.json",
+  "configuration.codexCliPath.description": "用於取得帳號速率限制的 Codex CLI 二進位檔路徑。留空則自動偵測",
+  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "當 VS Code 視窗取得焦點時，自動重新整理 Codex 帳號速率限制的頻率。設為 0 表示僅手動重新整理",
   "configuration.statusBarClickBehavior.description": "點擊狀態列設定檔項目時的行為",
   "configuration.statusBarClickBehavior.cycle": "循環切換所有已儲存的設定檔",
   "configuration.statusBarClickBehavior.toggleLast": "在目前與上一個設定檔之間切換",

@@ -3,11 +3,14 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 import { ProfileManager } from '../auth/profile-manager'
+import { ProfileRateLimitService } from '../auth/profile-rate-limit-service'
 import {
   getDefaultCodexAuthPath,
   loadAuthDataFromFile,
   shouldUseWslAuthPath,
 } from '../auth/auth-manager'
+import { buildProfileMetaDisplay } from '../ui/profile-display'
+import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
 
 /**
  * Register all extension commands
@@ -15,7 +18,10 @@ import {
 export function registerCommands(
   context: vscode.ExtensionContext,
   profileManager: ProfileManager,
-  onAuthChanged: () => Promise<void>,
+  profileRateLimitService: ProfileRateLimitService,
+  onAuthChanged: (options?: {
+    forceRateLimitRefresh?: boolean
+  }) => Promise<void>,
 ) {
   type StatusBarClickBehavior = 'cycle' | 'toggleLast' | 'selector'
   const restartExtensionHostCommandId = 'workbench.action.restartExtensionHost'
@@ -65,6 +71,60 @@ export function registerCommands(
     return vscode.Uri.file(path.join(baseDir, 'codex-switch-profiles.json'))
   }
 
+  const ensureCodexCliForRateLimits = async (): Promise<boolean> => {
+    if (resolveCodexCliCommand()) {
+      return true
+    }
+
+    const setPathLabel = vscode.l10n.t('Set CLI Path')
+    const openSettingsLabel = vscode.l10n.t('Open Settings')
+    const pick = await vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        'Codex CLI was not found. Set the Codex CLI path to refresh account limits.',
+      ),
+      setPathLabel,
+      openSettingsLabel,
+    )
+
+    if (pick === openSettingsLabel) {
+      await vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        'codexSwitch.codexCliPath',
+      )
+      return false
+    }
+
+    if (pick !== setPathLabel) {
+      return false
+    }
+
+    const selection = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      openLabel: setPathLabel,
+      title: vscode.l10n.t('Select Codex CLI binary'),
+      filters:
+        process.platform === 'win32'
+          ? { Executables: ['exe', 'cmd'], All: ['*'] }
+          : undefined,
+    })
+
+    if (!selection?.[0]) {
+      return false
+    }
+
+    await vscode.workspace
+      .getConfiguration('codexSwitch')
+      .update(
+        'codexCliPath',
+        selection[0].fsPath,
+        vscode.ConfigurationTarget.Global,
+      )
+    vscode.window.showInformationMessage(vscode.l10n.t('Codex CLI path saved.'))
+    return true
+  }
+
   // Login command
   const loginCommand = vscode.commands.registerCommand(
     'codex-switch.login',
@@ -109,32 +169,86 @@ export function registerCommands(
   const switchProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.switch',
     async () => {
-      const profiles = await profileManager.listProfiles()
-      if (profiles.length === 0) {
+      const rawProfiles = await profileManager.listProfiles()
+      if (rawProfiles.length === 0) {
         await vscode.commands.executeCommand('codex-switch.profile.manage')
         return
       }
 
       const activeId = await profileManager.getActiveProfileId()
-      const pick = await vscode.window.showQuickPick(
+
+      type ProfilePick = vscode.QuickPickItem & { profileId: string }
+      const toProfilePicks = (profiles: typeof rawProfiles): ProfilePick[] =>
         profiles.map((p) => ({
           label: p.name,
-          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
-          detail: p.id === activeId ? vscode.l10n.t('Active') : undefined,
+          description: buildProfileMetaDisplay(p.planType, p.rateLimits),
+          detail: [
+            p.email && p.email !== 'Unknown' ? p.email : undefined,
+            p.id === activeId ? vscode.l10n.t('Active') : undefined,
+          ]
+            .filter((value): value is string => Boolean(value))
+            .join(' • '),
           profileId: p.id,
-        })),
-        { placeHolder: vscode.l10n.t('Switch profile') },
-      )
+        }))
 
-      if (!pick) {
+      const quickPick = vscode.window.createQuickPick<ProfilePick>()
+      quickPick.placeholder = vscode.l10n.t('Switch profile')
+      quickPick.items = toProfilePicks(
+        profileRateLimitService.applyCachedRateLimits(rawProfiles),
+      )
+      quickPick.busy = true
+
+      let disposed = false
+      let pickedProfileId: string | undefined
+      const pickPromise = new Promise<string | undefined>((resolve) => {
+        quickPick.onDidAccept(() => {
+          pickedProfileId = quickPick.selectedItems[0]?.profileId
+          quickPick.hide()
+        })
+        quickPick.onDidHide(() => {
+          disposed = true
+          quickPick.dispose()
+          resolve(pickedProfileId)
+        })
+      })
+
+      quickPick.show()
+
+      void profileRateLimitService
+        .decorateProfiles(profileManager, rawProfiles)
+        .then((profiles) => {
+          if (!disposed) {
+            quickPick.items = toProfilePicks(profiles)
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (!disposed) {
+            quickPick.busy = false
+          }
+        })
+
+      const profileId = await pickPromise
+      if (!profileId) {
         return
       }
-      const ok = await profileManager.setActiveProfileId(pick.profileId)
+      const ok = await profileManager.setActiveProfileId(profileId)
       if (!ok) {
         return
       }
       await onAuthChanged()
       await maybeRestartAfterProfileSwitch()
+    },
+  )
+
+  const refreshRateLimitsCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.refresh',
+    async () => {
+      if (!(await ensureCodexCliForRateLimits())) {
+        return
+      }
+
+      await onAuthChanged({ forceRateLimitRefresh: true })
     },
   )
 
@@ -635,6 +749,7 @@ export function registerCommands(
   // Register all commands
   context.subscriptions.push(loginCommand)
   context.subscriptions.push(loginViaCliCommand)
+  context.subscriptions.push(refreshRateLimitsCommand)
   context.subscriptions.push(switchProfileCommand)
   context.subscriptions.push(activateProfileCommand)
   context.subscriptions.push(toggleLastProfileCommand)

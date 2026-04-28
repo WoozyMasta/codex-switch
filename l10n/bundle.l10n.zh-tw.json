@@ -34,6 +34,7 @@
   "Plan": "方案",
   "Rename profile": "重新命名設定檔",
   "Refresh limits": "重新整理限制",
+  "Reset": "重設",
   "Replace": "取代",
   "Selected file is not a valid auth.json.": "選取的檔案不是有效的 auth.json。",
   "Select Codex CLI binary": "選擇 Codex CLI 二進位檔",

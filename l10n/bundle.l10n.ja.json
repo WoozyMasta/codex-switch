@@ -34,6 +34,7 @@
   "Plan": "プラン",
   "Rename profile": "プロファイル名を変更",
   "Refresh limits": "制限を更新",
+  "Reset": "リセット",
   "Replace": "置き換える",
   "Selected file is not a valid auth.json.": "選択したファイルは有効な auth.json ではありません。",
   "Select Codex CLI binary": "Codex CLI バイナリを選択",

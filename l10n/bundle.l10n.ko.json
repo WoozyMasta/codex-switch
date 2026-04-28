@@ -34,6 +34,7 @@
   "Plan": "플랜",
   "Rename profile": "프로필 이름 변경",
   "Refresh limits": "제한 새로 고침",
+  "Reset": "초기화",
   "Replace": "바꾸기",
   "Selected file is not a valid auth.json.": "선택한 파일은 유효한 auth.json이 아닙니다.",
   "Select Codex CLI binary": "Codex CLI 바이너리 선택",

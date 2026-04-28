@@ -22,8 +22,41 @@ function formatRateLimitCell(
     return '-'
   }
 
-  const remainingPercent = Math.round(window.remainingPercent)
-  return `${remainingPercent}%`
+  return `${Math.round(window.remainingPercent)}%`
+}
+
+function formatResetTime(resetsAt: number | null | undefined): string | null {
+  if (typeof resetsAt !== 'number' || !Number.isFinite(resetsAt)) {
+    return null
+  }
+
+  const resetDate = new Date(resetsAt * 1000)
+  if (Number.isNaN(resetDate.getTime())) {
+    return null
+  }
+
+  const now = new Date()
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(resetDate)
+
+  if (isSameLocalDate(resetDate, now)) {
+    return time
+  }
+
+  const day = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+  }).format(resetDate)
+  return `${day} ${time}`
+}
+
+function isSameLocalDate(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
 }
 
 function padTableCell(content: string): string {
@@ -52,9 +85,9 @@ export function createProfileTooltip(
   } else {
     const activeId = activeProfile?.id
     tooltip.appendMarkdown(
-      `| ${padTableCell(escapeTableCell(vscode.l10n.t('Profile')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Plan')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('5h')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Weekly')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Status')))} |\n`,
+      `|  | ${padTableCell(escapeTableCell(vscode.l10n.t('Profile')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Plan')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('5h')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Weekly')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} |\n`,
     )
-    tooltip.appendMarkdown('|---|---|---|---|---|\n')
+    tooltip.appendMarkdown('|---|---|---|---:|---|---:|---|\n')
 
     for (const p of profiles) {
       const name = escapeTableCell(p.name)
@@ -62,7 +95,13 @@ export function createProfileTooltip(
       const fiveHour = escapeTableCell(
         formatRateLimitCell(p.rateLimits?.fiveHour),
       )
+      const fiveHourReset = escapeTableCell(
+        formatResetTime(p.rateLimits?.fiveHour?.resetsAt) || '',
+      )
       const weekly = escapeTableCell(formatRateLimitCell(p.rateLimits?.weekly))
+      const weeklyReset = escapeTableCell(
+        formatResetTime(p.rateLimits?.weekly?.resetsAt) || '',
+      )
       const switchUri = buildCommandUri('codex-switch.profile.activate', [p.id])
       const emailDisplay =
         p.email && p.email !== 'Unknown' ? p.email : vscode.l10n.t('Unknown')
@@ -71,10 +110,10 @@ export function createProfileTooltip(
       const linkedName = isActive
         ? `[**${name}**](${switchUri} "${linkTitle}")`
         : `[${name}](${switchUri} "${linkTitle}")`
-      const status = isActive ? escapeTableCell(vscode.l10n.t('Active')) : ''
+      const status = isActive ? '$(check)' : ''
 
       tooltip.appendMarkdown(
-        `| ${padTableCell(linkedName)} | ${padTableCell(plan)} | ${padTableCell(fiveHour)} | ${padTableCell(weekly)} | ${padTableCell(status)} |\n`,
+        `| ${padTableCell(status)} | ${padTableCell(linkedName)} | ${padTableCell(plan)} | ${padTableCell(fiveHour)} | ${padTableCell(fiveHourReset)} | ${padTableCell(weekly)} | ${padTableCell(weeklyReset)} |\n`,
       )
     }
     tooltip.appendMarkdown('\n')

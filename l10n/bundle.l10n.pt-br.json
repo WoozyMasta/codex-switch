@@ -34,6 +34,7 @@
   "Plan": "Plano",
   "Rename profile": "Renomear perfil",
   "Refresh limits": "Atualizar limites",
+  "Reset": "Redefinir",
   "Replace": "Substituir",
   "Selected file is not a valid auth.json.": "O arquivo selecionado nao e um auth.json valido.",
   "Select Codex CLI binary": "Selecionar binario do Codex CLI",

@@ -73,6 +73,10 @@
         "title": "%command.profile.addFromCodexAuthFile.title%"
       },
       {
+        "command": "codex-switch.profile.prepareForNewLoginChat",
+        "title": "%command.profile.prepareForNewLoginChat.title%"
+      },
+      {
         "command": "codex-switch.profile.addFromFile",
         "title": "%command.profile.addFromFile.title%"
       },

@@ -22,9 +22,25 @@ and keep profile state consistent across clients.
 1. Sign in with Codex CLI in the runtime you actually use.
    If you use WSL from Windows and enabled
    `chatgpt.runCodexInWindowsSubsystemForLinux`, run `wsl codex login`.
-1. Run `Codex Switch: Manage Profiles`.
-1. Import from current `auth.json` or from a selected JSON file.
-1. Switch profiles from the status bar, tooltip links, or the manage command.
+   Alternatively, sign in from the Chat/Codex UI.
+2. Run `Codex Switch: Manage Profiles`.
+3. Import from current `auth.json` or from a selected JSON file.
+4. Switch profiles from the status bar, tooltip links, or the manage command.
+
+## Adding Another Chat Login
+
+Use `Codex Switch: Prepare for New Login (Chat)` before signing in
+with another Chat/Codex account.
+
+The command preserves the current live auth into a matching saved profile
+when possible, removes the local `auth.json`, clears the active profile,
+and reloads so Chat can show the login screen again.
+If the current live account is not saved as a profile,
+Codex Switch asks you to choose `Cancel`,
+`Save Profile and Continue`, or `Continue without saving`.
+
+Do not use logout as the way to add the next account.
+Logout can invalidate the current token session.
 
 ## How Switching Works
 
@@ -38,6 +54,10 @@ Click behavior is configurable:
 After a successful switch,
 Codex Switch writes the chosen auth data into the active auth file,
 so CLI and extension state stay aligned.
+
+Before switching away from an unsaved live account,
+Codex Switch asks whether to cancel, save the profile and continue,
+or continue without saving.
 
 ## Auth File Resolution
 

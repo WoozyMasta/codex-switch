@@ -16,6 +16,7 @@
   "command.profile.switch.title": "Codex Switch: Switch Profile",
   "command.profile.toggleLast.title": "Codex Switch: Cycle Profiles",
   "command.profile.addFromCodexAuthFile.title": "Codex Switch: Add From Current auth.json",
+  "command.profile.prepareForNewLoginChat.title": "Codex Switch: Prepare for New Login (Chat)",
   "command.profile.addFromFile.title": "Codex Switch: Import From File",
   "command.profile.exportSettings.title": "Codex Switch: Export Profiles",
   "command.profile.importSettings.title": "Codex Switch: Import Profiles",

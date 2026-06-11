@@ -23,9 +23,9 @@ and keep profile state consistent across clients.
    If you use WSL from Windows and enabled
    `chatgpt.runCodexInWindowsSubsystemForLinux`, run `wsl codex login`.
    Alternatively, sign in from the Chat/Codex UI.
-2. Run `Codex Switch: Manage Profiles`.
-3. Import from current `auth.json` or from a selected JSON file.
-4. Switch profiles from the status bar, tooltip links, or the manage command.
+1. Run `Codex Switch: Manage Profiles`.
+1. Import from current `auth.json` or from a selected JSON file.
+1. Switch profiles from the status bar, tooltip links, or the manage command.
 
 ## Adding Another Chat Login
 

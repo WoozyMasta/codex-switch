@@ -10,6 +10,7 @@
   "command.profile.switch.title": "Codex Switch: Cambia profilo",
   "command.profile.toggleLast.title": "Codex Switch: Scorri i profili",
   "command.profile.addFromCodexAuthFile.title": "Codex Switch: Aggiungi da auth.json corrente",
+  "command.profile.prepareForNewLoginChat.title": "Codex Switch: Prepara nuovo accesso (Chat)",
   "command.profile.addFromFile.title": "Codex Switch: Importa da file",
   "command.profile.rename.title": "Codex Switch: Rinomina profilo",
   "command.profile.delete.title": "Codex Switch: Elimina profilo",

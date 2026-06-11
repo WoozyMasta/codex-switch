@@ -70,6 +70,20 @@ interface ParsedImportEntry {
   authData: AuthData
 }
 
+interface CanonicalTokenBundle {
+  idToken: string
+  accessToken: string
+  refreshToken: string
+}
+
+interface LiveAuthPreservationResult {
+  status: 'noLiveAuth' | 'saved' | 'unsaved'
+}
+
+interface PrepareForNewLoginChatResult {
+  removedAuthFile: boolean
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -344,36 +358,80 @@ export class ProfileManager {
     )
   }
 
-  private hasCanonicalAuthJson(authData: AuthData | null): boolean {
-    return (
-      !!authData && !!authData.authJson && typeof authData.authJson === 'object'
-    )
+  private getCanonicalTokenBundle(
+    authData: AuthData,
+  ): CanonicalTokenBundle | undefined {
+    const authJson = asObject(authData.authJson)
+    if (!authJson) {
+      return undefined
+    }
+
+    const tokens = asObject(authJson.tokens)
+    if (!tokens) {
+      return undefined
+    }
+
+    const idToken = this.asNonEmptyString(tokens.id_token)
+    const accessToken = this.asNonEmptyString(tokens.access_token)
+    const refreshToken = this.asNonEmptyString(tokens.refresh_token)
+
+    if (!idToken || !accessToken || !refreshToken) {
+      return undefined
+    }
+
+    return {
+      idToken,
+      accessToken,
+      refreshToken,
+    }
   }
 
   private shouldReplaceStoredProfileAuthWithLive(
     storedAuth: AuthData | null,
     liveAuth: AuthData,
   ): boolean {
-    if (!this.hasCanonicalAuthJson(liveAuth)) {
+    const liveTokens = this.getCanonicalTokenBundle(liveAuth)
+    if (!liveTokens) {
       return false
     }
+
     if (!storedAuth) {
       return true
     }
-    if (!this.hasCanonicalAuthJson(storedAuth)) {
+
+    const storedTokens = this.getCanonicalTokenBundle(storedAuth)
+    if (!storedTokens) {
       return true
     }
 
     const storedRefresh = this.getAuthLastRefresh(storedAuth)
     const liveRefresh = this.getAuthLastRefresh(liveAuth)
 
-    if (storedRefresh === undefined) {
-      return true
-    }
-    if (liveRefresh === undefined) {
+    if (
+      storedRefresh !== undefined &&
+      liveRefresh !== undefined &&
+      liveRefresh < storedRefresh
+    ) {
       return false
     }
-    return liveRefresh > storedRefresh
+
+    if (storedRefresh !== undefined && liveRefresh === undefined) {
+      return false
+    }
+
+    if (
+      storedTokens.idToken !== liveTokens.idToken ||
+      storedTokens.accessToken !== liveTokens.accessToken ||
+      storedTokens.refreshToken !== liveTokens.refreshToken
+    ) {
+      return true
+    }
+
+    if (storedRefresh === undefined && liveRefresh !== undefined) {
+      return true
+    }
+
+    return false
   }
 
   private async maybeReplaceProfileAuthWithLive(
@@ -1016,6 +1074,27 @@ export class ProfileManager {
     }
   }
 
+  async preserveLiveAuthForMatchingProfile(): Promise<LiveAuthPreservationResult> {
+    const liveAuth = await this.loadLiveCodexAuthData()
+    if (!liveAuth) {
+      return { status: 'noLiveAuth' }
+    }
+
+    const activeId = await this.getActiveProfileId()
+    const matchingProfile = await this.findProfileByPreservationIdentity(
+      liveAuth,
+      activeId,
+    )
+
+    if (!matchingProfile) {
+      return { status: 'unsaved' }
+    }
+
+    await this.maybeReplaceProfileAuthWithLive(matchingProfile, liveAuth)
+
+    return { status: 'saved' }
+  }
+
   private async captureLiveAuthForMatchingProfile(
     authPath: string,
   ): Promise<void> {
@@ -1287,6 +1366,26 @@ export class ProfileManager {
     const bucket = this.getStateBucket()
     await bucket.update(ACTIVE_PROFILE_KEY, profileId)
     await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
+  }
+
+  async prepareForNewLoginChat(): Promise<PrepareForNewLoginChatResult> {
+    const authPath = getDefaultCodexAuthPath()
+
+    await this.setActiveProfileIdInState(undefined)
+    this.lastSyncedProfileId = undefined
+    this.lastSyncedAuthHash = undefined
+
+    if (!fs.existsSync(authPath)) {
+      return {
+        removedAuthFile: false,
+      }
+    }
+
+    fs.unlinkSync(authPath)
+
+    return {
+      removedAuthFile: true,
+    }
   }
 
   async setActiveProfileId(profileId: string | undefined): Promise<boolean> {

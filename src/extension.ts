@@ -163,7 +163,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   void (async () => {
     await profileManager.reconcileActiveProfileWithCodexAuthFile()
-    await refreshUi()
+    await refreshUi({ refreshActiveRateLimitOnly: true })
   })()
 }
 

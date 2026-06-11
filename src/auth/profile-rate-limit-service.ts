@@ -21,6 +21,7 @@ const APP_SERVER_EXIT_TIMEOUT_MS = 2_000
 const FIVE_HOUR_WINDOW_MINUTES = 5 * 60
 const WEEKLY_WINDOW_MINUTES = 7 * 24 * 60
 const CODEX_LIMIT_ID = 'codex'
+const RATE_LIMIT_FAILURE_BACKOFF_MS = 30 * 1000
 
 type JsonRpcId = number | string
 
@@ -44,6 +45,7 @@ interface CacheEntry {
   profileUpdatedAt: string
   fetchedAt: number
   rateLimits: ProfileRateLimits | null
+  lastFailureAt?: number
 }
 
 interface DecorateProfilesOptions {
@@ -246,7 +248,7 @@ export class ProfileRateLimitService {
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
     return profiles.map((profile) => ({
       ...profile,
-      rateLimits: this.getFreshCachedRateLimits(profile),
+      rateLimits: this.getCachedRateLimits(profile),
     }))
   }
 
@@ -284,6 +286,17 @@ export class ProfileRateLimitService {
     return entry.rateLimits
   }
 
+  private getCachedRateLimits(
+    profile: ProfileSummary,
+  ): ProfileRateLimits | null | undefined {
+    const entry = this.cache.get(profile.id)
+    if (!entry || entry.profileUpdatedAt !== profile.updatedAt) {
+      return undefined
+    }
+
+    return entry.rateLimits
+  }
+
   private async getRateLimits(
     profileManager: ProfileManager,
     profile: ProfileSummary,
@@ -298,6 +311,11 @@ export class ProfileRateLimitService {
       const cached = this.getFreshCachedRateLimits(profile)
       if (cached !== undefined) {
         return cached
+      }
+
+      const staleCached = this.getCachedRateLimits(profile)
+      if (this.shouldSkipRefreshAfterFailure(profile)) {
+        return staleCached ?? null
       }
     }
 
@@ -317,7 +335,7 @@ export class ProfileRateLimitService {
   ): Promise<ProfileRateLimits | null> {
     const authData = await profileManager.loadAuthData(profile.id)
     if (!authData) {
-      this.cacheResult(profile, null)
+      this.cacheFailure(profile)
       return null
     }
 
@@ -325,14 +343,14 @@ export class ProfileRateLimitService {
       const rateLimits = await this.runWithAppServerConcurrencyLimit(() =>
         queryRateLimitsViaTemporaryCodexHome(authData),
       )
-      this.cacheResult(profile, rateLimits)
+      this.cacheSuccess(profile, rateLimits)
       return rateLimits
     } catch (error) {
       debugLog(
         `Rate limits unavailable for profile ${profile.id}:`,
         error instanceof Error ? error.message : error,
       )
-      this.cacheResult(profile, null)
+      this.cacheFailure(profile)
       return null
     }
   }
@@ -368,7 +386,7 @@ export class ProfileRateLimitService {
     }
   }
 
-  private cacheResult(
+  private cacheSuccess(
     profile: ProfileSummary,
     rateLimits: ProfileRateLimits | null,
   ): void {
@@ -377,6 +395,37 @@ export class ProfileRateLimitService {
       fetchedAt: Date.now(),
       rateLimits,
     })
+  }
+
+  private cacheFailure(profile: ProfileSummary): void {
+    const existing = this.cache.get(profile.id)
+    if (existing && existing.profileUpdatedAt === profile.updatedAt) {
+      this.cache.set(profile.id, {
+        ...existing,
+        lastFailureAt: Date.now(),
+      })
+      return
+    }
+
+    this.cache.set(profile.id, {
+      profileUpdatedAt: profile.updatedAt,
+      fetchedAt: Date.now(),
+      rateLimits: null,
+      lastFailureAt: Date.now(),
+    })
+  }
+
+  private shouldSkipRefreshAfterFailure(profile: ProfileSummary): boolean {
+    const entry = this.cache.get(profile.id)
+    if (!entry || entry.profileUpdatedAt !== profile.updatedAt) {
+      return false
+    }
+
+    if (entry.lastFailureAt === undefined) {
+      return false
+    }
+
+    return Date.now() - entry.lastFailureAt < RATE_LIMIT_FAILURE_BACKOFF_MS
   }
 
   private isFresh(profile: ProfileSummary, entry: CacheEntry): boolean {

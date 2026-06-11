@@ -10,6 +10,7 @@
   "command.profile.switch.title": "Codex Switch: 切换配置文件",
   "command.profile.toggleLast.title": "Codex Switch: 循环切换配置文件",
   "command.profile.addFromCodexAuthFile.title": "Codex Switch: 从当前 auth.json 添加",
+  "command.profile.prepareForNewLoginChat.title": "Codex Switch: 准备新的登录（Chat）",
   "command.profile.addFromFile.title": "Codex Switch: 从文件导入",
   "command.profile.rename.title": "Codex Switch: 重命名配置文件",
   "command.profile.delete.title": "Codex Switch: 删除配置文件",

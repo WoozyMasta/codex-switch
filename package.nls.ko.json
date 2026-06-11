@@ -10,6 +10,7 @@
   "command.profile.switch.title": "Codex Switch: 프로필 전환",
   "command.profile.toggleLast.title": "Codex Switch: 프로필 순환 전환",
   "command.profile.addFromCodexAuthFile.title": "Codex Switch: 현재 auth.json 에서 추가",
+  "command.profile.prepareForNewLoginChat.title": "Codex Switch: 새 로그인 준비 (Chat)",
   "command.profile.addFromFile.title": "Codex Switch: 파일에서 가져오기",
   "command.profile.rename.title": "Codex Switch: 프로필 이름 변경",
   "command.profile.delete.title": "Codex Switch: 프로필 삭제",

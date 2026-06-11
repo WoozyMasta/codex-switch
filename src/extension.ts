@@ -81,6 +81,7 @@ export function activate(context: vscode.ExtensionContext) {
     context,
     profileManager,
     codexHomeManager,
+    runtime.home,
     profileRateLimitService,
     refreshUi,
   )

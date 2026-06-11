@@ -70,7 +70,13 @@ export class CodexHomeManager {
     return shouldUseWslAuthPath() ? 'wsl codex login' : 'codex login'
   }
 
-  createCodexTerminal(name = 'Codex Login'): vscode.Terminal {
-    return vscode.window.createTerminal(name)
+  createCodexTerminal(
+    name = 'Codex Login',
+    home?: ResolvedCodexHome,
+  ): vscode.Terminal {
+    return vscode.window.createTerminal({
+      name,
+      env: home ? { CODEX_HOME: home.fsPath } : undefined,
+    })
   }
 }

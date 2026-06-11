@@ -9,6 +9,7 @@ import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import { buildProfileMetaDisplay } from '../ui/profile-display'
 import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
+import { ResolvedCodexHome } from '../types'
 
 /**
  * Register all extension commands
@@ -17,6 +18,7 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   profileManager: ProfileManager,
   codexHomeManager: CodexHomeManager,
+  runtimeHome: ResolvedCodexHome,
   profileRateLimitService: ProfileRateLimitService,
   onAuthChanged: (options?: {
     forceRateLimitRefresh?: boolean
@@ -265,7 +267,10 @@ export function registerCommands(
       if (selection === manageLabel) {
         await vscode.commands.executeCommand('codex-switch.profile.manage')
       } else if (selection === openTerminalLabel) {
-        const terminal = codexHomeManager.createCodexTerminal()
+        const terminal = codexHomeManager.createCodexTerminal(
+          undefined,
+          runtimeHome,
+        )
         terminal.show()
         terminal.sendText(loginCommandText)
       } else if (selection === copyCommandLabel) {
@@ -496,7 +501,10 @@ export function registerCommands(
       const authPath = profileManager.getActiveCodexAuthPath()
       const loginCommandText = getLoginCommandText()
 
-      const terminal = codexHomeManager.createCodexTerminal()
+      const terminal = codexHomeManager.createCodexTerminal(
+        undefined,
+        runtimeHome,
+      )
       terminal.show()
       terminal.sendText(loginCommandText)
 

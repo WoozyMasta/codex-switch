@@ -11,18 +11,17 @@ import {
 import { registerCommands } from './commands'
 import { restartExtensionHostOrReloadWindow } from './utils/vscode-restart'
 import { debugLog, errorLog } from './utils/log'
-
-const DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS = 30
+import {
+  DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS,
+  mergeRefreshOptions,
+  normalizeRateLimitAutoRefreshIntervalSeconds,
+  type RefreshProfileUiOptions,
+} from './utils/refresh-options'
 
 let profileManager: ProfileManager | undefined
 let codexHomeManager: CodexHomeManager | undefined
 let profileRateLimitService: ProfileRateLimitService | undefined
 let refreshProfileUiGeneration = 0
-
-interface RefreshProfileUiOptions {
-  forceRateLimitRefresh?: boolean
-  refreshActiveRateLimitOnly?: boolean
-}
 
 interface RuntimeContext {
   home: ResolvedCodexHome
@@ -246,24 +245,6 @@ async function refreshProfileUi(
   )
 }
 
-function mergeRefreshOptions(
-  current: RefreshProfileUiOptions | null,
-  next: RefreshProfileUiOptions,
-): RefreshProfileUiOptions {
-  if (!current) {
-    return next
-  }
-
-  return {
-    forceRateLimitRefresh:
-      current.forceRateLimitRefresh === true ||
-      next.forceRateLimitRefresh === true,
-    refreshActiveRateLimitOnly:
-      current.refreshActiveRateLimitOnly === true &&
-      next.refreshActiveRateLimitOnly === true,
-  }
-}
-
 function getRateLimitAutoRefreshIntervalSeconds(): number {
   const value = vscode.workspace
     .getConfiguration('codexSwitch')
@@ -271,12 +252,7 @@ function getRateLimitAutoRefreshIntervalSeconds(): number {
       'rateLimitAutoRefreshIntervalSeconds',
       DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS,
     )
-
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS
-  }
-
-  return Number.isFinite(value) && value > 0 ? Math.max(5, value) : 0
+  return normalizeRateLimitAutoRefreshIntervalSeconds(value)
 }
 
 export async function deactivate() {

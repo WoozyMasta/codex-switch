@@ -11,7 +11,10 @@ import {
   ProfileRateLimits,
   ProfileSummary,
 } from '../types'
-import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
+import {
+  CodexCliCommand,
+  resolveCodexCliCommand,
+} from '../utils/codex-cli-resolver'
 import { debugLog } from '../utils/log'
 
 const RATE_LIMIT_CACHE_TTL_MS = 60 * 1000
@@ -62,6 +65,7 @@ class CodexAppServerClient {
   private readonly child: ChildProcessWithoutNullStreams
   private readonly lineReader: readline.Interface
   private readonly clientVersion: string
+  private readonly codexCliCommand: CodexCliCommand
   private readonly onStdoutLine = (line: string) => {
     this.handleLine(line)
   }
@@ -93,14 +97,19 @@ class CodexAppServerClient {
   private disposing = false
   private disposed = false
 
-  constructor(codexHomePath: string, clientVersion: string) {
+  constructor(
+    codexHomePath: string,
+    clientVersion: string,
+    codexCliCommand: CodexCliCommand,
+  ) {
     this.clientVersion = clientVersion
+    this.codexCliCommand = codexCliCommand
     const env = {
       ...process.env,
       CODEX_HOME: codexHomePath,
     }
 
-    this.child = spawnAppServer(env)
+    this.child = spawnAppServer(this.codexCliCommand, env)
     this.child.stdout.setEncoding('utf8')
     this.child.stderr.setEncoding('utf8')
     this.child.stderr.on('data', this.onStderrData)
@@ -460,6 +469,7 @@ export class ProfileRateLimitService {
     profiles: ProfileSummary[],
     options: DecorateProfilesOptions = {},
   ): Promise<ProfileSummary[]> {
+    const codexCliCommand = resolveCodexCliCommand()
     const forceRefreshIds = new Set(options.forceRefreshProfileIds || [])
 
     return await Promise.all(
@@ -468,6 +478,7 @@ export class ProfileRateLimitService {
         rateLimits: await this.getRateLimits(
           profileManager,
           profile,
+          codexCliCommand,
           options.forceRefresh === true || forceRefreshIds.has(profile.id),
         ),
       })),
@@ -503,6 +514,7 @@ export class ProfileRateLimitService {
   private async getRateLimits(
     profileManager: ProfileManager,
     profile: ProfileSummary,
+    codexCliCommand: CodexCliCommand | null,
     forceRefresh = false,
   ): Promise<ProfileRateLimits | null> {
     if (this.disposed) {
@@ -531,6 +543,7 @@ export class ProfileRateLimitService {
     const promise = this.fetchRateLimits(
       profileManager,
       profile,
+      codexCliCommand,
       operationController.signal,
     )
     this.activeOperations.add(promise)
@@ -548,6 +561,7 @@ export class ProfileRateLimitService {
   private async fetchRateLimits(
     profileManager: ProfileManager,
     profile: ProfileSummary,
+    codexCliCommand: CodexCliCommand | null,
     signal: AbortSignal,
   ): Promise<ProfileRateLimits | null> {
     if (signal.aborted) {
@@ -561,11 +575,16 @@ export class ProfileRateLimitService {
     }
 
     try {
+      if (!codexCliCommand) {
+        return this.getCachedRateLimits(profile) ?? null
+      }
+
       const rateLimits = await this.runWithAppServerConcurrencyLimit(
         () =>
           queryRateLimitsViaTemporaryCodexHome(
             authData,
             this.clientVersion,
+            codexCliCommand,
             signal,
           ),
         signal,
@@ -691,6 +710,7 @@ export class ProfileRateLimitService {
 async function queryRateLimitsViaTemporaryCodexHome(
   authData: AuthData,
   clientVersion: string,
+  codexCliCommand: CodexCliCommand,
   signal?: AbortSignal,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
@@ -714,7 +734,11 @@ async function queryRateLimitsViaTemporaryCodexHome(
       mode: 0o600,
     })
 
-    client = new CodexAppServerClient(tempHomePath, clientVersion)
+    client = new CodexAppServerClient(
+      tempHomePath,
+      clientVersion,
+      codexCliCommand,
+    )
     try {
       await client.initialize()
       const response = await client.readRateLimits()
@@ -938,15 +962,9 @@ function clampPercent(value: number): number {
 }
 
 function spawnAppServer(
+  codexCommand: CodexCliCommand,
   env: Record<string, string | undefined>,
 ): ChildProcessWithoutNullStreams {
-  const codexCommand = resolveCodexCliCommand()
-  if (!codexCommand) {
-    throw new Error(
-      'Codex CLI was not found. Configure codexSwitch.codexCliPath or make codex available in PATH.',
-    )
-  }
-
   return spawn(codexCommand.command, codexCommand.args, {
     env,
     stdio: ['pipe', 'pipe', 'pipe'],

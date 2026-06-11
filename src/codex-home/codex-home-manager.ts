@@ -1,5 +1,4 @@
 import * as vscode from 'vscode'
-import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import { createHash } from 'crypto'
@@ -37,11 +36,6 @@ export class CodexHomeManager {
     return this.getConfiguration().get<boolean>('codexHome.enabled', false)
   }
 
-  setActiveProfileId(_profileId: string | undefined): void {
-    // Kept for ProfileManager compatibility; CODEX_HOME resolution is
-    // intentionally based only on the environment VS Code was launched with.
-  }
-
   private resolveActiveHome(): ResolvedCodexHome {
     const fallbackHome = path.join(os.homedir(), '.codex')
     const envValue = this.initialCodexHome || fallbackHome
@@ -68,12 +62,6 @@ export class CodexHomeManager {
 
   getActiveHome(): ResolvedCodexHome {
     return this.activeHome
-  }
-
-  ensureActiveHome(): ResolvedCodexHome {
-    const home = this.activeHome
-    fs.mkdirSync(home.fsPath, { recursive: true, mode: 0o700 })
-    return home
   }
 
   buildLoginCommand(home = this.activeHome): string {

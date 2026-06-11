@@ -1600,7 +1600,6 @@ export class ProfileManager {
     }
 
     await this.setActiveProfileIdInState(defaultProfileId)
-    this.codexHomeManager.setActiveProfileId(defaultProfileId)
     return defaultProfileId
   }
 
@@ -1613,13 +1612,9 @@ export class ProfileManager {
         if (explicit !== inferred) {
           this.writeSharedActiveProfile(inferred)
         }
-        this.codexHomeManager.setActiveProfileId(inferred)
         return inferred
       }
 
-      if (explicit) {
-        this.codexHomeManager.setActiveProfileId(explicit)
-      }
       return explicit || this.inheritDefaultProfileIfCurrentHomeIsEmpty()
     }
 
@@ -1629,7 +1624,6 @@ export class ProfileManager {
     if (v) {
       const existing = await this.getProfile(v)
       if (existing) {
-        this.codexHomeManager.setActiveProfileId(v)
         return v
       }
 
@@ -1637,7 +1631,6 @@ export class ProfileManager {
       if (inferred && inferred !== v) {
         await bucket.update(activeKey, inferred)
         await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-        this.codexHomeManager.setActiveProfileId(inferred)
         return inferred
       }
 
@@ -1662,7 +1655,6 @@ export class ProfileManager {
           await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
           await bucket.update(ACTIVE_PROFILE_KEY, undefined)
           await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-          this.codexHomeManager.setActiveProfileId(old)
           return old
         }
 
@@ -1671,9 +1663,6 @@ export class ProfileManager {
         await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
         await bucket.update(ACTIVE_PROFILE_KEY, undefined)
         await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-        if (inferred) {
-          this.codexHomeManager.setActiveProfileId(inferred)
-        }
         return inferred
       }
     }
@@ -1682,7 +1671,6 @@ export class ProfileManager {
     if (inferred) {
       await bucket.update(activeKey, inferred)
       await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-      this.codexHomeManager.setActiveProfileId(inferred)
       return inferred
     }
 
@@ -1769,7 +1757,6 @@ export class ProfileManager {
       await this.setLastProfileId(prev)
     }
 
-    this.codexHomeManager.setActiveProfileId(profileId)
     await this.setActiveProfileIdInState(profileId)
 
     if (profileId && authData) {

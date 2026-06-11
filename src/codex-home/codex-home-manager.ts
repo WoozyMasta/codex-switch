@@ -20,6 +20,7 @@ function normalizePathForId(value: string): string {
 
 export class CodexHomeManager {
   private readonly initialCodexHome = process.env.CODEX_HOME
+  private readonly activeHome = this.resolveActiveHome()
 
   constructor() {}
 
@@ -36,7 +37,7 @@ export class CodexHomeManager {
     // intentionally based only on the environment VS Code was launched with.
   }
 
-  getActiveHome(): ResolvedCodexHome {
+  private resolveActiveHome(): ResolvedCodexHome {
     const fallbackHome = path.join(os.homedir(), '.codex')
     const envValue = this.initialCodexHome || fallbackHome
     const fsPath = path.resolve(envValue)
@@ -60,8 +61,12 @@ export class CodexHomeManager {
     }
   }
 
+  getActiveHome(): ResolvedCodexHome {
+    return this.activeHome
+  }
+
   ensureActiveHome(): ResolvedCodexHome {
-    const home = this.getActiveHome()
+    const home = this.activeHome
     fs.mkdirSync(home.fsPath, { recursive: true, mode: 0o700 })
     return home
   }

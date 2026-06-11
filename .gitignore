@@ -241,3 +241,8 @@ $RECYCLE.BIN/
 
 # Profile export/import file
 codex-switch-profiles.json
+
+# Node tests
+out-test/
+test/**/*.js
+test/**/*.js.map

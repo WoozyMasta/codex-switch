@@ -24,14 +24,17 @@ and this project adheres to [Semantic Versioning][].
 * Added `Codex Switch: Prepare for New Login (Chat)`
   to clear the local `auth.json`, preserve matching saved auth when possible,
   and reload the window so Chat can show the login flow again.
+  (PR #23 #24 by @panella87)
 
 ### Changed
 
 * Warn before switching, activating, cycling, importing,
   or starting a new login when the current live Codex auth
   is not saved as a profile, with an option to save it first.
+  (PR #23 #24 by @panella87)
 * Preserve refreshed live Codex auth into the matching saved profile before
   destructive replacement flows to avoid restoring stale `auth.json` data.
+  (PR #23 #24 by @panella87)
 
 ## [1.3.2][] - 2026-04-28
 

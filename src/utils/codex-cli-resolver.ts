@@ -186,7 +186,7 @@ function getBundledCodexSearchDirectories(): string[] {
     path.join(os.homedir(), '.vscode-insiders', 'extensions'),
     path.join(os.homedir(), '.vscode-oss', 'extensions'),
   ]
-  const dirs: string[] = []
+  const candidates: BundledCodexCandidate[] = []
 
   for (const root of extensionRoots) {
     if (!existsSync(root)) {
@@ -205,14 +205,68 @@ function getBundledCodexSearchDirectories(): string[] {
           continue
         }
 
-        dirs.push(path.join(root, entry.name, 'bin', 'windows-x86_64'))
+        candidates.push({
+          extensionName: entry.name,
+          binaryDirectory: path.join(root, entry.name, 'bin', 'windows-x86_64'),
+        })
       }
     } catch {
       // Ignore optional bundled CLI discovery failures.
     }
   }
 
-  return dirs
+  return candidates
+    .sort(compareBundledCodexCandidates)
+    .map((candidate) => candidate.binaryDirectory)
+}
+
+interface BundledCodexCandidate {
+  extensionName: string
+  binaryDirectory: string
+}
+
+function compareBundledCodexCandidates(
+  left: BundledCodexCandidate,
+  right: BundledCodexCandidate,
+): number {
+  const leftVersion = extractVersionFromBundledExtensionName(left.extensionName)
+  const rightVersion = extractVersionFromBundledExtensionName(
+    right.extensionName,
+  )
+
+  if (leftVersion && rightVersion) {
+    const versionComparison = compareVersionParts(leftVersion, rightVersion)
+    if (versionComparison !== 0) {
+      return versionComparison * -1
+    }
+  } else if (leftVersion || rightVersion) {
+    return leftVersion ? -1 : 1
+  }
+
+  return left.extensionName.localeCompare(right.extensionName)
+}
+
+function extractVersionFromBundledExtensionName(
+  extensionName: string,
+): number[] | null {
+  const match = extensionName.match(/-(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/)
+  if (!match) {
+    return null
+  }
+
+  return match.slice(1).map((part) => Number.parseInt(part, 10))
+}
+
+function compareVersionParts(left: number[], right: number[]): number {
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const leftPart = left[i] ?? 0
+    const rightPart = right[i] ?? 0
+    if (leftPart !== rightPart) {
+      return leftPart - rightPart
+    }
+  }
+
+  return 0
 }
 
 function isExecutableFile(filePath: string): boolean {

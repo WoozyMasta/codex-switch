@@ -29,10 +29,8 @@ import {
   compareIdentitySnapshots,
   type IdentitySnapshot,
 } from '../utils/auth-identity'
-import {
-  getCanonicalTokenBundle,
-  validateImportedAuthJson,
-} from '../utils/auth-payload'
+import { getCanonicalTokenBundle } from '../utils/auth-payload'
+import { parseImportEntry } from '../utils/import-entry'
 import { parseProfileSummary } from '../utils/profile-summary'
 
 type ProfileTokens = Pick<
@@ -96,12 +94,6 @@ interface ImportProfilesResult {
   created: number
   updated: number
   skipped: number
-}
-
-interface ParsedImportEntry {
-  sourceProfileId?: string
-  name: string
-  authData: AuthData
 }
 
 interface LiveAuthPreservationResult {
@@ -766,70 +758,6 @@ export class ProfileManager {
     return { data, skipped }
   }
 
-  private parseImportEntry(value: unknown): ParsedImportEntry | null {
-    const entry = asObject(value)
-    if (!entry) {
-      return null
-    }
-
-    const profile = asObject(entry.profile)
-    const tokens = asObject(entry.tokens)
-    if (!profile || !tokens) {
-      return null
-    }
-
-    const idToken = asOptionalString(tokens.idToken)
-    const accessToken = asOptionalString(tokens.accessToken)
-    const refreshToken = asOptionalString(tokens.refreshToken)
-    if (!idToken || !accessToken || !refreshToken) {
-      return null
-    }
-
-    const email = asOptionalString(profile.email) || 'Unknown'
-    const planType = asOptionalString(profile.planType) || 'Unknown'
-    const name =
-      asOptionalString(profile.name) ||
-      (email !== 'Unknown' ? email.split('@')[0] : undefined) ||
-      'profile'
-
-    const authJson = asObject(tokens.authJson) || undefined
-    const accountId =
-      asOptionalString(tokens.accountId) || asOptionalString(profile.accountId)
-    const validatedAuthJson = authJson
-      ? validateImportedAuthJson(authJson, {
-          idToken,
-          accessToken,
-          refreshToken,
-          accountId,
-        })
-      : undefined
-
-    if (authJson && !validatedAuthJson) {
-      return null
-    }
-
-    return {
-      sourceProfileId: asOptionalString(profile.id),
-      name,
-      authData: {
-        idToken,
-        accessToken,
-        refreshToken,
-        accountId,
-        defaultOrganizationId: asOptionalString(profile.defaultOrganizationId),
-        defaultOrganizationTitle: asOptionalString(
-          profile.defaultOrganizationTitle,
-        ),
-        chatgptUserId: asOptionalString(profile.chatgptUserId),
-        userId: asOptionalString(profile.userId),
-        subject: asOptionalString(profile.subject),
-        email,
-        planType,
-        authJson: validatedAuthJson ?? undefined,
-      },
-    }
-  }
-
   async importProfilesFromTransfer(
     value: unknown,
   ): Promise<ImportProfilesResult> {
@@ -857,7 +785,7 @@ export class ProfileManager {
     let skipped = 0
 
     for (const rawEntry of payload.profiles) {
-      const parsed = this.parseImportEntry(rawEntry)
+      const parsed = parseImportEntry(rawEntry)
       if (!parsed) {
         skipped += 1
         continue

@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning][].
 * Active and previous profile state can now be stored per resolved `CODEX_HOME`,
   including per-home shared active-profile files in `remoteFiles` mode.
 
-## [1.3.2][] - 2026-04-27
+## [1.3.2][] - 2026-04-28
 
 ### Changed
 
@@ -50,7 +50,7 @@ and this project adheres to [Semantic Versioning][].
   (PR #14 by @hugodeco)
 * Preserve refreshed Codex auth across profile switches to avoid restoring
   stale `auth.json` snapshots after token refresh.
-  (PR #17 by @hugodeco)
+  (PR #17 by @panella87)
 * Prevent duplicate import popups during `Login via Codex CLI` by guarding
   against repeated auth-file watcher events.
 * Cache WSL auth-path resolution and throttle repeated resolve-error logs to

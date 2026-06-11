@@ -17,19 +17,34 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
-* Added optional `CODEX_HOME`-aware active profile state.
+* Optional `CODEX_HOME`-aware active profile state.
   When enabled, VS Code windows launched with different `CODEX_HOME`
   values keep separate active and previous profile selections.
-* Added `codexSwitch.codexHome.inheritDefaultProfileWhenEmpty`
+* `codexSwitch.codexHome.inheritDefaultProfileWhenEmpty`
   to bootstrap an empty non-default `CODEX_HOME`
   from the default home active profile.
-* Added `Codex Switch: Use Default CODEX_HOME Profile Here`
+* `Codex Switch: Use Default CODEX_HOME Profile Here`
   for manually syncing the current home to the default home active profile.
+* Codex account rate limits to the profile tooltip and switcher,
+  showing remaining 5-hour and weekly limits for saved profiles.
+* Automatic focused-window limit refresh, a manual Refresh limits action,
+  and `codexSwitch.codexCliPath` for choosing a Codex CLI binary when needed.
+* `Codex Switch: Prepare for New Login (Chat)`
+  to clear the local `auth.json`, preserve matching saved auth when possible,
+  and reload the window so Chat can show the login flow again.
+  (PR #23 #24 by @panella87)
 
 ### Changed
 
 * Active and previous profile state can now be stored per resolved `CODEX_HOME`,
   including per-home shared active-profile files in `remoteFiles` mode.
+* Warn before switching, activating, cycling, importing,
+  or starting a new login when the current live Codex auth
+  is not saved as a profile, with an option to save it first.
+  (PR #23 #24 by @panella87)
+* Preserve refreshed live Codex auth into the matching saved profile before
+  destructive replacement flows to avoid restoring stale `auth.json` data.
+  (PR #23 #24 by @panella87)
 
 ## [1.3.2][] - 2026-04-28
 

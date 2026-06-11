@@ -73,6 +73,10 @@
         "title": "%command.profile.addFromCodexAuthFile.title%"
       },
       {
+        "command": "codex-switch.profile.prepareForNewLoginChat",
+        "title": "%command.profile.prepareForNewLoginChat.title%"
+      },
+      {
         "command": "codex-switch.profile.addFromFile",
         "title": "%command.profile.addFromFile.title%"
       },
@@ -137,6 +141,17 @@
           "type": "boolean",
           "default": false,
           "description": "%configuration.reloadWindowAfterProfileSwitch.description%"
+        },
+        "codexSwitch.codexCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "%configuration.codexCliPath.description%"
+        },
+        "codexSwitch.rateLimitAutoRefreshIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "%configuration.rateLimitAutoRefreshIntervalSeconds.description%"
         },
         "codexSwitch.statusBarClickBehavior": {
           "type": "string",

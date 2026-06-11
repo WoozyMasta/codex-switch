@@ -13,6 +13,17 @@ export interface AuthData {
   authJson?: Record<string, unknown>
 }
 
+export interface ProfileRateLimitWindow {
+  usedPercent: number
+  remainingPercent: number
+  resetsAt?: number | null
+}
+
+export interface ProfileRateLimits {
+  fiveHour: ProfileRateLimitWindow | null
+  weekly: ProfileRateLimitWindow | null
+}
+
 export type StorageMode = 'auto' | 'secretStorage' | 'remoteFiles'
 
 export type CodexHomeSource = 'default' | 'environment'
@@ -30,6 +41,7 @@ export interface ProfileSummary {
   subject?: string
   createdAt: string
   updatedAt: string
+  rateLimits?: ProfileRateLimits | null
 }
 
 export interface ResolvedCodexHome {

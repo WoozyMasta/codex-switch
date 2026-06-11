@@ -132,10 +132,14 @@ export function activate(context: vscode.ExtensionContext) {
   resetAutoRefreshTimer()
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('codexSwitch.storageMode')) {
+      if (
+        event.affectsConfiguration('codexSwitch.storageMode') ||
+        event.affectsConfiguration('codexSwitch.codexHome.enabled') ||
+        event.affectsConfiguration('chatgpt.runCodexInWindowsSubsystemForLinux')
+      ) {
         void (async () => {
           vscode.window.showInformationMessage(
-            'Codex Switch storage mode changed. Restarting the extension host to apply the new storage location.',
+            'Codex Switch auth/storage settings changed. Restarting the extension host to apply the new home and storage targets.',
           )
           await restartExtensionHostOrReloadWindow()
         })()

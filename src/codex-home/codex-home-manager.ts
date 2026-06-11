@@ -21,6 +21,11 @@ function normalizePathForId(value: string): string {
 export class CodexHomeManager {
   private readonly initialCodexHome = process.env.CODEX_HOME
   private readonly activeHome = this.resolveActiveHome()
+  private readonly wslCustomHomeUnsupported =
+    process.platform === 'win32' &&
+    shouldUseWslAuthPath() &&
+    this.activeHome.source === 'environment' &&
+    !this.activeHome.isDefault
 
   constructor() {}
 
@@ -83,5 +88,9 @@ export class CodexHomeManager {
       name,
       env: home ? { CODEX_HOME: home.fsPath } : undefined,
     })
+  }
+
+  isWslCustomHomeUnsupported(): boolean {
+    return this.wslCustomHomeUnsupported
   }
 }

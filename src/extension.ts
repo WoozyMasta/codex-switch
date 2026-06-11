@@ -41,6 +41,13 @@ export function activate(context: vscode.ExtensionContext) {
     home: codexHomeManager.getActiveHome(),
   }
 
+  if (codexHomeManager.isWslCustomHomeUnsupported()) {
+    vscode.window.showErrorMessage(
+      'Codex Switch does not support a custom CODEX_HOME when Chat runs Codex in WSL. Disable codexHome.enabled or turn off runCodexInWindowsSubsystemForLinux.',
+    )
+    return
+  }
+
   let refreshProfileUiPromise: Promise<void> | null = null
   let pendingRefreshProfileUiOptions: RefreshProfileUiOptions | null = null
 

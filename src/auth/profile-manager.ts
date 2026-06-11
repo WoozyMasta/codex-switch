@@ -1888,7 +1888,10 @@ export class ProfileManager {
     await this.maybeSyncToCodexAuthFile(active)
   }
 
-  createWatchers(onChanged: () => void): vscode.Disposable[] {
+  createWatchers(
+    onChanged: () => void,
+    authPath?: string,
+  ): vscode.Disposable[] {
     const disposables: vscode.Disposable[] = []
     const fire = () => {
       try {
@@ -1898,7 +1901,7 @@ export class ProfileManager {
       }
     }
 
-    const authPath = this.getActiveCodexAuthPath()
+    const resolvedAuthPath = authPath || this.getActiveCodexAuthPath()
     let authDebounceTimer: ReturnType<typeof setTimeout> | undefined
     const scheduleAuthCapture = () => {
       if (authDebounceTimer) {
@@ -1907,7 +1910,7 @@ export class ProfileManager {
       authDebounceTimer = setTimeout(() => {
         void (async () => {
           try {
-            await this.captureLiveAuthForMatchingProfile(authPath)
+            await this.captureLiveAuthForMatchingProfile(resolvedAuthPath)
           } catch {
             // Best-effort capture.
           }
@@ -1924,7 +1927,7 @@ export class ProfileManager {
       }),
     )
 
-    const authDir = path.dirname(authPath)
+    const authDir = path.dirname(resolvedAuthPath)
     const authWatcher = vscode.workspace.createFileSystemWatcher(
       new vscode.RelativePattern(vscode.Uri.file(authDir), 'auth.json'),
     )

@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import { ProfileManager } from './auth/profile-manager'
 import { ProfileRateLimitService } from './auth/profile-rate-limit-service'
 import { CodexHomeManager } from './codex-home/codex-home-manager'
+import { ResolvedCodexHome } from './types'
 import {
   createStatusBarItem,
   getStatusBarItem,
@@ -23,6 +24,10 @@ interface RefreshProfileUiOptions {
   refreshActiveRateLimitOnly?: boolean
 }
 
+interface RuntimeContext {
+  home: ResolvedCodexHome
+}
+
 export function activate(context: vscode.ExtensionContext) {
   debugLog('Codex Switch activated')
 
@@ -32,6 +37,9 @@ export function activate(context: vscode.ExtensionContext) {
   codexHomeManager = new CodexHomeManager()
   profileManager = new ProfileManager(context, codexHomeManager)
   profileRateLimitService = new ProfileRateLimitService()
+  const runtime: RuntimeContext = {
+    home: codexHomeManager.getActiveHome(),
+  }
 
   let refreshProfileUiPromise: Promise<void> | null = null
   let pendingRefreshProfileUiOptions: RefreshProfileUiOptions | null = null
@@ -52,7 +60,7 @@ export function activate(context: vscode.ExtensionContext) {
         pendingRefreshProfileUiOptions = null
 
         try {
-          await refreshProfileUi(currentOptions)
+          await refreshProfileUi(runtime.home, currentOptions)
         } catch (error) {
           errorLog('Error refreshing profile UI:', error)
           updateProfileStatus(null, [])
@@ -80,7 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     ...profileManager.createWatchers(() => {
       void refreshUi()
-    }),
+    }, runtime.home.authPath),
   )
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((state) => {
@@ -147,7 +155,10 @@ export function activate(context: vscode.ExtensionContext) {
   })()
 }
 
-async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
+async function refreshProfileUi(
+  home: ResolvedCodexHome,
+  options: RefreshProfileUiOptions = {},
+) {
   if (!profileManager || !codexHomeManager) {
     updateProfileStatus(null, [])
     return
@@ -162,9 +173,7 @@ async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
     activeId = undefined
   }
 
-  const home = codexHomeManager.isEnabled()
-    ? codexHomeManager.getActiveHome()
-    : undefined
+  const activeHome = codexHomeManager.isEnabled() ? home : undefined
 
   const cachedProfiles = profileRateLimitService
     ? profileRateLimitService.applyCachedRateLimits(profiles)
@@ -177,7 +186,7 @@ async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
     return
   }
 
-  updateProfileStatus(cachedActiveProfile, cachedProfiles, home)
+  updateProfileStatus(cachedActiveProfile, cachedProfiles, activeHome)
 
   if (!profileRateLimitService || profiles.length === 0) {
     return
@@ -217,7 +226,7 @@ async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
   updateProfileStatus(
     activeProfileWithRateLimits,
     mergedProfilesWithRateLimits,
-    home,
+    activeHome,
   )
 }
 

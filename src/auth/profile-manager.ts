@@ -415,6 +415,43 @@ export class ProfileManager {
     }
   }
 
+  private validateImportedAuthJson(
+    authJson: unknown,
+    tokens: CanonicalTokenBundle & { accountId?: string },
+  ): Record<string, unknown> | null {
+    const root = asObject(authJson)
+    if (!root) {
+      return null
+    }
+
+    const nestedTokens = asObject(root.tokens)
+    if (!nestedTokens) {
+      return null
+    }
+
+    const nestedIdToken = this.asNonEmptyString(nestedTokens.id_token)
+    const nestedAccessToken = this.asNonEmptyString(nestedTokens.access_token)
+    const nestedRefreshToken = this.asNonEmptyString(nestedTokens.refresh_token)
+    if (
+      nestedIdToken !== tokens.idToken ||
+      nestedAccessToken !== tokens.accessToken ||
+      nestedRefreshToken !== tokens.refreshToken
+    ) {
+      return null
+    }
+
+    const nestedAccountId = this.asNonEmptyString(nestedTokens.account_id)
+    if (
+      tokens.accountId &&
+      nestedAccountId &&
+      nestedAccountId !== tokens.accountId
+    ) {
+      return null
+    }
+
+    return root
+  }
+
   private shouldReplaceStoredProfileAuthWithLive(
     storedAuth: AuthData | null,
     liveAuth: AuthData,
@@ -894,6 +931,18 @@ export class ProfileManager {
     const authJson = asObject(tokens.authJson) || undefined
     const accountId =
       asOptionalString(tokens.accountId) || asOptionalString(profile.accountId)
+    const validatedAuthJson = authJson
+      ? this.validateImportedAuthJson(authJson, {
+          idToken,
+          accessToken,
+          refreshToken,
+          accountId,
+        })
+      : undefined
+
+    if (authJson && !validatedAuthJson) {
+      return null
+    }
 
     return {
       sourceProfileId: asOptionalString(profile.id),
@@ -912,7 +961,7 @@ export class ProfileManager {
         subject: asOptionalString(profile.subject),
         email,
         planType,
-        authJson,
+        authJson: validatedAuthJson ?? undefined,
       },
     }
   }

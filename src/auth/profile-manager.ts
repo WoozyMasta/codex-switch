@@ -35,6 +35,28 @@ interface ProfilesFileV1 {
   profiles: ProfileSummary[]
 }
 
+interface ProfilesFileStateMissing {
+  kind: 'missing'
+  path: string
+}
+
+interface ProfilesFileStateValid {
+  kind: 'valid'
+  path: string
+  file: ProfilesFileV1
+}
+
+interface ProfilesFileStateCorrupt {
+  kind: 'corrupt'
+  path: string
+  reason: string
+}
+
+type ProfilesFileState =
+  | ProfilesFileStateMissing
+  | ProfilesFileStateValid
+  | ProfilesFileStateCorrupt
+
 const PROFILE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -611,7 +633,7 @@ export class ProfileManager {
     }
   }
 
-  private parseProfilesFile(raw: string): ProfilesFileV1 {
+  private parseProfilesFile(raw: string): ProfilesFileV1 | null {
     const parsed: any = JSON.parse(raw)
 
     const profiles = (values: unknown[]): ProfileSummary[] =>
@@ -621,7 +643,10 @@ export class ProfileManager {
 
     // Legacy format: plain array of profiles.
     if (Array.isArray(parsed)) {
-      return { version: 1, profiles: profiles(parsed) }
+      const parsedProfiles = profiles(parsed)
+      return parsed.length > 0 && parsedProfiles.length === 0
+        ? null
+        : { version: 1, profiles: parsedProfiles }
     }
 
     // Legacy format: { profiles: [...] } without a version.
@@ -630,15 +655,21 @@ export class ProfileManager {
       typeof parsed === 'object' &&
       Array.isArray(parsed.profiles)
     ) {
-      return { version: 1, profiles: profiles(parsed.profiles) }
+      const parsedProfiles = profiles(parsed.profiles)
+      return parsed.profiles.length > 0 && parsedProfiles.length === 0
+        ? null
+        : { version: 1, profiles: parsedProfiles }
     }
 
     // Current format: { version: 1, profiles: [...] }
     if (parsed && parsed.version === 1 && Array.isArray(parsed.profiles)) {
-      return { version: 1, profiles: profiles(parsed.profiles) }
+      const parsedProfiles = profiles(parsed.profiles)
+      return parsed.profiles.length > 0 && parsedProfiles.length === 0
+        ? null
+        : { version: 1, profiles: parsedProfiles }
     }
 
-    return { version: 1, profiles: [] }
+    return null
   }
 
   private parseProfileId(value: unknown): string | null {
@@ -697,32 +728,67 @@ export class ProfileManager {
     }
   }
 
-  private async readProfilesFile(): Promise<ProfilesFileV1> {
+  private async readProfilesFileState(): Promise<ProfilesFileState> {
     this.ensureStorageDir()
     const filePath = this.getProfilesPath()
     if (!fs.existsSync(filePath)) {
-      return { version: 1, profiles: [] }
+      return { kind: 'missing', path: filePath }
     }
 
     try {
-      if (this.isRemoteFilesMode()) {
-        const parsed = readJsonFile<any>(filePath)
-        if (parsed == null) {
-          return { version: 1, profiles: [] }
-        }
-        return this.parseProfilesFile(JSON.stringify(parsed))
-      }
       const raw = fs.readFileSync(filePath, 'utf8')
-      return this.parseProfilesFile(raw)
-    } catch {
-      // If corrupted, don't crash the extension.
-      return { version: 1, profiles: [] }
+      const file = this.parseProfilesFile(raw)
+      if (!file) {
+        return {
+          kind: 'corrupt',
+          path: filePath,
+          reason: 'Invalid profiles file format.',
+        }
+      }
+      return { kind: 'valid', path: filePath, file }
+    } catch (error) {
+      return {
+        kind: 'corrupt',
+        path: filePath,
+        reason: error instanceof Error ? error.message : String(error),
+      }
     }
+  }
+
+  private async readProfilesFile(): Promise<ProfilesFileV1> {
+    const state = await this.readProfilesFileState()
+    if (state.kind === 'valid') {
+      return state.file
+    }
+    if (state.kind === 'corrupt') {
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t(
+          'Profile storage at {0} is corrupted and was not loaded.',
+          state.path,
+        ),
+      )
+    }
+    return { version: 1, profiles: [] }
   }
 
   private writeProfilesFile(data: ProfilesFileV1) {
     this.ensureStorageDir()
     writeJsonFile(this.getProfilesPath(), data)
+  }
+
+  private async requireWritableProfilesFile(): Promise<ProfilesFileV1 | null> {
+    const state = await this.readProfilesFileState()
+    if (state.kind === 'corrupt') {
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t(
+          'Profile storage at {0} is corrupted and cannot be modified.',
+          state.path,
+        ),
+      )
+      return null
+    }
+
+    return state.kind === 'valid' ? state.file : { version: 1, profiles: [] }
   }
 
   private secretKey(profileId: string): string {
@@ -894,7 +960,7 @@ export class ProfileManager {
       try {
         const raw = fs.readFileSync(legacyProfilesPath, 'utf8')
         const legacy = this.parseProfilesFile(raw)
-        if (!legacy.profiles || legacy.profiles.length === 0) {
+        if (!legacy || legacy.profiles.length === 0) {
           continue
         }
 
@@ -1172,7 +1238,10 @@ export class ProfileManager {
     profileId: string,
     authData: AuthData,
   ): Promise<boolean> {
-    const file = await this.readProfilesFile()
+    const file = await this.requireWritableProfilesFile()
+    if (!file) {
+      return false
+    }
     const idx = file.profiles.findIndex((p) => p.id === profileId)
     if (idx === -1) {
       return false
@@ -1289,6 +1358,11 @@ export class ProfileManager {
     name: string,
     authData: AuthData,
   ): Promise<ProfileSummary> {
+    const file = await this.requireWritableProfilesFile()
+    if (!file) {
+      throw new Error('Profile storage is corrupted and cannot be modified.')
+    }
+
     const now = new Date().toISOString()
     const id = randomUUID()
 
@@ -1307,7 +1381,6 @@ export class ProfileManager {
       updatedAt: now,
     }
 
-    const file = await this.readProfilesFile()
     file.profiles.push(profile)
     this.writeProfilesFile(file)
 
@@ -1324,7 +1397,10 @@ export class ProfileManager {
   }
 
   async renameProfile(profileId: string, newName: string): Promise<boolean> {
-    const file = await this.readProfilesFile()
+    const file = await this.requireWritableProfilesFile()
+    if (!file) {
+      return false
+    }
     const idx = file.profiles.findIndex((p) => p.id === profileId)
     if (idx === -1) {
       return false
@@ -1339,7 +1415,10 @@ export class ProfileManager {
   }
 
   async deleteProfile(profileId: string): Promise<boolean> {
-    const file = await this.readProfilesFile()
+    const file = await this.requireWritableProfilesFile()
+    if (!file) {
+      return false
+    }
     const before = file.profiles.length
     file.profiles = file.profiles.filter((p) => p.id !== profileId)
     if (file.profiles.length === before) {

@@ -8,6 +8,7 @@ import {
   updateProfileStatus,
 } from './ui/status-bar'
 import { registerCommands } from './commands'
+import { restartExtensionHostOrReloadWindow } from './utils/vscode-restart'
 import { debugLog, errorLog } from './utils/log'
 
 const DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS = 30
@@ -115,6 +116,16 @@ export function activate(context: vscode.ExtensionContext) {
   resetAutoRefreshTimer()
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('codexSwitch.storageMode')) {
+        void (async () => {
+          vscode.window.showInformationMessage(
+            'Codex Switch storage mode changed. Restarting the extension host to apply the new storage location.',
+          )
+          await restartExtensionHostOrReloadWindow()
+        })()
+        return
+      }
+
       if (
         event.affectsConfiguration(
           'codexSwitch.rateLimitAutoRefreshIntervalSeconds',

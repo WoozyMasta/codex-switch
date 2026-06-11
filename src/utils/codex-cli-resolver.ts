@@ -1,16 +1,20 @@
-import { constants, Dirent, existsSync, readdirSync, accessSync } from 'fs'
+import {
+  accessSync,
+  constants,
+  Dirent,
+  existsSync,
+  readdirSync,
+  statSync,
+} from 'fs'
 import * as os from 'os'
 import * as path from 'path'
 import * as vscode from 'vscode'
 
-const CODEX_CLI_FILENAMES =
-  process.platform === 'win32' ? ['codex.exe', 'codex.cmd'] : ['codex']
 const NPM_BIN_DIRECTORY = 'npm'
 
 export interface CodexCliCommand {
   command: string
   args: string[]
-  useShell?: boolean
 }
 
 export function resolveCodexCliCommand(): CodexCliCommand | null {
@@ -33,40 +37,59 @@ function resolveConfiguredCodexCommand(): CodexCliCommand | null {
     return null
   }
 
-  if (path.isAbsolute(configuredPath) && !isExecutableFile(configuredPath)) {
+  const executable = resolveConfiguredCodexExecutable(configuredPath)
+  if (!executable) {
     return null
   }
 
-  return createCodexCommand(configuredPath, {
-    useShellForWindowsCommandName:
-      process.platform === 'win32' && !path.isAbsolute(configuredPath),
-  })
+  return createCodexCommand(executable)
 }
 
-function createCodexCommand(
-  executable: string,
-  options: { useShellForWindowsCommandName?: boolean } = {},
-): CodexCliCommand {
+function resolveConfiguredCodexExecutable(
+  configuredPath: string,
+): string | null {
+  const candidate = configuredPath.trim()
+  if (!candidate) {
+    return null
+  }
+
+  if (isPathLike(candidate)) {
+    const resolvedPath = path.resolve(candidate)
+    return isExecutableFile(resolvedPath) ? resolvedPath : null
+  }
+
+  return findCodexExecutable(candidate)
+}
+
+function createCodexCommand(executable: string): CodexCliCommand {
   if (
     process.platform === 'win32' &&
     executable.toLowerCase().endsWith('.cmd')
   ) {
     return {
       command: process.env.ComSpec || 'cmd.exe',
-      args: ['/d', '/s', '/c', `"${executable}" app-server`],
+      // Keep the batch command shape fixed. Only the resolved absolute path is
+      // interpolated, and it is quoted before cmd.exe sees it.
+      args: [
+        '/d',
+        '/v:off',
+        '/s',
+        '/c',
+        `${quoteWindowsCmdArgument(executable)} app-server`,
+      ],
     }
   }
 
   return {
     command: executable,
     args: ['app-server'],
-    useShell: options.useShellForWindowsCommandName,
   }
 }
 
-function findCodexExecutable(): string | null {
+function findCodexExecutable(commandName = 'codex'): string | null {
+  const candidateNames = buildExecutableCandidateNames(commandName)
   for (const dir of getCodexSearchDirectories()) {
-    for (const filename of CODEX_CLI_FILENAMES) {
+    for (const filename of candidateNames) {
       const candidate = path.join(dir, filename)
       if (isExecutableFile(candidate)) {
         return candidate
@@ -96,6 +119,29 @@ function getCodexSearchDirectories(): string[] {
   }
 
   return dirs
+}
+
+function buildExecutableCandidateNames(commandName: string): string[] {
+  const names = [commandName]
+
+  if (process.platform === 'win32') {
+    const lower = commandName.toLowerCase()
+    if (!lower.endsWith('.exe') && !lower.endsWith('.cmd')) {
+      names.push(`${commandName}.exe`, `${commandName}.cmd`)
+    }
+  }
+
+  return names
+}
+
+function isPathLike(value: string): boolean {
+  return (
+    path.isAbsolute(value) ||
+    value.startsWith('.') ||
+    value.includes(path.sep) ||
+    (path.sep !== path.posix.sep && value.includes(path.posix.sep)) ||
+    /^[a-zA-Z]:[\\/]/.test(value)
+  )
 }
 
 function addCommonCodexSearchDirectories(
@@ -174,6 +220,15 @@ function isExecutableFile(filePath: string): boolean {
     return false
   }
 
+  try {
+    const stat = statSync(filePath)
+    if (!stat.isFile()) {
+      return false
+    }
+  } catch {
+    return false
+  }
+
   if (process.platform === 'win32') {
     return true
   }
@@ -184,6 +239,10 @@ function isExecutableFile(filePath: string): boolean {
   } catch {
     return false
   }
+}
+
+function quoteWindowsCmdArgument(value: string): string {
+  return `"${value.replace(/%/g, '%%')}"`
 }
 
 function isSamePath(a: string, b: string): boolean {

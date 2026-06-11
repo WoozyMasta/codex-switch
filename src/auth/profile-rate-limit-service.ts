@@ -540,7 +540,6 @@ function spawnAppServer(
     env,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
-    shell: codexCommand.useShell,
   })
 }
 

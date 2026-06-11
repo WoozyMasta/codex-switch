@@ -24,6 +24,15 @@ import {
   writeJsonFile,
 } from './shared-profile-store'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
+import {
+  buildIdentitySnapshot,
+  compareIdentitySnapshots,
+  type IdentitySnapshot,
+} from '../utils/auth-identity'
+import {
+  getCanonicalTokenBundle,
+  validateImportedAuthJson,
+} from '../utils/auth-payload'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -97,25 +106,8 @@ interface ParsedImportEntry {
   authData: AuthData
 }
 
-interface CanonicalTokenBundle {
-  idToken: string
-  accessToken: string
-  refreshToken: string
-}
-
 interface LiveAuthPreservationResult {
   status: 'noLiveAuth' | 'saved' | 'unsaved'
-}
-
-type IdentityMatch = 'exact' | 'different' | 'ambiguous'
-
-interface IdentitySnapshot {
-  organizationId?: string
-  chatgptUserId?: string
-  userId?: string
-  subject?: string
-  accountId?: string
-  email?: string
 }
 
 interface PrepareForNewLoginChatResult {
@@ -169,17 +161,6 @@ export class ProfileManager {
     return this.getResolvedStorageMode() === 'remoteFiles'
   }
 
-  private normalizeEmail(email: string | undefined): string {
-    return String(email || '')
-      .trim()
-      .toLowerCase()
-  }
-
-  private normalizeComparableEmail(email: string | undefined): string {
-    const normalized = this.normalizeEmail(email)
-    return normalized && normalized !== 'unknown' ? normalized : ''
-  }
-
   private asNonEmptyString(value: unknown): string | undefined {
     if (typeof value !== 'string') {
       return undefined
@@ -198,126 +179,11 @@ export class ProfileManager {
     return undefined
   }
 
-  private normalizeIdentity(value: string | undefined): string {
-    return String(value || '').trim()
-  }
-
-  private compareIdentityValue(
-    left: string | undefined,
-    right: string | undefined,
-  ): 'match' | 'different' | 'ambiguous' | 'unknown' {
-    const normalizedLeft = this.normalizeIdentity(left)
-    const normalizedRight = this.normalizeIdentity(right)
-
-    if (!normalizedLeft && !normalizedRight) {
-      return 'unknown'
-    }
-
-    if (!normalizedLeft || !normalizedRight) {
-      return 'ambiguous'
-    }
-
-    return normalizedLeft === normalizedRight ? 'match' : 'different'
-  }
-
-  private compareIdentityGroup(
-    left: IdentitySnapshot,
-    right: IdentitySnapshot,
-    keys: Array<keyof IdentitySnapshot>,
-  ): 'match' | 'different' | 'ambiguous' | 'unknown' {
-    let sawMatch = false
-    let sawAmbiguous = false
-
-    for (const key of keys) {
-      const state = this.compareIdentityValue(left[key], right[key])
-      if (state === 'different') {
-        return 'different'
-      }
-      if (state === 'match') {
-        sawMatch = true
-      } else if (state === 'ambiguous') {
-        sawAmbiguous = true
-      }
-    }
-
-    if (sawMatch) {
-      return 'match'
-    }
-    if (sawAmbiguous) {
-      return 'ambiguous'
-    }
-    return 'unknown'
-  }
-
-  private compareIdentitySnapshots(
-    left: IdentitySnapshot,
-    right: IdentitySnapshot,
-  ): IdentityMatch {
-    const organizationState = this.compareIdentityValue(
-      left.organizationId,
-      right.organizationId,
-    )
-    if (organizationState === 'different') {
-      return 'different'
-    }
-
-    const strongState = this.compareIdentityGroup(left, right, [
-      'chatgptUserId',
-      'userId',
-      'subject',
-    ])
-    if (strongState === 'different') {
-      return 'different'
-    }
-    if (strongState === 'match') {
-      return organizationState === 'ambiguous' ? 'ambiguous' : 'exact'
-    }
-
-    const weakState = this.compareIdentityGroup(left, right, [
-      'accountId',
-      'email',
-    ])
-    if (weakState === 'different') {
-      return 'different'
-    }
-    if (weakState === 'match') {
-      return organizationState === 'ambiguous' ? 'ambiguous' : 'exact'
-    }
-
-    if (
-      organizationState === 'ambiguous' ||
-      strongState === 'ambiguous' ||
-      weakState === 'ambiguous'
-    ) {
-      return 'ambiguous'
-    }
-
-    return 'ambiguous'
-  }
-
-  private buildIdentitySnapshot(source: {
-    defaultOrganizationId?: string
-    chatgptUserId?: string
-    userId?: string
-    subject?: string
-    accountId?: string
-    email?: string
-  }): IdentitySnapshot {
-    return {
-      organizationId: this.normalizeIdentity(source.defaultOrganizationId),
-      chatgptUserId: this.normalizeIdentity(source.chatgptUserId),
-      userId: this.normalizeIdentity(source.userId),
-      subject: this.normalizeIdentity(source.subject),
-      accountId: this.normalizeIdentity(source.accountId),
-      email: this.normalizeComparableEmail(source.email),
-    }
-  }
-
   private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
     return (
-      this.compareIdentitySnapshots(
-        this.buildIdentitySnapshot(profile),
-        this.buildIdentitySnapshot(authData),
+      compareIdentitySnapshots(
+        buildIdentitySnapshot(profile),
+        buildIdentitySnapshot(authData),
       ) === 'exact'
     )
   }
@@ -327,9 +193,9 @@ export class ProfileManager {
     liveAuth: AuthData,
   ): boolean {
     return (
-      this.compareIdentitySnapshots(
+      compareIdentitySnapshots(
         storedIdentity,
-        this.buildIdentitySnapshot(liveAuth),
+        buildIdentitySnapshot(liveAuth),
       ) === 'exact'
     )
   }
@@ -338,12 +204,10 @@ export class ProfileManager {
     profile: ProfileSummary,
     storedAuth: AuthData | null,
   ): IdentitySnapshot {
-    return {
-      organizationId: this.normalizeIdentity(
-        this.pickNonEmptyString(
-          storedAuth?.defaultOrganizationId,
-          profile.defaultOrganizationId,
-        ),
+    return buildIdentitySnapshot({
+      defaultOrganizationId: this.pickNonEmptyString(
+        storedAuth?.defaultOrganizationId,
+        profile.defaultOrganizationId,
       ),
       chatgptUserId: this.pickNonEmptyString(
         storedAuth?.chatgptUserId,
@@ -351,7 +215,7 @@ export class ProfileManager {
       ),
       userId: this.pickNonEmptyString(storedAuth?.userId, profile.userId),
       subject: this.pickNonEmptyString(storedAuth?.subject, profile.subject),
-    }
+    })
   }
 
   private matchesPreservationIdentityForProfile(
@@ -412,76 +276,11 @@ export class ProfileManager {
     )
   }
 
-  private getCanonicalTokenBundle(
-    authData: AuthData,
-  ): CanonicalTokenBundle | undefined {
-    const authJson = asObject(authData.authJson)
-    if (!authJson) {
-      return undefined
-    }
-
-    const tokens = asObject(authJson.tokens)
-    if (!tokens) {
-      return undefined
-    }
-
-    const idToken = this.asNonEmptyString(tokens.id_token)
-    const accessToken = this.asNonEmptyString(tokens.access_token)
-    const refreshToken = this.asNonEmptyString(tokens.refresh_token)
-
-    if (!idToken || !accessToken || !refreshToken) {
-      return undefined
-    }
-
-    return {
-      idToken,
-      accessToken,
-      refreshToken,
-    }
-  }
-
-  private validateImportedAuthJson(
-    authJson: unknown,
-    tokens: CanonicalTokenBundle & { accountId?: string },
-  ): Record<string, unknown> | null {
-    const root = asObject(authJson)
-    if (!root) {
-      return null
-    }
-
-    const nestedTokens = asObject(root.tokens)
-    if (!nestedTokens) {
-      return null
-    }
-
-    const nestedIdToken = this.asNonEmptyString(nestedTokens.id_token)
-    const nestedAccessToken = this.asNonEmptyString(nestedTokens.access_token)
-    const nestedRefreshToken = this.asNonEmptyString(nestedTokens.refresh_token)
-    if (
-      nestedIdToken !== tokens.idToken ||
-      nestedAccessToken !== tokens.accessToken ||
-      nestedRefreshToken !== tokens.refreshToken
-    ) {
-      return null
-    }
-
-    const nestedAccountId = this.asNonEmptyString(nestedTokens.account_id)
-    if (
-      tokens.accountId &&
-      nestedAccountId &&
-      nestedAccountId !== tokens.accountId
-    ) {
-      return null
-    }
-
-    return root
-  }
-
   private shouldReplaceStoredProfileAuthWithLive(
     storedAuth: AuthData | null,
     liveAuth: AuthData,
   ): boolean {
-    const liveTokens = this.getCanonicalTokenBundle(liveAuth)
+    const liveTokens = getCanonicalTokenBundle(liveAuth)
     if (!liveTokens) {
       return false
     }
@@ -490,7 +289,7 @@ export class ProfileManager {
       return true
     }
 
-    const storedTokens = this.getCanonicalTokenBundle(storedAuth)
+    const storedTokens = getCanonicalTokenBundle(storedAuth)
     if (!storedTokens) {
       return true
     }
@@ -1055,7 +854,7 @@ export class ProfileManager {
     const accountId =
       asOptionalString(tokens.accountId) || asOptionalString(profile.accountId)
     const validatedAuthJson = authJson
-      ? this.validateImportedAuthJson(authJson, {
+      ? validateImportedAuthJson(authJson, {
           idToken,
           accessToken,
           refreshToken,

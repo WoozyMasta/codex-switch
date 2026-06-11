@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { ProfileManager } from './auth/profile-manager'
 import { ProfileRateLimitService } from './auth/profile-rate-limit-service'
+import { CodexHomeManager } from './codex-home/codex-home-manager'
 import {
   createStatusBarItem,
   getStatusBarItem,
@@ -12,6 +13,7 @@ import { debugLog, errorLog } from './utils/log'
 const DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS = 30
 
 let profileManager: ProfileManager | undefined
+let codexHomeManager: CodexHomeManager | undefined
 let profileRateLimitService: ProfileRateLimitService | undefined
 let refreshProfileUiGeneration = 0
 
@@ -26,7 +28,8 @@ export function activate(context: vscode.ExtensionContext) {
   const statusBarItem = createStatusBarItem()
   context.subscriptions.push(statusBarItem)
 
-  profileManager = new ProfileManager(context)
+  codexHomeManager = new CodexHomeManager()
+  profileManager = new ProfileManager(context, codexHomeManager)
   profileRateLimitService = new ProfileRateLimitService()
 
   let refreshProfileUiPromise: Promise<void> | null = null
@@ -65,7 +68,14 @@ export function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  registerCommands(context, profileManager, profileRateLimitService, refreshUi)
+  registerCommands(
+    context,
+    profileManager,
+    codexHomeManager,
+    profileRateLimitService,
+    refreshUi,
+  )
+
   context.subscriptions.push(
     ...profileManager.createWatchers(() => {
       void refreshUi()
@@ -127,7 +137,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
-  if (!profileManager) {
+  if (!profileManager || !codexHomeManager) {
     updateProfileStatus(null, [])
     return
   }
@@ -141,6 +151,10 @@ async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
     activeId = undefined
   }
 
+  const home = codexHomeManager.isEnabled()
+    ? codexHomeManager.getActiveHome()
+    : undefined
+
   const cachedProfiles = profileRateLimitService
     ? profileRateLimitService.applyCachedRateLimits(profiles)
     : profiles
@@ -152,7 +166,7 @@ async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
     return
   }
 
-  updateProfileStatus(cachedActiveProfile, cachedProfiles)
+  updateProfileStatus(cachedActiveProfile, cachedProfiles, home)
 
   if (!profileRateLimitService || profiles.length === 0) {
     return
@@ -189,7 +203,11 @@ async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
     return
   }
 
-  updateProfileStatus(activeProfileWithRateLimits, mergedProfilesWithRateLimits)
+  updateProfileStatus(
+    activeProfileWithRateLimits,
+    mergedProfilesWithRateLimits,
+    home,
+  )
 }
 
 function mergeRefreshOptions(
@@ -217,6 +235,10 @@ function getRateLimitAutoRefreshIntervalSeconds(): number {
       'rateLimitAutoRefreshIntervalSeconds',
       DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS,
     )
+
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS
+  }
 
   return Number.isFinite(value) && value > 0 ? Math.max(5, value) : 0
 }

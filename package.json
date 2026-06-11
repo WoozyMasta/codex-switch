@@ -95,6 +95,10 @@
       {
         "command": "codex-switch.profile.delete",
         "title": "%command.profile.delete.title%"
+      },
+      {
+        "command": "codex-switch.profile.syncFromDefaultHome",
+        "title": "%command.profile.syncFromDefaultHome.title%"
       }
     ],
     "menus": {
@@ -163,6 +167,16 @@
             "%configuration.statusBarClickBehavior.toggleLast%",
             "%configuration.statusBarClickBehavior.selector%"
           ]
+        },
+        "codexSwitch.codexHome.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "%configuration.codexHome.enabled.description%"
+        },
+        "codexSwitch.codexHome.inheritDefaultProfileWhenEmpty": {
+          "type": "boolean",
+          "default": true,
+          "description": "%configuration.codexHome.inheritDefaultProfileWhenEmpty.description%"
         }
       }
     }

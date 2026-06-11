@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import { ProfileSummary } from '../types'
+import { ProfileSummary, ResolvedCodexHome } from '../types'
 import { createProfileTooltip } from './tooltip-builder'
 
 let statusBarItem: vscode.StatusBarItem
@@ -20,6 +20,7 @@ export function createStatusBarItem(): vscode.StatusBarItem {
 export function updateProfileStatus(
   profile: ProfileSummary | null,
   profiles: ProfileSummary[],
+  home?: ResolvedCodexHome,
 ) {
   if (!statusBarItem) {
     return
@@ -28,19 +29,21 @@ export function updateProfileStatus(
   cachedProfiles = profiles || []
 
   if (!profile) {
-    statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', vscode.l10n.t('none'))}`
+    const homeSuffix = home ? ` @ ${home.name}` : ''
+    statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', vscode.l10n.t('none'))}${homeSuffix}`
     statusBarItem.command = 'codex-switch.profile.manage'
-    statusBarItem.tooltip = createProfileTooltip(null, cachedProfiles)
+    statusBarItem.tooltip = createProfileTooltip(null, cachedProfiles, home)
     return
   }
 
-  statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', profile.name)}`
+  const homeSuffix = home ? ` @ ${home.name}` : ''
+  statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', profile.name)}${homeSuffix}`
   // If there is nothing meaningful to switch to, go straight to Manage.
   statusBarItem.command =
     cachedProfiles.length <= 1
       ? 'codex-switch.profile.manage'
       : 'codex-switch.profile.toggleLast'
-  statusBarItem.tooltip = createProfileTooltip(profile, cachedProfiles)
+  statusBarItem.tooltip = createProfileTooltip(profile, cachedProfiles, home)
 }
 
 export function getStatusBarItem(): vscode.StatusBarItem {

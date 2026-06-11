@@ -4,13 +4,11 @@ import * as path from 'path'
 import * as os from 'os'
 import { ProfileManager } from '../auth/profile-manager'
 import { ProfileRateLimitService } from '../auth/profile-rate-limit-service'
-import {
-  getDefaultCodexAuthPath,
-  loadAuthDataFromFile,
-  shouldUseWslAuthPath,
-} from '../auth/auth-manager'
+import { loadAuthDataFromFile } from '../auth/auth-manager'
+import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import { buildProfileMetaDisplay } from '../ui/profile-display'
 import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
+import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 
 /**
  * Register all extension commands
@@ -18,14 +16,13 @@ import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
 export function registerCommands(
   context: vscode.ExtensionContext,
   profileManager: ProfileManager,
+  codexHomeManager: CodexHomeManager,
   profileRateLimitService: ProfileRateLimitService,
   onAuthChanged: (options?: {
     forceRateLimitRefresh?: boolean
   }) => Promise<void>,
 ) {
   type StatusBarClickBehavior = 'cycle' | 'toggleLast' | 'selector'
-  const restartExtensionHostCommandId = 'workbench.action.restartExtensionHost'
-  const reloadWindowCommandId = 'workbench.action.reloadWindow'
 
   const maybeRestartAfterProfileSwitch = async () => {
     const reloadAfterSwitch = vscode.workspace
@@ -35,36 +32,14 @@ export function registerCommands(
       return
     }
 
-    const commandIds = await vscode.commands.getCommands(true)
-    if (commandIds.includes(restartExtensionHostCommandId)) {
-      try {
-        await vscode.commands.executeCommand(restartExtensionHostCommandId)
-        return
-      } catch {
-        // Fall back to full window reload on older or restricted hosts.
-      }
-    }
-
-    await vscode.commands.executeCommand(reloadWindowCommandId)
+    await restartExtensionHostOrReloadWindow()
   }
 
   const reloadAfterAuthReset = async (): Promise<void> => {
-    const commandIds = await vscode.commands.getCommands(true)
-
-    if (commandIds.includes(restartExtensionHostCommandId)) {
-      try {
-        await vscode.commands.executeCommand(restartExtensionHostCommandId)
-        return
-      } catch {
-        // Fall back to full window reload.
-      }
-    }
-
-    await vscode.commands.executeCommand(reloadWindowCommandId)
+    await restartExtensionHostOrReloadWindow()
   }
 
-  const getLoginCommandText = (): string =>
-    shouldUseWslAuthPath() ? 'wsl codex login' : 'codex login'
+  const getLoginCommandText = (): string => codexHomeManager.buildLoginCommand()
 
   const getStatusBarClickBehavior = (): StatusBarClickBehavior => {
     const raw = vscode.workspace
@@ -89,7 +64,7 @@ export function registerCommands(
   const addCurrentAuthJsonAsProfile = async (
     restartAfterImport: boolean,
   ): Promise<boolean> => {
-    const authPath = getDefaultCodexAuthPath()
+    const authPath = profileManager.getActiveCodexAuthPath()
     const loginCommandText = getLoginCommandText()
     const authData = await loadAuthDataFromFile(authPath)
     if (!authData) {
@@ -245,7 +220,6 @@ export function registerCommands(
     'codex-switch.login',
     async () => {
       const loginCommandText = getLoginCommandText()
-      const loginSequence = `${loginCommandText}\n`
       const manageLabel = vscode.l10n.t('Manage profiles')
       const openTerminalLabel = vscode.l10n.t('Open terminal')
       const copyCommandLabel = vscode.l10n.t('Copy command')
@@ -263,15 +237,9 @@ export function registerCommands(
       if (selection === manageLabel) {
         await vscode.commands.executeCommand('codex-switch.profile.manage')
       } else if (selection === openTerminalLabel) {
-        vscode.commands.executeCommand('workbench.action.terminal.new')
-        setTimeout(() => {
-          vscode.commands.executeCommand(
-            'workbench.action.terminal.sendSequence',
-            {
-              text: loginSequence,
-            },
-          )
-        }, 500)
+        const terminal = codexHomeManager.createCodexTerminal()
+        terminal.show()
+        terminal.sendText(loginCommandText)
       } else if (selection === copyCommandLabel) {
         vscode.env.clipboard.writeText(loginCommandText)
         vscode.window.showInformationMessage(
@@ -497,18 +465,12 @@ export function registerCommands(
         return
       }
 
-      const authPath = getDefaultCodexAuthPath()
-      const loginSequence = `${getLoginCommandText()}\n`
+      const authPath = profileManager.getActiveCodexAuthPath()
+      const loginCommandText = getLoginCommandText()
 
-      vscode.commands.executeCommand('workbench.action.terminal.new')
-      setTimeout(() => {
-        vscode.commands.executeCommand(
-          'workbench.action.terminal.sendSequence',
-          {
-            text: loginSequence,
-          },
-        )
-      }, 500)
+      const terminal = codexHomeManager.createCodexTerminal()
+      terminal.show()
+      terminal.sendText(loginCommandText)
 
       const start = Date.now()
       const maxWaitMs = 10 * 60 * 1000
@@ -823,10 +785,34 @@ export function registerCommands(
     },
   )
 
+  const syncFromDefaultHomeCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.syncFromDefaultHome',
+    async () => {
+      const profileId = await profileManager.syncActiveProfileFromDefaultHome()
+      if (!profileId) {
+        vscode.window.showInformationMessage(
+          vscode.l10n.t('Default CODEX_HOME has no active profile to sync.'),
+        )
+        return
+      }
+
+      const profile = await profileManager.getProfile(profileId)
+      await onAuthChanged()
+      await maybeRestartAfterProfileSwitch()
+      vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'Synced active profile from default CODEX_HOME: {0}.',
+          profile?.name || profileId,
+        ),
+      )
+    },
+  )
+
   const manageProfilesCommand = vscode.commands.registerCommand(
     'codex-switch.profile.manage',
     async () => {
-      const authPath = getDefaultCodexAuthPath()
+      const authPath = profileManager.getActiveCodexAuthPath()
+      const home = profileManager.getActiveCodexHomeSummary()
       const profiles = await profileManager.listProfiles()
       const hasProfiles = profiles.length > 0
 
@@ -868,6 +854,15 @@ export function registerCommands(
             label: vscode.l10n.t('Import profiles...'),
             command: 'codex-switch.profile.importSettings',
           },
+          ...(home.usesPerHomeState && !home.isDefault
+            ? [
+                {
+                  label: vscode.l10n.t('Use default CODEX_HOME profile here'),
+                  description: home.fsPath,
+                  command: 'codex-switch.profile.syncFromDefaultHome',
+                },
+              ]
+            : []),
           ...(hasProfiles
             ? [
                 {
@@ -905,4 +900,5 @@ export function registerCommands(
   context.subscriptions.push(importSettingsCommand)
   context.subscriptions.push(renameProfileCommand)
   context.subscriptions.push(deleteProfileCommand)
+  context.subscriptions.push(syncFromDefaultHomeCommand)
 }

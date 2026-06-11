@@ -26,6 +26,8 @@ export interface ProfileRateLimits {
 
 export type StorageMode = 'auto' | 'secretStorage' | 'remoteFiles'
 
+export type CodexHomeSource = 'default' | 'environment'
+
 export interface ProfileSummary {
   id: string
   name: string
@@ -40,4 +42,15 @@ export interface ProfileSummary {
   createdAt: string
   updatedAt: string
   rateLimits?: ProfileRateLimits | null
+}
+
+export interface ResolvedCodexHome {
+  id: string
+  name: string
+  fsPath: string
+  envValue: string
+  authPath: string
+  source: CodexHomeSource
+  isDefault: boolean
+  usesPerHomeState: boolean
 }

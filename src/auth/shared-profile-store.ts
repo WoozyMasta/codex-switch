@@ -4,6 +4,7 @@ import * as path from 'path'
 
 export const SHARED_STORE_DIRNAME = '.codex-switch'
 export const SHARED_PROFILES_DIRNAME = 'profiles'
+export const SHARED_ACTIVE_PROFILES_DIRNAME = 'active-profiles'
 export const SHARED_PROFILES_FILENAME = 'profiles.json'
 export const SHARED_ACTIVE_PROFILE_FILENAME = 'active-profile.json'
 
@@ -20,12 +21,20 @@ export function getSharedProfilesDir(): string {
   return path.join(getSharedStoreRoot(), SHARED_PROFILES_DIRNAME)
 }
 
+export function getSharedActiveProfilesDir(): string {
+  return path.join(getSharedStoreRoot(), SHARED_ACTIVE_PROFILES_DIRNAME)
+}
+
 export function getSharedProfilesPath(): string {
   return path.join(getSharedStoreRoot(), SHARED_PROFILES_FILENAME)
 }
 
 export function getSharedActiveProfilePath(): string {
   return path.join(getSharedStoreRoot(), SHARED_ACTIVE_PROFILE_FILENAME)
+}
+
+export function getSharedActiveProfilePathForHome(homeId: string): string {
+  return path.join(getSharedActiveProfilesDir(), `${homeId}.json`)
 }
 
 export function getSharedProfileSecretsPath(profileId: string): string {
@@ -35,6 +44,10 @@ export function getSharedProfileSecretsPath(profileId: string): string {
 export function ensureSharedStoreDirs(): void {
   fs.mkdirSync(getSharedStoreRoot(), { recursive: true, mode: 0o700 })
   fs.mkdirSync(getSharedProfilesDir(), { recursive: true, mode: 0o700 })
+  fs.mkdirSync(getSharedActiveProfilesDir(), {
+    recursive: true,
+    mode: 0o700,
+  })
 }
 
 export function readJsonFile<T>(filePath: string): T | null {

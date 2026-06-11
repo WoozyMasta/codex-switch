@@ -40,29 +40,6 @@ interface JsonRpcErrorResponse {
   error: JsonRpcErrorPayload
 }
 
-interface RateLimitWindowPayload {
-  usedPercent?: number
-  used_percent?: number
-  windowDurationMins?: number | null
-  window_minutes?: number | null
-  resetsAt?: number | null
-  resets_at?: number | null
-  resets_in_seconds?: number | null
-}
-
-interface RateLimitSnapshotPayload {
-  primary: RateLimitWindowPayload | null
-  secondary: RateLimitWindowPayload | null
-}
-
-interface RateLimitResponsePayload {
-  rateLimits: RateLimitSnapshotPayload | null
-  rateLimitsByLimitId: Record<
-    string,
-    RateLimitSnapshotPayload | undefined
-  > | null
-}
-
 interface CacheEntry {
   profileUpdatedAt: string
   fetchedAt: number
@@ -140,10 +117,8 @@ class CodexAppServerClient {
     })
   }
 
-  async readRateLimits(): Promise<RateLimitResponsePayload> {
-    return (await this.sendRequest(
-      'account/rateLimits/read',
-    )) as RateLimitResponsePayload
+  async readRateLimits(): Promise<unknown> {
+    return await this.sendRequest('account/rateLimits/read')
   }
 
   async dispose(): Promise<void> {
@@ -398,7 +373,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
     try {
       await client.initialize()
       const response = await client.readRateLimits()
-      return normalizeRateLimitResponse(response)
+      return normalizeRateLimitResponse(response, Math.floor(Date.now() / 1000))
     } finally {
       await client.dispose()
     }
@@ -437,89 +412,165 @@ async function removeTemporaryCodexHome(
 }
 
 function normalizeRateLimitResponse(
-  response: RateLimitResponsePayload,
+  response: unknown,
+  nowSeconds: number,
 ): ProfileRateLimits | null {
-  const snapshot =
-    response.rateLimitsByLimitId?.[CODEX_LIMIT_ID] || response.rateLimits
-  if (!snapshot) {
+  const snapshots = readRateLimitSnapshots(response)
+
+  for (const snapshot of snapshots) {
+    const normalized = normalizeRateLimitSnapshot(snapshot, nowSeconds)
+    if (normalized) {
+      return normalized
+    }
+  }
+
+  return null
+}
+
+function readRateLimitSnapshots(response: unknown): unknown[] {
+  if (!isRecord(response)) {
+    return []
+  }
+
+  const snapshots: unknown[] = []
+  const byLimitId = response.rateLimitsByLimitId
+  if (isRecord(byLimitId) && CODEX_LIMIT_ID in byLimitId) {
+    snapshots.push(byLimitId[CODEX_LIMIT_ID])
+  }
+  snapshots.push(response.rateLimits)
+  return snapshots
+}
+
+function normalizeRateLimitSnapshot(
+  snapshot: unknown,
+  nowSeconds: number,
+): ProfileRateLimits | null {
+  if (!isRecord(snapshot)) {
     return null
   }
 
   const windows = [snapshot.primary, snapshot.secondary].filter(
-    (value): value is RateLimitWindowPayload => value !== null,
+    (value): value is unknown => value !== null && value !== undefined,
   )
-  const fiveHourWindow = findWindowByDuration(windows, FIVE_HOUR_WINDOW_MINUTES)
-  const weeklyWindow = findWindowByDuration(windows, WEEKLY_WINDOW_MINUTES)
+  const normalizedWindows = windows
+    .map((window) => normalizeRateLimitWindow(window, nowSeconds))
+    .filter((value): value is NormalizedRateLimitWindow => value !== null)
 
-  const normalized: ProfileRateLimits = {
-    fiveHour: normalizeWindow(fiveHourWindow),
-    weekly: normalizeWindow(weeklyWindow),
-  }
-
-  if (!normalized.fiveHour && !normalized.weekly) {
-    return null
-  }
-
-  return normalized
-}
-
-function findWindowByDuration(
-  windows: RateLimitWindowPayload[],
-  targetDurationMins: number,
-): RateLimitWindowPayload | null {
-  return (
-    windows.find(
-      (window) => getWindowDurationMins(window) === targetDurationMins,
-    ) || null
+  const fiveHourWindow = findWindowByDuration(
+    normalizedWindows,
+    FIVE_HOUR_WINDOW_MINUTES,
   )
-}
+  const weeklyWindow = findWindowByDuration(
+    normalizedWindows,
+    WEEKLY_WINDOW_MINUTES,
+  )
 
-function normalizeWindow(
-  window: RateLimitWindowPayload | null | undefined,
-): ProfileRateLimitWindow | null {
-  const usedPercent = getWindowUsedPercent(window)
-  if (usedPercent === null) {
+  if (!fiveHourWindow && !weeklyWindow) {
     return null
   }
 
   return {
-    usedPercent,
-    remainingPercent: clampPercent(100 - usedPercent),
-    resetsAt: getWindowResetTimestamp(window),
+    fiveHour: fiveHourWindow?.rateLimit ?? null,
+    weekly: weeklyWindow?.rateLimit ?? null,
   }
 }
 
-function getWindowUsedPercent(
-  window: RateLimitWindowPayload | null | undefined,
-): number | null {
-  const usedPercent = window?.usedPercent ?? window?.used_percent
-  return typeof usedPercent === 'number' ? clampPercent(usedPercent) : null
+interface NormalizedRateLimitWindow {
+  durationMins: number
+  rateLimit: ProfileRateLimitWindow
 }
 
-function getWindowDurationMins(window: RateLimitWindowPayload): number | null {
-  return window.windowDurationMins ?? window.window_minutes ?? null
+function findWindowByDuration(
+  windows: NormalizedRateLimitWindow[],
+  targetDurationMins: number,
+): NormalizedRateLimitWindow | null {
+  return (
+    windows.find((window) => window.durationMins === targetDurationMins) || null
+  )
 }
 
-function getWindowResetTimestamp(
-  window: RateLimitWindowPayload | null | undefined,
-): number | null {
-  if (!window) {
+function normalizeRateLimitWindow(
+  window: unknown,
+  nowSeconds: number,
+): NormalizedRateLimitWindow | null {
+  if (!isRecord(window)) {
     return null
   }
 
-  if (typeof window.resetsAt === 'number') {
-    return window.resetsAt
+  const usedPercent = readWindowUsedPercent(window)
+  if (usedPercent === null) {
+    return null
   }
 
-  if (typeof window.resets_at === 'number') {
-    return window.resets_at
+  const durationMins = readWindowDurationMins(window)
+  if (durationMins === null) {
+    return null
   }
 
-  if (typeof window.resets_in_seconds === 'number') {
-    return Math.floor(Date.now() / 1000) + window.resets_in_seconds
+  const resetsAt = readWindowResetTimestamp(window, nowSeconds)
+
+  return {
+    durationMins,
+    rateLimit: {
+      usedPercent,
+      remainingPercent: clampPercent(100 - usedPercent),
+      resetsAt,
+    },
+  }
+}
+
+function readWindowUsedPercent(window: Record<string, unknown>): number | null {
+  const usedPercent = window.usedPercent ?? window.used_percent
+  return typeof usedPercent === 'number' && Number.isFinite(usedPercent)
+    ? clampPercent(usedPercent)
+    : null
+}
+
+function readWindowDurationMins(
+  window: Record<string, unknown>,
+): number | null {
+  const durationMins = window.windowDurationMins ?? window.window_minutes
+  return typeof durationMins === 'number' &&
+    Number.isFinite(durationMins) &&
+    Number.isInteger(durationMins) &&
+    durationMins > 0
+    ? durationMins
+    : null
+}
+
+function readWindowResetTimestamp(
+  window: Record<string, unknown>,
+  nowSeconds: number,
+): number | null {
+  const resetsAt = window.resetsAt ?? window.resets_at
+  if (
+    typeof resetsAt === 'number' &&
+    isPlausibleUnixTimestampSeconds(resetsAt)
+  ) {
+    return resetsAt
+  }
+
+  const resetsInSeconds = window.resets_in_seconds
+  if (
+    typeof resetsInSeconds === 'number' &&
+    Number.isFinite(resetsInSeconds) &&
+    resetsInSeconds >= 0
+  ) {
+    const resetTimestamp = nowSeconds + Math.floor(resetsInSeconds)
+    return isPlausibleUnixTimestampSeconds(resetTimestamp)
+      ? resetTimestamp
+      : null
   }
 
   return null
+}
+
+function isPlausibleUnixTimestampSeconds(value: number): boolean {
+  return Number.isFinite(value) && value >= 946684800 && value <= 4102444800
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function clampPercent(value: number): number {

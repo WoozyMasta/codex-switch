@@ -35,6 +35,9 @@ interface ProfilesFileV1 {
   profiles: ProfileSummary[]
 }
 
+const PROFILE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 const PROFILES_FILENAME = 'profiles.json'
 const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
 const LAST_PROFILE_KEY = 'codexSwitch.lastProfileId'
@@ -611,9 +614,14 @@ export class ProfileManager {
   private parseProfilesFile(raw: string): ProfilesFileV1 {
     const parsed: any = JSON.parse(raw)
 
+    const profiles = (values: unknown[]): ProfileSummary[] =>
+      values
+        .map((value) => this.parseProfileSummary(value))
+        .filter((value): value is ProfileSummary => value !== null)
+
     // Legacy format: plain array of profiles.
     if (Array.isArray(parsed)) {
-      return { version: 1, profiles: parsed as ProfileSummary[] }
+      return { version: 1, profiles: profiles(parsed) }
     }
 
     // Legacy format: { profiles: [...] } without a version.
@@ -622,15 +630,71 @@ export class ProfileManager {
       typeof parsed === 'object' &&
       Array.isArray(parsed.profiles)
     ) {
-      return { version: 1, profiles: parsed.profiles as ProfileSummary[] }
+      return { version: 1, profiles: profiles(parsed.profiles) }
     }
 
     // Current format: { version: 1, profiles: [...] }
     if (parsed && parsed.version === 1 && Array.isArray(parsed.profiles)) {
-      return { version: 1, profiles: parsed.profiles as ProfileSummary[] }
+      return { version: 1, profiles: profiles(parsed.profiles) }
     }
 
     return { version: 1, profiles: [] }
+  }
+
+  private parseProfileId(value: unknown): string | null {
+    const id = asOptionalString(value)
+    if (!id || !PROFILE_ID_PATTERN.test(id)) {
+      return null
+    }
+    return id
+  }
+
+  private parseProfileTimestamp(value: unknown): string | null {
+    const timestamp = asOptionalString(value)
+    if (!timestamp) {
+      return null
+    }
+
+    const parsed = Date.parse(timestamp)
+    if (!Number.isFinite(parsed)) {
+      return null
+    }
+
+    return new Date(parsed).toISOString()
+  }
+
+  private parseProfileSummary(value: unknown): ProfileSummary | null {
+    const profile = asObject(value)
+    if (!profile) {
+      return null
+    }
+
+    const id = this.parseProfileId(profile.id)
+    const name = asOptionalString(profile.name)
+    const email = asOptionalString(profile.email)
+    const planType = asOptionalString(profile.planType)
+    const createdAt = this.parseProfileTimestamp(profile.createdAt)
+    const updatedAt = this.parseProfileTimestamp(profile.updatedAt)
+    if (!id || !name || !email || !planType || !createdAt || !updatedAt) {
+      return null
+    }
+
+    return {
+      id,
+      name,
+      email,
+      planType,
+      accountId: asOptionalString(profile.accountId),
+      defaultOrganizationId: asOptionalString(profile.defaultOrganizationId),
+      defaultOrganizationTitle: asOptionalString(
+        profile.defaultOrganizationTitle,
+      ),
+      chatgptUserId: asOptionalString(profile.chatgptUserId),
+      userId: asOptionalString(profile.userId),
+      subject: asOptionalString(profile.subject),
+      createdAt,
+      updatedAt,
+    }
   }
 
   private async readProfilesFile(): Promise<ProfilesFileV1> {

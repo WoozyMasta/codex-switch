@@ -722,14 +722,7 @@ export class ProfileManager {
 
   private writeProfilesFile(data: ProfilesFileV1) {
     this.ensureStorageDir()
-    if (this.isRemoteFilesMode()) {
-      writeJsonFile(this.getProfilesPath(), data)
-      return
-    }
-
-    fs.writeFileSync(this.getProfilesPath(), JSON.stringify(data, null, 2), {
-      encoding: 'utf8',
-    })
+    writeJsonFile(this.getProfilesPath(), data)
   }
 
   private secretKey(profileId: string): string {

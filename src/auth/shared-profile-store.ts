@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { randomUUID } from 'crypto'
 
 export const SHARED_STORE_DIRNAME = '.codex-switch'
 export const SHARED_PROFILES_DIRNAME = 'profiles'
@@ -48,6 +49,20 @@ export function ensureSharedStoreDirs(): void {
     recursive: true,
     mode: 0o700,
   })
+
+  if (process.platform !== 'win32') {
+    for (const dir of [
+      getSharedStoreRoot(),
+      getSharedProfilesDir(),
+      getSharedActiveProfilesDir(),
+    ]) {
+      try {
+        fs.chmodSync(dir, 0o700)
+      } catch {
+        // Ignore best-effort permission correction failures.
+      }
+    }
+  }
 }
 
 export function readJsonFile<T>(filePath: string): T | null {
@@ -64,10 +79,55 @@ export function readJsonFile<T>(filePath: string): T | null {
 export function writeJsonFile(filePath: string, data: unknown): void {
   const dir = path.dirname(filePath)
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), {
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(dir, 0o700)
+    } catch {
+      // Ignore best-effort permission correction failures.
+    }
+  }
+
+  const tmpPath = path.join(
+    dir,
+    `${path.basename(filePath)}.tmp.${process.pid}.${Date.now()}.${randomUUID()}`,
+  )
+  const content = `${JSON.stringify(data, null, 2)}\n`
+
+  fs.writeFileSync(tmpPath, content, {
     encoding: 'utf8',
     mode: 0o600,
   })
+
+  try {
+    fs.renameSync(tmpPath, filePath)
+  } catch (error) {
+    if (process.platform === 'win32') {
+      try {
+        fs.rmSync(filePath, { force: true })
+        fs.renameSync(tmpPath, filePath)
+      } catch {
+        fs.copyFileSync(tmpPath, filePath)
+      }
+      return
+    }
+    throw error
+  } finally {
+    try {
+      if (fs.existsSync(tmpPath)) {
+        fs.unlinkSync(tmpPath)
+      }
+    } catch {
+      // ignore cleanup failures
+    }
+  }
+
+  if (process.platform !== 'win32') {
+    try {
+      fs.chmodSync(filePath, 0o600)
+    } catch {
+      // Ignore best-effort permission correction failures.
+    }
+  }
 }
 
 export function deleteFileIfExists(filePath: string): void {

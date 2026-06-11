@@ -14,7 +14,8 @@ function hashValue(value: string): string {
 }
 
 function normalizePathForId(value: string): string {
-  return path.resolve(value).toLowerCase()
+  const resolved = path.resolve(value)
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
 export class CodexHomeManager {
@@ -37,7 +38,8 @@ export class CodexHomeManager {
 
   getActiveHome(): ResolvedCodexHome {
     const fallbackHome = path.join(os.homedir(), '.codex')
-    const fsPath = this.initialCodexHome || fallbackHome
+    const envValue = this.initialCodexHome || fallbackHome
+    const fsPath = path.resolve(envValue)
     const normalizedHome = normalizePathForId(fsPath)
     const normalizedFallback = normalizePathForId(fallbackHome)
     const isDefault = normalizedHome === normalizedFallback
@@ -50,7 +52,7 @@ export class CodexHomeManager {
           : 'default',
       name: isDefault ? 'default' : path.basename(fsPath) || 'CODEX_HOME',
       fsPath,
-      envValue: fsPath,
+      envValue,
       authPath: getDefaultCodexAuthPathForHome(fsPath),
       source: this.initialCodexHome ? 'environment' : 'default',
       isDefault,

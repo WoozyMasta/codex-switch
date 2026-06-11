@@ -5,7 +5,6 @@ import { createHash, randomUUID } from 'crypto'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import {
   extractAuthDataFromAuthJson,
-  getDefaultCodexAuthPath,
   loadAuthDataFromFile,
 } from './auth-manager'
 import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
@@ -489,7 +488,7 @@ export class ProfileManager {
   }
 
   private getActiveCodexHome() {
-    return this.codexHomeManager.ensureActiveHome()
+    return this.codexHomeManager.getActiveHome()
   }
 
   getActiveCodexAuthPath(): string {
@@ -1499,7 +1498,7 @@ export class ProfileManager {
   }
 
   async prepareForNewLoginChat(): Promise<PrepareForNewLoginChatResult> {
-    const authPath = getDefaultCodexAuthPath()
+    const authPath = this.getActiveCodexAuthPath()
 
     await this.setActiveProfileIdInState(undefined)
     this.lastSyncedProfileId = undefined

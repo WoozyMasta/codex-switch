@@ -81,7 +81,6 @@ export function activate(context: vscode.ExtensionContext) {
       void refreshUi()
     }),
   )
-
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((state) => {
       if (!state.focused || !profileRateLimitService) {
@@ -237,7 +236,7 @@ function getRateLimitAutoRefreshIntervalSeconds(): number {
     return DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS
   }
 
-  return Math.max(0, Math.floor(value))
+  return Number.isFinite(value) && value > 0 ? Math.max(5, value) : 0
 }
 
 export function deactivate() {

@@ -61,70 +61,98 @@ export function registerCommands(
     return vscode.Uri.file(path.join(baseDir, 'codex-switch-profiles.json'))
   }
 
+  const showProfileMutationError = (
+    actionLabel: string,
+    error: unknown,
+    fallbackMessage: string,
+  ): void => {
+    const message =
+      error instanceof Error && error.message ? error.message : fallbackMessage
+    vscode.window.showErrorMessage(
+      vscode.l10n.t('Failed to {0}: {1}', actionLabel, message),
+    )
+  }
+
   const addCurrentAuthJsonAsProfile = async (
     restartAfterImport: boolean,
   ): Promise<boolean> => {
-    const authPath = profileManager.getActiveCodexAuthPath()
-    const loginCommandText = getLoginCommandText()
-    const authData = await loadAuthDataFromFile(authPath)
-    if (!authData) {
-      vscode.window.showErrorMessage(
-        vscode.l10n.t(
-          'Could not read auth from {0}. Run "{1}" first.',
-          authPath,
-          loginCommandText,
-        ),
-      )
-      return false
-    }
-
-    const existing = await profileManager.findDuplicateProfile(authData)
-    if (existing) {
-      const replaceLabel = vscode.l10n.t('Replace')
-      const pick = await vscode.window.showWarningMessage(
-        vscode.l10n.t(
-          'This account is already saved as profile "{0}". Replace it?',
-          existing.name,
-        ),
-        { modal: true },
-        replaceLabel,
-      )
-      if (pick !== replaceLabel) {
+    try {
+      const authPath = profileManager.getActiveCodexAuthPath()
+      const loginCommandText = getLoginCommandText()
+      const authData = await loadAuthDataFromFile(authPath)
+      if (!authData) {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Could not read auth from {0}. Run "{1}" first.',
+            authPath,
+            loginCommandText,
+          ),
+        )
         return false
       }
 
-      await profileManager.replaceProfileAuth(existing.id, authData)
-      await profileManager.setActiveProfileId(existing.id)
+      const existing = await profileManager.findDuplicateProfile(authData)
+      if (existing) {
+        const replaceLabel = vscode.l10n.t('Replace')
+        const pick = await vscode.window.showWarningMessage(
+          vscode.l10n.t(
+            'This account is already saved as profile "{0}". Replace it?',
+            existing.name,
+          ),
+          { modal: true },
+          replaceLabel,
+        )
+        if (pick !== replaceLabel) {
+          return false
+        }
+
+        if (!(await profileManager.replaceProfileAuth(existing.id, authData))) {
+          throw new Error(vscode.l10n.t('Failed to update the saved profile.'))
+        }
+        if (!(await profileManager.setActiveProfileId(existing.id))) {
+          throw new Error(
+            vscode.l10n.t('Failed to activate the saved profile.'),
+          )
+        }
+        await onAuthChanged()
+        if (restartAfterImport) {
+          await maybeRestartAfterProfileSwitch()
+        }
+        return true
+      }
+
+      const defaultName =
+        authData.email && authData.email !== 'Unknown'
+          ? authData.email.split('@')[0]
+          : 'profile'
+
+      const name = await vscode.window.showInputBox({
+        prompt: vscode.l10n.t(
+          'Profile name (for example "work" or "personal")',
+        ),
+        value: defaultName,
+      })
+      if (!name || !name.trim()) {
+        return false
+      }
+
+      const profile = await profileManager.createProfile(name, authData)
+      if (!(await profileManager.setActiveProfileId(profile.id))) {
+        throw new Error(vscode.l10n.t('Failed to activate the new profile.'))
+      }
       await onAuthChanged()
       if (restartAfterImport) {
         await maybeRestartAfterProfileSwitch()
       }
       return true
-    }
-
-    const defaultName =
-      authData.email && authData.email !== 'Unknown'
-        ? authData.email.split('@')[0]
-        : 'profile'
-
-    const name = await vscode.window.showInputBox({
-      prompt: vscode.l10n.t('Profile name (for example "work" or "personal")'),
-      value: defaultName,
-    })
-    if (!name) {
+    } catch (error) {
+      showProfileMutationError(
+        vscode.l10n.t('save the current auth as a profile'),
+        error,
+        vscode.l10n.t('Unknown profile creation error.'),
+      )
       return false
     }
-    if (!name.trim()) {
-      return false
-    }
-
-    const profile = await profileManager.createProfile(name, authData)
-    await profileManager.setActiveProfileId(profile.id)
-    await onAuthChanged()
-    if (restartAfterImport) {
-      await maybeRestartAfterProfileSwitch()
-    }
-    return true
   }
 
   const ensureLiveAuthIsSavedBeforeReplacing = async (
@@ -596,45 +624,7 @@ export function registerCommands(
         return
       }
 
-      const existing = await profileManager.findDuplicateProfile(authData)
-      if (existing) {
-        const replaceLabel = vscode.l10n.t('Replace')
-        const pick = await vscode.window.showWarningMessage(
-          vscode.l10n.t(
-            'This account is already saved as profile "{0}". Replace it?',
-            existing.name,
-          ),
-          { modal: true },
-          replaceLabel,
-        )
-        if (pick !== replaceLabel) {
-          return
-        }
-
-        await profileManager.replaceProfileAuth(existing.id, authData)
-        await profileManager.setActiveProfileId(existing.id)
-        await onAuthChanged()
-        await maybeRestartAfterProfileSwitch()
-        return
-      }
-
-      const defaultName =
-        authData.email && authData.email !== 'Unknown'
-          ? authData.email.split('@')[0]
-          : 'profile'
-
-      const name = await vscode.window.showInputBox({
-        prompt: vscode.l10n.t('Profile name'),
-        value: defaultName,
-      })
-      if (!name) {
-        return
-      }
-
-      const profile = await profileManager.createProfile(name, authData)
-      await profileManager.setActiveProfileId(profile.id)
-      await onAuthChanged()
-      await maybeRestartAfterProfileSwitch()
+      await addCurrentAuthJsonAsProfile(true)
     },
   )
 
@@ -745,8 +735,20 @@ export function registerCommands(
         return
       }
 
-      await profileManager.renameProfile(pick.profileId, newName)
-      await onAuthChanged()
+      try {
+        if (!(await profileManager.renameProfile(pick.profileId, newName))) {
+          throw new Error(vscode.l10n.t('Profile was not updated.'))
+        }
+        await onAuthChanged()
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : vscode.l10n.t('Unknown rename error.')
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Failed to rename profile: {0}', message),
+        )
+      }
     },
   )
 
@@ -780,8 +782,20 @@ export function registerCommands(
         return
       }
 
-      await profileManager.deleteProfile(pick.profileId)
-      await onAuthChanged()
+      try {
+        if (!(await profileManager.deleteProfile(pick.profileId))) {
+          throw new Error(vscode.l10n.t('Profile was not deleted.'))
+        }
+        await onAuthChanged()
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : vscode.l10n.t('Unknown delete error.')
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Failed to delete profile: {0}', message),
+        )
+      }
     },
   )
 

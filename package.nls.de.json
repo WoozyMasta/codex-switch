@@ -14,6 +14,8 @@
   "command.profile.rename.title": "Codex Switch: Profil umbenennen",
   "command.profile.delete.title": "Codex Switch: Profil loeschen",
   "configuration.reloadWindowAfterProfileSwitch.description": "VS Code-Extension-Host nach erfolgreichem Profilwechsel/-import neu starten; falls nicht verfuegbar, das Fenster neu laden, damit die Codex-Erweiterung auth.json erneut einliest",
+  "configuration.codexCliPath.description": "Pfad zur Codex-CLI-Binaerdatei fuer Konto-Limits. Leer lassen, um automatisch zu erkennen",
+  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "Wie oft die Ratenlimits des Codex-Kontos automatisch aktualisiert werden, solange das VS Code-Fenster fokussiert ist. Auf 0 setzen, um nur manuell zu aktualisieren",
   "configuration.statusBarClickBehavior.description": "Verhalten beim Klick auf das Profil-Element in der Statusleiste",
   "configuration.statusBarClickBehavior.cycle": "Alle gespeicherten Profile zyklisch wechseln",
   "configuration.statusBarClickBehavior.toggleLast": "Zwischen aktuellem und vorherigem Profil wechseln",

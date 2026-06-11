@@ -1,5 +1,4 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
-import { once } from 'events'
 import * as fs from 'fs/promises'
 import * as os from 'os'
 import * as path from 'path'
@@ -56,6 +55,24 @@ interface DecorateProfilesOptions {
 class CodexAppServerClient {
   private readonly child: ChildProcessWithoutNullStreams
   private readonly lineReader: readline.Interface
+  private readonly onStdoutLine = (line: string) => {
+    this.handleLine(line)
+  }
+  private readonly onChildError = (error: Error) => {
+    this.handleChildError(error)
+  }
+  private readonly onChildExit = (
+    code: number | null,
+    signal: string | null,
+  ) => {
+    this.handleChildExit(code, signal)
+  }
+  private readonly onStderrData = (chunk: string) => {
+    this.handleStderrData(chunk)
+  }
+  private readonly onStdinError = (error: Error) => {
+    this.handleStdinError(error)
+  }
   private readonly pendingRequests = new Map<
     JsonRpcId,
     {
@@ -66,6 +83,8 @@ class CodexAppServerClient {
   >()
   private readonly stderrChunks: string[] = []
   private nextRequestId = 1
+  private disposing = false
+  private disposed = false
 
   constructor(codexHomePath: string) {
     const env = {
@@ -76,33 +95,17 @@ class CodexAppServerClient {
     this.child = spawnAppServer(env)
     this.child.stdout.setEncoding('utf8')
     this.child.stderr.setEncoding('utf8')
-    this.child.stderr.on('data', (chunk: string) => {
-      if (this.stderrChunks.length >= 10) {
-        this.stderrChunks.shift()
-      }
-      this.stderrChunks.push(chunk.trim())
-    })
+    this.child.stderr.on('data', this.onStderrData)
+    this.child.stdin.on('error', this.onStdinError)
 
     this.lineReader = readline.createInterface({
       input: this.child.stdout,
       crlfDelay: Infinity,
     })
-    this.lineReader.on('line', (line) => {
-      this.handleLine(line)
-    })
+    this.lineReader.on('line', this.onStdoutLine)
 
-    this.child.on('error', (error) => {
-      this.rejectAllPending(
-        new Error(`Failed to start Codex app-server: ${error.message}`),
-      )
-    })
-    this.child.on('exit', (code, signal) => {
-      this.rejectAllPending(
-        new Error(
-          `Codex app-server exited before completing the request (${formatExitReason(code, signal)}).${this.getStderrSuffix()}`,
-        ),
-      )
-    })
+    this.child.on('error', this.onChildError)
+    this.child.on('exit', this.onChildExit)
   }
 
   async initialize(): Promise<void> {
@@ -124,26 +127,91 @@ class CodexAppServerClient {
   }
 
   async dispose(): Promise<void> {
-    this.lineReader.close()
+    if (this.disposed || this.disposing) {
+      return
+    }
+
+    this.disposing = true
     this.rejectAllPending(new Error('Codex app-server request was canceled.'))
 
-    if (!this.child.killed) {
-      this.child.kill()
+    try {
+      await this.sendLifecycleRequest('shutdown').catch((error) => {
+        debugLog(
+          'Codex app-server shutdown request failed:',
+          error instanceof Error ? error.message : error,
+        )
+      })
+    } finally {
+      await this.sendLifecycleNotification('exit').catch((error) => {
+        debugLog(
+          'Codex app-server exit notification failed:',
+          error instanceof Error ? error.message : error,
+        )
+      })
+      this.child.stdin.end()
+      await this.terminateChild()
+      this.lineReader.close()
+      this.removeListeners()
+      this.disposed = true
+      this.disposing = false
+    }
+  }
+
+  private removeListeners(): void {
+    this.lineReader.off('line', this.onStdoutLine)
+    this.child.off('error', this.onChildError)
+    this.child.off('exit', this.onChildExit)
+    this.child.stdin.off('error', this.onStdinError)
+    this.child.stderr.off('data', this.onStderrData)
+  }
+
+  private async terminateChild(): Promise<void> {
+    if (this.child.exitCode !== null || this.child.signalCode !== null) {
+      return
+    }
+
+    this.child.kill()
+    if (await this.waitForExit(APP_SERVER_EXIT_TIMEOUT_MS)) {
+      return
     }
 
     if (this.child.exitCode !== null || this.child.signalCode !== null) {
       return
     }
 
-    await Promise.race([
-      once(this.child, 'exit'),
-      new Promise((resolve) => {
-        setTimeout(resolve, APP_SERVER_EXIT_TIMEOUT_MS)
-      }),
-    ])
+    this.child.kill('SIGKILL')
+    await this.waitForExit(APP_SERVER_EXIT_TIMEOUT_MS)
   }
 
   private async sendRequest(
+    method: string,
+    params?: unknown,
+  ): Promise<unknown> {
+    if (this.disposing || this.disposed) {
+      throw new Error('Codex app-server client is closing.')
+    }
+
+    return await this.sendRequestInternal(method, params)
+  }
+
+  private async sendLifecycleRequest(
+    method: string,
+    params?: unknown,
+  ): Promise<unknown> {
+    return await this.sendRequestInternal(method, params)
+  }
+
+  private async sendLifecycleNotification(
+    method: string,
+    params?: unknown,
+  ): Promise<void> {
+    await this.writeJsonRpcMessage({
+      method,
+      ...(params !== undefined ? { params } : {}),
+    })
+  }
+
+  private async sendRequestInternal(
     method: string,
     params?: unknown,
   ): Promise<unknown> {
@@ -169,7 +237,46 @@ class CodexAppServerClient {
         payload.params = params
       }
 
-      this.child.stdin.write(`${JSON.stringify(payload)}\n`)
+      void this.writeJsonRpcMessage(payload).catch((error) => {
+        if (this.pendingRequests.has(id)) {
+          this.rejectAllPending(
+            new Error(
+              `Failed to send Codex app-server request to ${method}: ${error instanceof Error ? error.message : String(error)}`,
+            ),
+          )
+        }
+      })
+    })
+  }
+
+  private async writeJsonRpcMessage(
+    message: Record<string, unknown>,
+  ): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      let settled = false
+      const done = (error?: Error | null) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        if (error) {
+          reject(error)
+          return
+        }
+        resolve()
+      }
+
+      try {
+        this.child.stdin.write(`${JSON.stringify(message)}\n`, (error) => {
+          if (error) {
+            done(error)
+            return
+          }
+          done()
+        })
+      } catch (error) {
+        done(error instanceof Error ? error : new Error(String(error)))
+      }
     })
   }
 
@@ -217,6 +324,35 @@ class CodexAppServerClient {
     pending.resolve(message.result)
   }
 
+  private handleChildError(error: Error): void {
+    this.rejectAllPending(
+      new Error(`Failed to start Codex app-server: ${error.message}`),
+    )
+  }
+
+  private handleChildExit(code: number | null, signal: string | null): void {
+    this.rejectAllPending(
+      new Error(
+        `Codex app-server exited before completing the request (${formatExitReason(code, signal)}).${this.getStderrSuffix()}`,
+      ),
+    )
+  }
+
+  private handleStdinError(error: Error): void {
+    this.rejectAllPending(
+      new Error(
+        `Codex app-server stdin write failed: ${error.message || String(error)}`,
+      ),
+    )
+  }
+
+  private handleStderrData(chunk: string): void {
+    if (this.stderrChunks.length >= 10) {
+      this.stderrChunks.shift()
+    }
+    this.stderrChunks.push(chunk.trim())
+  }
+
   private rejectAllPending(error: Error): void {
     if (this.pendingRequests.size === 0) {
       return
@@ -227,6 +363,34 @@ class CodexAppServerClient {
       pending.reject(error)
     }
     this.pendingRequests.clear()
+  }
+
+  private async waitForExit(timeoutMs: number): Promise<boolean> {
+    if (this.child.exitCode !== null || this.child.signalCode !== null) {
+      return true
+    }
+
+    return await new Promise<boolean>((resolve) => {
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      const cleanup = () => {
+        if (timeout) {
+          clearTimeout(timeout)
+          timeout = undefined
+        }
+        this.child.removeListener('exit', onExit)
+      }
+      const onExit = () => {
+        cleanup()
+        resolve(true)
+      }
+
+      timeout = setTimeout(() => {
+        cleanup()
+        resolve(false)
+      }, timeoutMs)
+
+      this.child.once('exit', onExit)
+    })
   }
 
   private getStderrSuffix(): string {

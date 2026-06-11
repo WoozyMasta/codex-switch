@@ -1,10 +1,12 @@
 import * as fs from 'fs'
-import * as path from 'path'
-import * as os from 'os'
 import * as vscode from 'vscode'
 import { execFileSync } from 'child_process'
 import { AuthData } from '../types'
 import { errorLog } from '../utils/log'
+import {
+  getCodexAuthPathForHome,
+  resolveDefaultCodexHomePath,
+} from '../utils/codex-paths'
 
 const WSL_AUTH_PATH_CACHE_TTL_MS = 60 * 1000
 const WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS = 60 * 1000
@@ -123,13 +125,7 @@ export function extractAuthDataFromAuthJson(
  * Resolve default Codex home path.
  */
 export function getDefaultCodexHomePath(): string {
-  return path.resolve(
-    process.env.CODEX_HOME || path.join(os.homedir(), '.codex'),
-  )
-}
-
-export function getCodexAuthPathForHome(codexHomePath: string): string {
-  return path.join(path.resolve(codexHomePath), 'auth.json')
+  return resolveDefaultCodexHomePath(process.env.CODEX_HOME)
 }
 
 export function getDefaultCodexAuthPathForHome(codexHomePath: string): string {

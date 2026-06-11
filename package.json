@@ -134,6 +134,17 @@
           "default": false,
           "description": "%configuration.reloadWindowAfterProfileSwitch.description%"
         },
+        "codexSwitch.codexCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "%configuration.codexCliPath.description%"
+        },
+        "codexSwitch.rateLimitAutoRefreshIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "%configuration.rateLimitAutoRefreshIntervalSeconds.description%"
+        },
         "codexSwitch.statusBarClickBehavior": {
           "type": "string",
           "enum": [

@@ -239,6 +239,9 @@ export class ProfileRateLimitService {
     string,
     Promise<ProfileRateLimits | null>
   >()
+  private readonly appServerConcurrencyLimit = 2
+  private appServerActiveCount = 0
+  private readonly appServerWaitQueue: Array<() => void> = []
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
     return profiles.map((profile) => ({
@@ -286,6 +289,11 @@ export class ProfileRateLimitService {
     profile: ProfileSummary,
     forceRefresh = false,
   ): Promise<ProfileRateLimits | null> {
+    const existing = this.inflight.get(profile.id)
+    if (existing) {
+      return await existing
+    }
+
     if (!forceRefresh) {
       const cached = this.getFreshCachedRateLimits(profile)
       if (cached !== undefined) {
@@ -293,21 +301,13 @@ export class ProfileRateLimitService {
       }
     }
 
-    const inflightKey = `${profile.id}:${profile.updatedAt}:${
-      forceRefresh ? 'force' : 'cached'
-    }`
-    const existing = this.inflight.get(inflightKey)
-    if (existing) {
-      return await existing
-    }
-
     const promise = this.fetchRateLimits(profileManager, profile)
-    this.inflight.set(inflightKey, promise)
+    this.inflight.set(profile.id, promise)
 
     try {
       return await promise
     } finally {
-      this.inflight.delete(inflightKey)
+      this.inflight.delete(profile.id)
     }
   }
 
@@ -322,7 +322,9 @@ export class ProfileRateLimitService {
     }
 
     try {
-      const rateLimits = await queryRateLimitsViaTemporaryCodexHome(authData)
+      const rateLimits = await this.runWithAppServerConcurrencyLimit(() =>
+        queryRateLimitsViaTemporaryCodexHome(authData),
+      )
       this.cacheResult(profile, rateLimits)
       return rateLimits
     } catch (error) {
@@ -332,6 +334,37 @@ export class ProfileRateLimitService {
       )
       this.cacheResult(profile, null)
       return null
+    }
+  }
+
+  private async runWithAppServerConcurrencyLimit<T>(
+    task: () => Promise<T>,
+  ): Promise<T> {
+    await this.acquireAppServerSlot()
+    try {
+      return await task()
+    } finally {
+      this.releaseAppServerSlot()
+    }
+  }
+
+  private async acquireAppServerSlot(): Promise<void> {
+    if (this.appServerActiveCount < this.appServerConcurrencyLimit) {
+      this.appServerActiveCount += 1
+      return
+    }
+
+    await new Promise<void>((resolve) => {
+      this.appServerWaitQueue.push(resolve)
+    })
+    this.appServerActiveCount += 1
+  }
+
+  private releaseAppServerSlot(): void {
+    this.appServerActiveCount = Math.max(this.appServerActiveCount - 1, 0)
+    const next = this.appServerWaitQueue.shift()
+    if (next) {
+      next()
     }
   }
 

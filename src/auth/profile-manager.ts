@@ -31,17 +31,12 @@ import {
 } from '../utils/auth-identity'
 import { getCanonicalTokenBundle } from '../utils/auth-payload'
 import { parseImportEntry } from '../utils/import-entry'
-import { parseProfileSummary } from '../utils/profile-summary'
+import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
 
 type ProfileTokens = Pick<
   AuthData,
   'idToken' | 'accessToken' | 'refreshToken' | 'accountId' | 'authJson'
 >
-
-interface ProfilesFileV1 {
-  version: 1
-  profiles: ProfileSummary[]
-}
 
 interface ProfilesFileStateMissing {
   kind: 'missing'
@@ -422,45 +417,6 @@ export class ProfileManager {
     }
   }
 
-  private parseProfilesFile(raw: string): ProfilesFileV1 | null {
-    const parsed: any = JSON.parse(raw)
-
-    const profiles = (values: unknown[]): ProfileSummary[] =>
-      values
-        .map((value) => parseProfileSummary(value))
-        .filter((value): value is ProfileSummary => value !== null)
-
-    // Legacy format: plain array of profiles.
-    if (Array.isArray(parsed)) {
-      const parsedProfiles = profiles(parsed)
-      return parsed.length > 0 && parsedProfiles.length === 0
-        ? null
-        : { version: 1, profiles: parsedProfiles }
-    }
-
-    // Legacy format: { profiles: [...] } without a version.
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      Array.isArray(parsed.profiles)
-    ) {
-      const parsedProfiles = profiles(parsed.profiles)
-      return parsed.profiles.length > 0 && parsedProfiles.length === 0
-        ? null
-        : { version: 1, profiles: parsedProfiles }
-    }
-
-    // Current format: { version: 1, profiles: [...] }
-    if (parsed && parsed.version === 1 && Array.isArray(parsed.profiles)) {
-      const parsedProfiles = profiles(parsed.profiles)
-      return parsed.profiles.length > 0 && parsedProfiles.length === 0
-        ? null
-        : { version: 1, profiles: parsedProfiles }
-    }
-
-    return null
-  }
-
   private async readProfilesFileState(): Promise<ProfilesFileState> {
     this.ensureStorageDir()
     const filePath = this.getProfilesPath()
@@ -470,7 +426,7 @@ export class ProfileManager {
 
     try {
       const raw = fs.readFileSync(filePath, 'utf8')
-      const file = this.parseProfilesFile(raw)
+      const file = parseProfilesFile(raw)
       if (!file) {
         return {
           kind: 'corrupt',
@@ -692,7 +648,7 @@ export class ProfileManager {
 
       try {
         const raw = fs.readFileSync(legacyProfilesPath, 'utf8')
-        const legacy = this.parseProfilesFile(raw)
+        const legacy = parseProfilesFile(raw)
         if (!legacy || legacy.profiles.length === 0) {
           continue
         }

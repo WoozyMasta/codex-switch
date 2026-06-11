@@ -61,6 +61,7 @@ interface AppServerWaiter {
 class CodexAppServerClient {
   private readonly child: ChildProcessWithoutNullStreams
   private readonly lineReader: readline.Interface
+  private readonly clientVersion: string
   private readonly onStdoutLine = (line: string) => {
     this.handleLine(line)
   }
@@ -92,7 +93,8 @@ class CodexAppServerClient {
   private disposing = false
   private disposed = false
 
-  constructor(codexHomePath: string) {
+  constructor(codexHomePath: string, clientVersion: string) {
+    this.clientVersion = clientVersion
     const env = {
       ...process.env,
       CODEX_HOME: codexHomePath,
@@ -119,7 +121,7 @@ class CodexAppServerClient {
       clientInfo: {
         name: 'codex-switch',
         title: null,
-        version: '1.3.1',
+        version: this.clientVersion,
       },
       capabilities: {
         experimentalApi: false,
@@ -406,6 +408,7 @@ class CodexAppServerClient {
 }
 
 export class ProfileRateLimitService {
+  private readonly clientVersion: string
   private readonly cache = new Map<string, CacheEntry>()
   private readonly inflight = new Map<
     string,
@@ -419,6 +422,10 @@ export class ProfileRateLimitService {
   private appServerActiveCount = 0
   private readonly appServerWaitQueue: AppServerWaiter[] = []
   private disposed = false
+
+  constructor(clientVersion: string) {
+    this.clientVersion = clientVersion
+  }
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
     return profiles.map((profile) => ({
@@ -555,7 +562,12 @@ export class ProfileRateLimitService {
 
     try {
       const rateLimits = await this.runWithAppServerConcurrencyLimit(
-        () => queryRateLimitsViaTemporaryCodexHome(authData, signal),
+        () =>
+          queryRateLimitsViaTemporaryCodexHome(
+            authData,
+            this.clientVersion,
+            signal,
+          ),
         signal,
       )
       this.cacheSuccess(profile, rateLimits)
@@ -678,6 +690,7 @@ export class ProfileRateLimitService {
 
 async function queryRateLimitsViaTemporaryCodexHome(
   authData: AuthData,
+  clientVersion: string,
   signal?: AbortSignal,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
@@ -701,7 +714,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
       mode: 0o600,
     })
 
-    client = new CodexAppServerClient(tempHomePath)
+    client = new CodexAppServerClient(tempHomePath, clientVersion)
     try {
       await client.initialize()
       const response = await client.readRateLimits()

@@ -36,7 +36,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   codexHomeManager = new CodexHomeManager()
   profileManager = new ProfileManager(context, codexHomeManager)
-  profileRateLimitService = new ProfileRateLimitService()
+  profileRateLimitService = new ProfileRateLimitService(
+    String(context.extension.packageJSON.version || 'unknown'),
+  )
   const runtime: RuntimeContext = {
     home: codexHomeManager.getActiveHome(),
   }

@@ -41,7 +41,8 @@ export function registerCommands(
     await restartExtensionHostOrReloadWindow()
   }
 
-  const getLoginCommandText = (): string => codexHomeManager.buildLoginCommand()
+  const getLoginCommandText = (): string =>
+    codexHomeManager.buildLoginCommand(runtimeHome)
 
   const getStatusBarClickBehavior = (): StatusBarClickBehavior => {
     const raw = vscode.workspace

@@ -76,8 +76,12 @@ export class CodexHomeManager {
     return home
   }
 
-  buildLoginCommand(): string {
-    return shouldUseWslAuthPath() ? 'wsl codex login' : 'codex login'
+  buildLoginCommand(home = this.activeHome): string {
+    if (shouldUseWslAuthPath() && home.isDefault) {
+      return 'wsl codex login'
+    }
+
+    return 'codex login'
   }
 
   createCodexTerminal(

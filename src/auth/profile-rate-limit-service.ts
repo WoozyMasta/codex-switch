@@ -52,6 +52,12 @@ interface DecorateProfilesOptions {
   forceRefreshProfileIds?: readonly string[]
 }
 
+interface AppServerWaiter {
+  resolve: () => void
+  reject: (error: Error) => void
+  onAbort: () => void
+}
+
 class CodexAppServerClient {
   private readonly child: ChildProcessWithoutNullStreams
   private readonly lineReader: readline.Interface
@@ -405,15 +411,41 @@ export class ProfileRateLimitService {
     string,
     Promise<ProfileRateLimits | null>
   >()
+  private readonly activeOperationControllers = new Set<AbortController>()
+  private readonly activeOperations = new Set<
+    Promise<ProfileRateLimits | null>
+  >()
   private readonly appServerConcurrencyLimit = 2
   private appServerActiveCount = 0
-  private readonly appServerWaitQueue: Array<() => void> = []
+  private readonly appServerWaitQueue: AppServerWaiter[] = []
+  private disposed = false
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
     return profiles.map((profile) => ({
       ...profile,
       rateLimits: this.getCachedRateLimits(profile),
     }))
+  }
+
+  cancelPendingWork(): void {
+    for (const controller of this.activeOperationControllers) {
+      controller.abort()
+    }
+  }
+
+  async dispose(): Promise<void> {
+    if (this.disposed) {
+      return
+    }
+
+    this.disposed = true
+    this.cancelPendingWork()
+
+    await Promise.allSettled(this.activeOperations)
+    this.inflight.clear()
+    this.cache.clear()
+    this.activeOperationControllers.clear()
+    this.appServerWaitQueue.length = 0
   }
 
   async decorateProfiles(
@@ -466,6 +498,10 @@ export class ProfileRateLimitService {
     profile: ProfileSummary,
     forceRefresh = false,
   ): Promise<ProfileRateLimits | null> {
+    if (this.disposed) {
+      return this.getCachedRateLimits(profile) ?? null
+    }
+
     const existing = this.inflight.get(profile.id)
     if (existing) {
       return await existing
@@ -483,20 +519,34 @@ export class ProfileRateLimitService {
       }
     }
 
-    const promise = this.fetchRateLimits(profileManager, profile)
+    const operationController = new AbortController()
+    this.activeOperationControllers.add(operationController)
+    const promise = this.fetchRateLimits(
+      profileManager,
+      profile,
+      operationController.signal,
+    )
+    this.activeOperations.add(promise)
     this.inflight.set(profile.id, promise)
 
     try {
       return await promise
     } finally {
       this.inflight.delete(profile.id)
+      this.activeOperations.delete(promise)
+      this.activeOperationControllers.delete(operationController)
     }
   }
 
   private async fetchRateLimits(
     profileManager: ProfileManager,
     profile: ProfileSummary,
+    signal: AbortSignal,
   ): Promise<ProfileRateLimits | null> {
+    if (signal.aborted) {
+      return this.getCachedRateLimits(profile) ?? null
+    }
+
     const authData = await profileManager.loadAuthData(profile.id)
     if (!authData) {
       this.cacheFailure(profile)
@@ -504,12 +554,16 @@ export class ProfileRateLimitService {
     }
 
     try {
-      const rateLimits = await this.runWithAppServerConcurrencyLimit(() =>
-        queryRateLimitsViaTemporaryCodexHome(authData),
+      const rateLimits = await this.runWithAppServerConcurrencyLimit(
+        () => queryRateLimitsViaTemporaryCodexHome(authData, signal),
+        signal,
       )
       this.cacheSuccess(profile, rateLimits)
       return rateLimits
     } catch (error) {
+      if (isAbortError(error) || signal.aborted) {
+        return this.getCachedRateLimits(profile) ?? null
+      }
       debugLog(
         `Rate limits unavailable for profile ${profile.id}:`,
         error instanceof Error ? error.message : error,
@@ -521,8 +575,9 @@ export class ProfileRateLimitService {
 
   private async runWithAppServerConcurrencyLimit<T>(
     task: () => Promise<T>,
+    signal: AbortSignal,
   ): Promise<T> {
-    await this.acquireAppServerSlot()
+    await this.acquireAppServerSlot(signal)
     try {
       return await task()
     } finally {
@@ -530,14 +585,35 @@ export class ProfileRateLimitService {
     }
   }
 
-  private async acquireAppServerSlot(): Promise<void> {
+  private async acquireAppServerSlot(signal: AbortSignal): Promise<void> {
+    if (signal.aborted) {
+      throw createAbortError()
+    }
+
     if (this.appServerActiveCount < this.appServerConcurrencyLimit) {
       this.appServerActiveCount += 1
       return
     }
 
-    await new Promise<void>((resolve) => {
-      this.appServerWaitQueue.push(resolve)
+    await new Promise<void>((resolve, reject) => {
+      let waiter: AppServerWaiter
+      const settle = (callback: () => void) => {
+        signal.removeEventListener('abort', waiter.onAbort)
+        callback()
+      }
+      waiter = {
+        resolve: () => settle(resolve),
+        reject: (error: Error) => settle(() => reject(error)),
+        onAbort: () => {
+          const index = this.appServerWaitQueue.indexOf(waiter)
+          if (index >= 0) {
+            this.appServerWaitQueue.splice(index, 1)
+          }
+          reject(createAbortError())
+        },
+      }
+      this.appServerWaitQueue.push(waiter)
+      signal.addEventListener('abort', waiter.onAbort, { once: true })
     })
     this.appServerActiveCount += 1
   }
@@ -546,7 +622,7 @@ export class ProfileRateLimitService {
     this.appServerActiveCount = Math.max(this.appServerActiveCount - 1, 0)
     const next = this.appServerWaitQueue.shift()
     if (next) {
-      next()
+      next.resolve()
     }
   }
 
@@ -602,20 +678,30 @@ export class ProfileRateLimitService {
 
 async function queryRateLimitsViaTemporaryCodexHome(
   authData: AuthData,
+  signal?: AbortSignal,
 ): Promise<ProfileRateLimits | null> {
+  if (signal?.aborted) {
+    return null
+  }
+
   const tempHomePath = await fs.mkdtemp(
     path.join(os.tmpdir(), 'codex-switch-rate-limits-'),
   )
   const authFilePath = path.join(tempHomePath, 'auth.json')
+  let client: CodexAppServerClient | undefined
+  const onAbort = () => {
+    void client?.dispose()
+  }
 
   try {
+    signal?.addEventListener('abort', onAbort, { once: true })
     await fs.chmod(tempHomePath, 0o700).catch(() => undefined)
     await fs.writeFile(authFilePath, buildCodexAuthJson(authData), {
       encoding: 'utf8',
       mode: 0o600,
     })
 
-    const client = new CodexAppServerClient(tempHomePath)
+    client = new CodexAppServerClient(tempHomePath)
     try {
       await client.initialize()
       const response = await client.readRateLimits()
@@ -624,6 +710,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
       await client.dispose()
     }
   } finally {
+    signal?.removeEventListener('abort', onAbort)
     await removeTemporaryCodexHome(tempHomePath, authFilePath)
   }
 }
@@ -817,6 +904,20 @@ function isPlausibleUnixTimestampSeconds(value: number): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' ||
+      error.message === 'Codex app-server request was canceled.')
+  )
+}
+
+function createAbortError(): Error {
+  const error = new Error('Codex app-server request was canceled.')
+  error.name = 'AbortError'
+  return error
 }
 
 function clampPercent(value: number): number {

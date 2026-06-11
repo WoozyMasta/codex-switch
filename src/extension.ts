@@ -138,6 +138,7 @@ export function activate(context: vscode.ExtensionContext) {
         event.affectsConfiguration('chatgpt.runCodexInWindowsSubsystemForLinux')
       ) {
         void (async () => {
+          await profileRateLimitService?.dispose()
           vscode.window.showInformationMessage(
             'Codex Switch auth/storage settings changed. Restarting the extension host to apply the new home and storage targets.',
           )
@@ -176,6 +177,7 @@ async function refreshProfileUi(
     return
   }
 
+  profileRateLimitService?.cancelPendingWork()
   const generation = ++refreshProfileUiGeneration
 
   const profiles = await profileManager.listProfiles()
@@ -275,9 +277,11 @@ function getRateLimitAutoRefreshIntervalSeconds(): number {
   return Number.isFinite(value) && value > 0 ? Math.max(5, value) : 0
 }
 
-export function deactivate() {
+export async function deactivate() {
   const statusBarItem = getStatusBarItem()
   if (statusBarItem) {
     statusBarItem.dispose()
   }
+
+  await profileRateLimitService?.dispose()
 }

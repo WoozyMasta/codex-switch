@@ -82,6 +82,17 @@ interface LiveAuthPreservationResult {
   status: 'noLiveAuth' | 'saved' | 'unsaved'
 }
 
+type IdentityMatch = 'exact' | 'different' | 'ambiguous'
+
+interface IdentitySnapshot {
+  organizationId?: string
+  chatgptUserId?: string
+  userId?: string
+  subject?: string
+  accountId?: string
+  email?: string
+}
+
 interface PrepareForNewLoginChatResult {
   removedAuthFile: boolean
 }
@@ -139,6 +150,11 @@ export class ProfileManager {
       .toLowerCase()
   }
 
+  private normalizeComparableEmail(email: string | undefined): string {
+    const normalized = this.normalizeEmail(email)
+    return normalized && normalized !== 'unknown' ? normalized : ''
+  }
+
   private asNonEmptyString(value: unknown): string | undefined {
     if (typeof value !== 'string') {
       return undefined
@@ -161,141 +177,149 @@ export class ProfileManager {
     return String(value || '').trim()
   }
 
-  private compareIdentityField(
-    profileValue: string | undefined,
-    authValue: string | undefined,
-  ): boolean | undefined {
-    const p = this.normalizeIdentity(profileValue)
-    const a = this.normalizeIdentity(authValue)
-    if (!p || !a) {
-      return undefined
+  private compareIdentityValue(
+    left: string | undefined,
+    right: string | undefined,
+  ): 'match' | 'different' | 'ambiguous' | 'unknown' {
+    const normalizedLeft = this.normalizeIdentity(left)
+    const normalizedRight = this.normalizeIdentity(right)
+
+    if (!normalizedLeft && !normalizedRight) {
+      return 'unknown'
     }
-    return p === a
+
+    if (!normalizedLeft || !normalizedRight) {
+      return 'ambiguous'
+    }
+
+    return normalizedLeft === normalizedRight ? 'match' : 'different'
   }
 
-  private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
-    const hasProfileOrganizationId = Boolean(
-      this.normalizeIdentity(profile.defaultOrganizationId),
-    )
-    const hasAuthOrganizationId = Boolean(
-      this.normalizeIdentity(authData.defaultOrganizationId),
-    )
-    const organizationIdMatch = this.compareIdentityField(
-      profile.defaultOrganizationId,
-      authData.defaultOrganizationId,
-    )
+  private compareIdentityGroup(
+    left: IdentitySnapshot,
+    right: IdentitySnapshot,
+    keys: Array<keyof IdentitySnapshot>,
+  ): 'match' | 'different' | 'ambiguous' | 'unknown' {
+    let sawMatch = false
+    let sawAmbiguous = false
 
-    // Team/Business tenants can share account_id across different users.
-    // Match by user identity fields first.
-    // If identity matches and both sides know the selected workspace/org, require it too.
-    const identityMatches = [
-      this.compareIdentityField(profile.chatgptUserId, authData.chatgptUserId),
-      this.compareIdentityField(profile.userId, authData.userId),
-      this.compareIdentityField(profile.subject, authData.subject),
-    ].filter((v): v is boolean => v !== undefined)
-
-    if (identityMatches.length > 0) {
-      if (identityMatches.some((v) => !v)) {
-        return false
+    for (const key of keys) {
+      const state = this.compareIdentityValue(left[key], right[key])
+      if (state === 'different') {
+        return 'different'
       }
-      if (hasProfileOrganizationId || hasAuthOrganizationId) {
-        // If workspace is known only on one side, avoid collapsing profiles.
-        if (organizationIdMatch === undefined) {
-          return false
-        }
-        return organizationIdMatch
+      if (state === 'match') {
+        sawMatch = true
+      } else if (state === 'ambiguous') {
+        sawAmbiguous = true
       }
-      return true
     }
 
-    const pe = this.normalizeEmail(profile.email)
-    const ae = this.normalizeEmail(authData.email)
-    const hasComparableEmail =
-      Boolean(pe) && Boolean(ae) && pe !== 'unknown' && ae !== 'unknown'
-    const hasComparableAccountId =
-      Boolean(authData.accountId) && Boolean(profile.accountId)
-    const accountIdMatch = hasComparableAccountId
-      ? authData.accountId === profile.accountId
-      : false
-    const hasComparableOrganizationId = organizationIdMatch !== undefined
-
-    if (
-      (hasProfileOrganizationId || hasAuthOrganizationId) &&
-      !hasComparableOrganizationId
-    ) {
-      // Workspace is known only on one side: treat as distinct to avoid false matches.
-      return false
+    if (sawMatch) {
+      return 'match'
     }
-
-    if (
-      hasComparableEmail &&
-      hasComparableAccountId &&
-      hasComparableOrganizationId
-    ) {
-      return pe === ae && accountIdMatch && organizationIdMatch === true
+    if (sawAmbiguous) {
+      return 'ambiguous'
     }
-
-    if (hasComparableEmail && hasComparableOrganizationId) {
-      return pe === ae && organizationIdMatch === true
-    }
-
-    if (hasComparableEmail && hasComparableAccountId) {
-      return pe === ae && accountIdMatch
-    }
-
-    if (hasComparableAccountId && hasComparableOrganizationId) {
-      return accountIdMatch && organizationIdMatch === true
-    }
-
-    if (hasComparableEmail) {
-      return pe === ae
-    }
-
-    return false
+    return 'unknown'
   }
 
-  private matchesPreservationIdentity(
-    storedIdentity: {
-      chatgptUserId?: string
-      userId?: string
-      subject?: string
-    },
-    liveAuth: AuthData,
-  ): boolean {
-    const fields: Array<'chatgptUserId' | 'userId' | 'subject'> = [
+  private compareIdentitySnapshots(
+    left: IdentitySnapshot,
+    right: IdentitySnapshot,
+  ): IdentityMatch {
+    const organizationState = this.compareIdentityValue(
+      left.organizationId,
+      right.organizationId,
+    )
+    if (organizationState === 'different') {
+      return 'different'
+    }
+
+    const strongState = this.compareIdentityGroup(left, right, [
       'chatgptUserId',
       'userId',
       'subject',
-    ]
-
-    let comparedFieldCount = 0
-    let matchedFieldCount = 0
-    for (const field of fields) {
-      const storedValue = this.normalizeIdentity(storedIdentity[field])
-      const liveValue = this.normalizeIdentity(liveAuth[field])
-      if (!storedValue || !liveValue) {
-        continue
-      }
-
-      comparedFieldCount += 1
-      if (storedValue !== liveValue) {
-        return false
-      }
-      matchedFieldCount += 1
+    ])
+    if (strongState === 'different') {
+      return 'different'
+    }
+    if (strongState === 'match') {
+      return organizationState === 'ambiguous' ? 'ambiguous' : 'exact'
     }
 
-    return comparedFieldCount > 0 && matchedFieldCount > 0
+    const weakState = this.compareIdentityGroup(left, right, [
+      'accountId',
+      'email',
+    ])
+    if (weakState === 'different') {
+      return 'different'
+    }
+    if (weakState === 'match') {
+      return organizationState === 'ambiguous' ? 'ambiguous' : 'exact'
+    }
+
+    if (
+      organizationState === 'ambiguous' ||
+      strongState === 'ambiguous' ||
+      weakState === 'ambiguous'
+    ) {
+      return 'ambiguous'
+    }
+
+    return 'ambiguous'
+  }
+
+  private buildIdentitySnapshot(source: {
+    defaultOrganizationId?: string
+    chatgptUserId?: string
+    userId?: string
+    subject?: string
+    accountId?: string
+    email?: string
+  }): IdentitySnapshot {
+    return {
+      organizationId: this.normalizeIdentity(source.defaultOrganizationId),
+      chatgptUserId: this.normalizeIdentity(source.chatgptUserId),
+      userId: this.normalizeIdentity(source.userId),
+      subject: this.normalizeIdentity(source.subject),
+      accountId: this.normalizeIdentity(source.accountId),
+      email: this.normalizeComparableEmail(source.email),
+    }
+  }
+
+  private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
+    return (
+      this.compareIdentitySnapshots(
+        this.buildIdentitySnapshot(profile),
+        this.buildIdentitySnapshot(authData),
+      ) === 'exact'
+    )
+  }
+
+  private matchesPreservationIdentity(
+    storedIdentity: IdentitySnapshot,
+    liveAuth: AuthData,
+  ): boolean {
+    return (
+      this.compareIdentitySnapshots(
+        storedIdentity,
+        this.buildIdentitySnapshot(liveAuth),
+      ) === 'exact'
+    )
   }
 
   private getStoredPreservationIdentity(
     profile: ProfileSummary,
     storedAuth: AuthData | null,
-  ): {
-    chatgptUserId?: string
-    userId?: string
-    subject?: string
-  } {
+  ): IdentitySnapshot {
     return {
+      organizationId: this.normalizeIdentity(
+        this.pickNonEmptyString(
+          storedAuth?.defaultOrganizationId,
+          profile.defaultOrganizationId,
+        ),
+      ),
       chatgptUserId: this.pickNonEmptyString(
         storedAuth?.chatgptUserId,
         profile.chatgptUserId,
@@ -1656,7 +1680,13 @@ export class ProfileManager {
         }
         await this.setActiveProfileIdInState(matched.id)
         await this.maybeReplaceProfileAuthWithLive(matched, liveAuth)
+        return
       }
+
+      if (activeId) {
+        await this.setLastProfileId(activeId)
+      }
+      await this.setActiveProfileIdInState(undefined)
       return
     }
 

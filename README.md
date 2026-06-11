@@ -82,6 +82,8 @@ each with its own `CODEX_HOME` and Codex account.
 This feature is off by default.
 Enable `codexSwitch.codexHome.enabled` to make active
 and previous profile selection local to the resolved `CODEX_HOME`.
+It does not change which `CODEX_HOME` or auth path the extension resolves.
+It only changes which profile state bucket is used.
 
 When a new non-default `CODEX_HOME` has no `auth.json` yet,
 Codex Switch can bootstrap it from the default home active profile.
@@ -97,6 +99,19 @@ for example:
 ```sh
 CODEX_HOME="$HOME/.codex-client-a" code .
 ```
+
+Supported runtime matrix:
+
+* Native Windows, Linux, and macOS: `CODEX_HOME` is resolved from the
+  environment the IDE was started with, or falls back to `~/.codex`.
+* Windows + WSL: when `chatgpt.runCodexInWindowsSubsystemForLinux` is on,
+  auth resolution uses the WSL-side Codex home;
+  custom `CODEX_HOME` is not supported in that mode.
+* SSH remote: `codexSwitch.storageMode=remoteFiles` keeps shared active state
+  per resolved home, while `secretStorage` remains local to the client.
+* Default home vs custom environment home: active
+  and previous profile state can be isolated per resolved `CODEX_HOME`,
+  but the resolved auth path still comes from the launched environment value.
 
 ## Profile Matching
 

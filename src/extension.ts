@@ -203,7 +203,11 @@ async function refreshProfileUi(options: RefreshProfileUiOptions = {}) {
     return
   }
 
-  updateProfileStatus(activeProfileWithRateLimits, mergedProfilesWithRateLimits, home)
+  updateProfileStatus(
+    activeProfileWithRateLimits,
+    mergedProfilesWithRateLimits,
+    home,
+  )
 }
 
 function mergeRefreshOptions(

@@ -123,7 +123,9 @@ export function extractAuthDataFromAuthJson(
  * Resolve default Codex home path.
  */
 export function getDefaultCodexHomePath(): string {
-  return path.resolve(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'))
+  return path.resolve(
+    process.env.CODEX_HOME || path.join(os.homedir(), '.codex'),
+  )
 }
 
 export function getCodexAuthPathForHome(codexHomePath: string): string {

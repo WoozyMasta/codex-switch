@@ -1,5 +1,9 @@
 import * as vscode from 'vscode'
-import { ProfileRateLimitWindow, ProfileSummary, ResolvedCodexHome } from '../types'
+import {
+  ProfileRateLimitWindow,
+  ProfileSummary,
+  ResolvedCodexHome,
+} from '../types'
 import { getProfilePlanDisplay } from './profile-display'
 import { escapeMarkdown } from '../utils/markdown'
 

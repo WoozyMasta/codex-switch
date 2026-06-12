@@ -18,7 +18,6 @@ import {
   getSharedActiveProfilePathForHome,
   getSharedProfileSecretsPath,
   getSharedProfilesDir,
-  getSharedProfilesPath,
   getSharedStoreRoot,
   readJsonFile,
   writeJsonFile,
@@ -44,6 +43,7 @@ import {
   isNonDefaultPerHomeState,
   shouldMigrateLegacyProfileState,
 } from '../utils/profile-state-policy'
+import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 import { sha256Text } from '../utils/text-hash'
@@ -257,10 +257,7 @@ export class ProfileManager {
   }
 
   private getProfilesPath(): string {
-    if (this.isRemoteFilesMode()) {
-      return getSharedProfilesPath()
-    }
-    return path.join(this.getStorageDir(), PROFILES_FILENAME)
+    return resolveProfilesPath(this.isRemoteFilesMode(), this.getStorageDir())
   }
 
   private ensureStorageDir() {

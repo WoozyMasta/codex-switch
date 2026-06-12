@@ -31,6 +31,7 @@ import {
 import { parseImportEntry } from '../utils/import-entry'
 import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
 import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
+import { parseProfilesFileState } from '../utils/profiles-file-state'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
 import {
@@ -282,15 +283,7 @@ export class ProfileManager {
 
     try {
       const raw = fs.readFileSync(filePath, 'utf8')
-      const file = parseProfilesFile(raw)
-      if (!file) {
-        return {
-          kind: 'corrupt',
-          path: filePath,
-          reason: 'Invalid profiles file format.',
-        }
-      }
-      return { kind: 'valid', path: filePath, file }
+      return parseProfilesFileState(raw, filePath)
     } catch (error) {
       return {
         kind: 'corrupt',

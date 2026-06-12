@@ -1,5 +1,6 @@
 import type { AuthData } from '../types'
 import { validateImportedAuthJson } from './auth-payload'
+import { asOptionalString } from './strings'
 
 interface ParsedImportEntry {
   sourceProfileId?: string
@@ -12,14 +13,6 @@ function asObject(value: unknown): Record<string, unknown> | null {
     return null
   }
   return value as Record<string, unknown>
-}
-
-function asOptionalString(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const trimmed = value.trim()
-  return trimmed ? trimmed : undefined
 }
 
 export function parseImportEntry(value: unknown): ParsedImportEntry | null {

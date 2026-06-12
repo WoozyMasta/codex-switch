@@ -3,14 +3,7 @@ import {
   buildIdentitySnapshot,
   compareIdentitySnapshots,
 } from './auth-identity'
-
-function asOptionalString(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const trimmed = value.trim()
-  return trimmed ? trimmed : undefined
-}
+import { asOptionalString } from './strings'
 
 function pickNonEmptyString(...values: unknown[]): string | undefined {
   for (const value of values) {

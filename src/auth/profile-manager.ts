@@ -34,6 +34,7 @@ import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
 import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
+import { asOptionalString } from '../utils/strings'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -107,15 +108,6 @@ function asObject(value: unknown): Record<string, unknown> | null {
   }
   return value as Record<string, unknown>
 }
-
-function asOptionalString(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const v = value.trim()
-  return v ? v : undefined
-}
-
 export class ProfileManager {
   constructor(
     private context: vscode.ExtensionContext,

@@ -39,6 +39,10 @@ import {
 } from '../utils/shared-active-profile'
 import { asOptionalString, firstDefinedString } from '../utils/strings'
 import { buildProfileStateKeys } from '../utils/profile-state-keys'
+import {
+  isNonDefaultPerHomeState,
+  shouldMigrateLegacyProfileState,
+} from '../utils/profile-state-policy'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sha256Text } from '../utils/text-hash'
 import {
@@ -976,8 +980,7 @@ export class ProfileManager {
   }
 
   private shouldMigrateLegacyProfileState(): boolean {
-    const home = this.getActiveCodexHome()
-    return !home.usesPerHomeState || home.isDefault
+    return shouldMigrateLegacyProfileState(this.getActiveCodexHome())
   }
 
   private shouldInheritDefaultProfileWhenEmpty(): boolean {
@@ -986,8 +989,7 @@ export class ProfileManager {
   }
 
   private isNonDefaultPerHomeState(): boolean {
-    const home = this.getActiveCodexHome()
-    return home.usesPerHomeState && !home.isDefault
+    return isNonDefaultPerHomeState(this.getActiveCodexHome())
   }
 
   private isActiveCodexAuthFileMissing(): boolean {

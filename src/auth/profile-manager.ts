@@ -37,6 +37,10 @@ import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
 import { asOptionalString } from '../utils/strings'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sha256Text } from '../utils/text-hash'
+import {
+  buildProfileSummaryFromAuth,
+  buildProfileTokensFromAuth,
+} from '../utils/profile-records'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -720,13 +724,7 @@ export class ProfileManager {
     }
     this.writeProfilesFile(file)
 
-    const tokens: ProfileTokens = {
-      idToken: authData.idToken,
-      accessToken: authData.accessToken,
-      refreshToken: authData.refreshToken,
-      accountId: authData.accountId,
-      authJson: authData.authJson,
-    }
+    const tokens = buildProfileTokensFromAuth(authData)
     await this.writeStoredTokens(profileId, tokens)
     return true
   }
@@ -825,31 +823,12 @@ export class ProfileManager {
     const now = new Date().toISOString()
     const id = randomUUID()
 
-    const profile: ProfileSummary = {
-      id,
-      name,
-      email: authData.email,
-      planType: authData.planType,
-      accountId: authData.accountId,
-      defaultOrganizationId: authData.defaultOrganizationId,
-      defaultOrganizationTitle: authData.defaultOrganizationTitle,
-      chatgptUserId: authData.chatgptUserId,
-      userId: authData.userId,
-      subject: authData.subject,
-      createdAt: now,
-      updatedAt: now,
-    }
+    const profile = buildProfileSummaryFromAuth(id, name, authData, now)
 
     file.profiles.push(profile)
     this.writeProfilesFile(file)
 
-    const tokens: ProfileTokens = {
-      idToken: authData.idToken,
-      accessToken: authData.accessToken,
-      refreshToken: authData.refreshToken,
-      accountId: authData.accountId,
-      authJson: authData.authJson,
-    }
+    const tokens = buildProfileTokensFromAuth(authData)
     await this.writeStoredTokens(id, tokens)
 
     return profile

@@ -33,7 +33,10 @@ import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-po
 import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
-import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
+import {
+  resolveDefaultHomeActiveProfileId,
+  resolveSharedActiveProfile,
+} from '../utils/shared-active-profile'
 import { asOptionalString, firstDefinedString } from '../utils/strings'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sha256Text } from '../utils/text-hash'
@@ -991,23 +994,17 @@ export class ProfileManager {
   }
 
   private async getDefaultHomeActiveProfileId(): Promise<string | undefined> {
-    if (this.isRemoteFilesMode()) {
-      return firstDefinedString(
-        readJsonFile<SharedActiveProfile>(
-          getSharedActiveProfilePathForHome('default'),
-        )?.profileId,
-        readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
-          ?.profileId,
-      )
-    }
-
-    const bucket = this.getStateBucket()
-    const legacyBucket = this.getLegacyStateBucket()
-    return firstDefinedString(
-      bucket.get<string>(`${ACTIVE_PROFILE_KEY}.default`),
-      bucket.get<string>(ACTIVE_PROFILE_KEY),
-      bucket.get<string>(OLD_ACTIVE_PROFILE_KEY),
-      legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY),
+    return resolveDefaultHomeActiveProfileId(
+      readJsonFile<SharedActiveProfile>(
+        getSharedActiveProfilePathForHome('default'),
+      )?.profileId,
+      readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
+        ?.profileId,
+      this.getStateBucket().get<string>(`${ACTIVE_PROFILE_KEY}.default`),
+      this.getStateBucket().get<string>(ACTIVE_PROFILE_KEY),
+      this.getStateBucket().get<string>(OLD_ACTIVE_PROFILE_KEY),
+      this.getLegacyStateBucket().get<string>(OLD_ACTIVE_PROFILE_KEY),
+      this.isRemoteFilesMode(),
     )
   }
 

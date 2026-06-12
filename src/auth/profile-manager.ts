@@ -38,6 +38,7 @@ import {
   resolveSharedActiveProfile,
 } from '../utils/shared-active-profile'
 import { asOptionalString, firstDefinedString } from '../utils/strings'
+import { buildProfileStateKeys } from '../utils/profile-state-keys'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sha256Text } from '../utils/text-hash'
 import {
@@ -967,11 +968,11 @@ export class ProfileManager {
   }
 
   private activeProfileKey(): string {
-    return `${ACTIVE_PROFILE_KEY}.${this.getActiveCodexHome().id}`
+    return buildProfileStateKeys(this.getActiveCodexHome().id).active
   }
 
   private lastProfileKey(): string {
-    return `${LAST_PROFILE_KEY}.${this.getActiveCodexHome().id}`
+    return buildProfileStateKeys(this.getActiveCodexHome().id).last
   }
 
   private shouldMigrateLegacyProfileState(): boolean {

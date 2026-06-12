@@ -35,6 +35,7 @@ import { matchesPreservationIdentityForProfile } from '../utils/preservation-ide
 import { resolveStorageMode } from '../utils/storage-mode'
 import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
 import { asOptionalString } from '../utils/strings'
+import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -71,9 +72,6 @@ const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 // Backward compatibility keys (pre-rename).
 const OLD_ACTIVE_PROFILE_KEY = 'codexUsage.activeProfileId'
 const OLD_LAST_PROFILE_KEY = 'codexUsage.lastProfileId'
-const OLD_SECRET_PREFIX = 'codexUsage.profile.'
-const NEW_SECRET_PREFIX = 'codexSwitch.profile.'
-
 interface ExportedProfileEntryV1 {
   profile: ProfileSummary
   tokens: ProfileTokens
@@ -333,14 +331,6 @@ export class ProfileManager {
     return state.kind === 'valid' ? state.file : { version: 1, profiles: [] }
   }
 
-  private secretKey(profileId: string): string {
-    return `${NEW_SECRET_PREFIX}${profileId}`
-  }
-
-  private legacySecretKey(profileId: string): string {
-    return `${OLD_SECRET_PREFIX}${profileId}`
-  }
-
   private readSharedActiveProfile(): SharedActiveProfile | null {
     if (!this.isRemoteFilesMode()) {
       return null
@@ -388,9 +378,10 @@ export class ProfileManager {
       return this.readRemoteProfileTokens(profileId)
     }
 
+    const keys = buildProfileSecretKeys(profileId)
     const raw =
-      (await this.context.secrets.get(this.secretKey(profileId))) ||
-      (await this.context.secrets.get(this.legacySecretKey(profileId)))
+      (await this.context.secrets.get(keys.current)) ||
+      (await this.context.secrets.get(keys.legacy))
     if (!raw) {
       return null
     }
@@ -412,10 +403,8 @@ export class ProfileManager {
       return
     }
 
-    await this.context.secrets.store(
-      this.secretKey(profileId),
-      JSON.stringify(tokens),
-    )
+    const keys = buildProfileSecretKeys(profileId)
+    await this.context.secrets.store(keys.current, JSON.stringify(tokens))
   }
 
   private async deleteStoredTokens(profileId: string): Promise<void> {
@@ -424,8 +413,9 @@ export class ProfileManager {
       return
     }
 
-    await this.context.secrets.delete(this.secretKey(profileId))
-    await this.context.secrets.delete(this.legacySecretKey(profileId))
+    const keys = buildProfileSecretKeys(profileId)
+    await this.context.secrets.delete(keys.current)
+    await this.context.secrets.delete(keys.legacy)
   }
 
   private getGlobalStorageRoot(): string {

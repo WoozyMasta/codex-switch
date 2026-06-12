@@ -45,6 +45,7 @@ import {
 } from '../utils/profile-state-policy'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
+import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 import { sha256Text } from '../utils/text-hash'
@@ -622,8 +623,7 @@ export class ProfileManager {
     }
 
     const file = await this.readProfilesFile()
-    const match = file.profiles.find((p) => this.matchesAuth(p, authData))
-    return match?.id
+    return findMatchingProfileIdForAuth(file.profiles, authData)
   }
 
   async findDuplicateProfile(

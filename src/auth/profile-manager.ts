@@ -45,6 +45,7 @@ import {
 } from '../utils/profile-state-policy'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
+import { resolveActiveProfileId } from '../utils/profile-active-state'
 import {
   readLastProfileIdFromState,
   toggleLastProfileId,
@@ -969,77 +970,25 @@ export class ProfileManager {
   }
 
   async getActiveProfileId(): Promise<string | undefined> {
-    if (this.isRemoteFilesMode()) {
-      const explicit = this.readSharedActiveProfile()?.profileId
-      const inferred = await this.inferActiveProfileIdFromAuthFile()
-
-      if (inferred) {
-        if (explicit !== inferred) {
-          this.writeSharedActiveProfile(inferred)
-        }
-        return inferred
-      }
-
-      return explicit || this.inheritDefaultProfileIfCurrentHomeIsEmpty()
-    }
-
-    const bucket = this.getStateBucket()
-    const activeKey = this.activeProfileKey()
-    const v = bucket.get<string>(activeKey)
-    if (v) {
-      const existing = await this.getProfile(v)
-      if (existing) {
-        return v
-      }
-
-      const inferred = await this.inferActiveProfileIdFromAuthFile()
-      if (inferred && inferred !== v) {
-        await bucket.update(activeKey, inferred)
-        await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-        return inferred
-      }
-
-      await bucket.update(activeKey, undefined)
-      await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-      return undefined
-    }
-
-    if (this.shouldMigrateLegacyProfileState()) {
-      // Migrate old key lazily only for the default home. A non-default
-      // external CODEX_HOME should not inherit the user's previous global
-      // active profile and write it into a fresh auth.json.
-      const legacyBucket = this.getLegacyStateBucket()
-      const old =
-        bucket.get<string>(ACTIVE_PROFILE_KEY) ||
-        bucket.get<string>(OLD_ACTIVE_PROFILE_KEY) ||
-        legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
-      if (old) {
-        const existing = await this.getProfile(old)
-        if (existing) {
-          await bucket.update(activeKey, old)
-          await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-          await bucket.update(ACTIVE_PROFILE_KEY, undefined)
-          await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-          return old
-        }
-
-        const inferred = await this.inferActiveProfileIdFromAuthFile()
-        await bucket.update(activeKey, inferred)
-        await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-        await bucket.update(ACTIVE_PROFILE_KEY, undefined)
-        await legacyBucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-        return inferred
-      }
-    }
-
-    const inferred = await this.inferActiveProfileIdFromAuthFile()
-    if (inferred) {
-      await bucket.update(activeKey, inferred)
-      await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-      return inferred
-    }
-
-    return this.inheritDefaultProfileIfCurrentHomeIsEmpty()
+    return resolveActiveProfileId({
+      isRemoteFilesMode: this.isRemoteFilesMode(),
+      currentBucket: this.getStateBucket(),
+      legacyBucket: this.getLegacyStateBucket(),
+      keys: {
+        current: this.activeProfileKey(),
+        currentBase: ACTIVE_PROFILE_KEY,
+        legacy: OLD_ACTIVE_PROFILE_KEY,
+      },
+      shouldMigrateLegacyProfileState: this.shouldMigrateLegacyProfileState(),
+      readSharedActiveProfile: () => this.readSharedActiveProfile()?.profileId,
+      writeSharedActiveProfile: (profileId) =>
+        this.writeSharedActiveProfile(profileId),
+      getProfile: (profileId) => this.getProfile(profileId),
+      inferActiveProfileIdFromAuthFile: () =>
+        this.inferActiveProfileIdFromAuthFile(),
+      inheritDefaultProfileIfCurrentHomeIsEmpty: () =>
+        this.inheritDefaultProfileIfCurrentHomeIsEmpty(),
+    })
   }
 
   private async setActiveProfileIdInState(

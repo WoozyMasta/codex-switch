@@ -44,6 +44,7 @@ import {
   shouldMigrateLegacyProfileState,
 } from '../utils/profile-state-policy'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
+import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 import { sha256Text } from '../utils/text-hash'
@@ -941,18 +942,22 @@ export class ProfileManager {
       vscode.workspace
         .getConfiguration('codexUsage')
         .get<'global' | 'workspace'>('activeProfileScope', 'global')
-    return scope === 'workspace'
-      ? this.context.workspaceState
-      : this.context.globalState
+    return resolveProfileStateBucket(
+      scope,
+      this.context.globalState,
+      this.context.workspaceState,
+    )
   }
 
   private getLegacyStateBucket(): vscode.Memento {
     const scope = vscode.workspace
       .getConfiguration('codexUsage')
       .get<'global' | 'workspace'>('activeProfileScope', 'global')
-    return scope === 'workspace'
-      ? this.context.workspaceState
-      : this.context.globalState
+    return resolveProfileStateBucket(
+      scope,
+      this.context.globalState,
+      this.context.workspaceState,
+    )
   }
 
   private activeProfileKey(): string {

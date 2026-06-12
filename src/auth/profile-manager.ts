@@ -32,6 +32,7 @@ import { parseImportEntry } from '../utils/import-entry'
 import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
 import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
+import { resolveStorageMode } from '../utils/storage-mode'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -133,13 +134,10 @@ export class ProfileManager {
   }
 
   private getResolvedStorageMode(): Exclude<StorageMode, 'auto'> {
-    const configured = this.getConfiguredStorageMode()
-    if (configured === 'auto') {
-      return vscode.env.remoteName === 'ssh-remote'
-        ? 'remoteFiles'
-        : 'secretStorage'
-    }
-    return configured
+    return resolveStorageMode(
+      this.getConfiguredStorageMode(),
+      vscode.env.remoteName,
+    )
   }
 
   private isRemoteFilesMode(): boolean {

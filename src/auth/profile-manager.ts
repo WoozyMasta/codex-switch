@@ -45,7 +45,10 @@ import {
 } from '../utils/profile-state-policy'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
-import { resolveActiveProfileId } from '../utils/profile-active-state'
+import {
+  resolveActiveProfileId,
+  setActiveProfileIdInState,
+} from '../utils/profile-active-state'
 import {
   readLastProfileIdFromState,
   toggleLastProfileId,
@@ -965,7 +968,20 @@ export class ProfileManager {
       return undefined
     }
 
-    await this.setActiveProfileIdInState(defaultProfileId)
+    await setActiveProfileIdInState(
+      {
+        isRemoteFilesMode: this.isRemoteFilesMode(),
+        currentBucket: this.getStateBucket(),
+        keys: {
+          current: this.activeProfileKey(),
+          legacy: OLD_ACTIVE_PROFILE_KEY,
+        },
+        writeSharedActiveProfile: (profileId) =>
+          this.writeSharedActiveProfile(profileId),
+        deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+      },
+      defaultProfileId,
+    )
     return defaultProfileId
   }
 
@@ -991,27 +1007,23 @@ export class ProfileManager {
     })
   }
 
-  private async setActiveProfileIdInState(
-    profileId: string | undefined,
-  ): Promise<void> {
-    if (this.isRemoteFilesMode()) {
-      if (profileId) {
-        this.writeSharedActiveProfile(profileId)
-      } else {
-        this.deleteSharedActiveProfile()
-      }
-      return
-    }
-
-    const bucket = this.getStateBucket()
-    await bucket.update(this.activeProfileKey(), profileId)
-    await bucket.update(OLD_ACTIVE_PROFILE_KEY, undefined)
-  }
-
   async prepareForNewLoginChat(): Promise<PrepareForNewLoginChatResult> {
     const authPath = this.getActiveCodexAuthPath()
 
-    await this.setActiveProfileIdInState(undefined)
+    await setActiveProfileIdInState(
+      {
+        isRemoteFilesMode: this.isRemoteFilesMode(),
+        currentBucket: this.getStateBucket(),
+        keys: {
+          current: this.activeProfileKey(),
+          legacy: OLD_ACTIVE_PROFILE_KEY,
+        },
+        writeSharedActiveProfile: (profileId) =>
+          this.writeSharedActiveProfile(profileId),
+        deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+      },
+      undefined,
+    )
     this.lastSyncedProfileId = undefined
     this.lastSyncedAuthHash = undefined
 
@@ -1071,7 +1083,20 @@ export class ProfileManager {
       await this.setLastProfileId(prev)
     }
 
-    await this.setActiveProfileIdInState(profileId)
+    await setActiveProfileIdInState(
+      {
+        isRemoteFilesMode: this.isRemoteFilesMode(),
+        currentBucket: this.getStateBucket(),
+        keys: {
+          current: this.activeProfileKey(),
+          legacy: OLD_ACTIVE_PROFILE_KEY,
+        },
+        writeSharedActiveProfile: (value) =>
+          this.writeSharedActiveProfile(value),
+        deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+      },
+      profileId,
+    )
 
     if (profileId && authData) {
       // We already validated tokens above; avoid a second secret read.
@@ -1154,7 +1179,20 @@ export class ProfileManager {
         if (activeProfile && activeId && activeId !== matched.id) {
           await this.setLastProfileId(activeId)
         }
-        await this.setActiveProfileIdInState(matched.id)
+        await setActiveProfileIdInState(
+          {
+            isRemoteFilesMode: this.isRemoteFilesMode(),
+            currentBucket: this.getStateBucket(),
+            keys: {
+              current: this.activeProfileKey(),
+              legacy: OLD_ACTIVE_PROFILE_KEY,
+            },
+            writeSharedActiveProfile: (profileId) =>
+              this.writeSharedActiveProfile(profileId),
+            deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+          },
+          matched.id,
+        )
         await this.maybeReplaceProfileAuthWithLive(matched, liveAuth)
         return
       }
@@ -1162,7 +1200,20 @@ export class ProfileManager {
       if (activeId) {
         await this.setLastProfileId(activeId)
       }
-      await this.setActiveProfileIdInState(undefined)
+      await setActiveProfileIdInState(
+        {
+          isRemoteFilesMode: this.isRemoteFilesMode(),
+          currentBucket: this.getStateBucket(),
+          keys: {
+            current: this.activeProfileKey(),
+            legacy: OLD_ACTIVE_PROFILE_KEY,
+          },
+          writeSharedActiveProfile: (profileId) =>
+            this.writeSharedActiveProfile(profileId),
+          deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+        },
+        undefined,
+      )
       return
     }
 

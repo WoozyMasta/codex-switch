@@ -2,9 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type {
   ActiveProfileStateDependencies,
+  ActiveProfileStateWriteDependencies,
   ProfileStateBucketLike,
 } from '../../src/utils/profile-active-state'
-import { resolveActiveProfileId } from '../../src/utils/profile-active-state'
+import {
+  resolveActiveProfileId,
+  setActiveProfileIdInState,
+} from '../../src/utils/profile-active-state'
 import type { ProfileSummary } from '../../src/types'
 
 class MemoryBucket implements ProfileStateBucketLike {
@@ -76,6 +80,39 @@ function makeDeps(
       getProfile: async () => undefined,
       inferActiveProfileIdFromAuthFile: async () => undefined,
       inheritDefaultProfileIfCurrentHomeIsEmpty: async () => undefined,
+      ...rest,
+    },
+  }
+}
+
+function makeWriteDeps(
+  overrides: Partial<ActiveProfileStateWriteDependencies> & {
+    currentBucket?: MemoryBucket
+  } = {},
+): {
+  currentBucket: MemoryBucket
+  sharedWrites: string[]
+  deletedCount: () => number
+  deps: ActiveProfileStateWriteDependencies
+} {
+  const { currentBucket = new MemoryBucket(), ...rest } = overrides
+  const sharedWrites: string[] = []
+  let deleted = 0
+
+  return {
+    currentBucket,
+    sharedWrites,
+    deletedCount: () => deleted,
+    deps: {
+      isRemoteFilesMode: false,
+      currentBucket,
+      keys: { current: 'current', legacy: 'legacy' },
+      writeSharedActiveProfile: (profileId) => {
+        sharedWrites.push(profileId)
+      },
+      deleteSharedActiveProfile: () => {
+        deleted += 1
+      },
       ...rest,
     },
   }
@@ -216,4 +253,26 @@ test('resolveActiveProfileId migrates legacy state and inherits default home whe
   assert.equal(await resolveActiveProfileId(inferred.deps), 'fresh-home')
   assert.equal(inferred.currentBucket.get('current'), 'fresh-home')
   assert.equal(inferred.currentBucket.get('legacy'), undefined)
+})
+
+test('setActiveProfileIdInState writes remote and local active state', async () => {
+  const remote = makeWriteDeps({
+    isRemoteFilesMode: true,
+  })
+
+  await setActiveProfileIdInState(remote.deps, 'remote-active')
+  await setActiveProfileIdInState(remote.deps, undefined)
+
+  assert.deepEqual(remote.sharedWrites, ['remote-active'])
+  assert.equal(remote.deletedCount(), 1)
+  assert.equal(remote.currentBucket.get('current'), undefined)
+
+  const local = makeWriteDeps({
+    currentBucket: new MemoryBucket({ legacy: 'old' }),
+  })
+
+  await setActiveProfileIdInState(local.deps, 'local-active')
+
+  assert.equal(local.currentBucket.get('current'), 'local-active')
+  assert.equal(local.currentBucket.get('legacy'), undefined)
 })

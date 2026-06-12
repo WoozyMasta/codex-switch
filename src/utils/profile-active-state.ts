@@ -25,6 +25,14 @@ export interface ActiveProfileStateDependencies {
   inheritDefaultProfileIfCurrentHomeIsEmpty: () => Promise<string | undefined>
 }
 
+export interface ActiveProfileStateWriteDependencies {
+  isRemoteFilesMode: boolean
+  currentBucket: ProfileStateBucketLike
+  keys: Pick<ActiveProfileStateKeys, 'current' | 'legacy'>
+  writeSharedActiveProfile: (profileId: string) => void
+  deleteSharedActiveProfile: () => void
+}
+
 export async function resolveActiveProfileId(
   deps: ActiveProfileStateDependencies,
 ): Promise<string | undefined> {
@@ -96,4 +104,21 @@ export async function resolveActiveProfileId(
   }
 
   return deps.inheritDefaultProfileIfCurrentHomeIsEmpty()
+}
+
+export async function setActiveProfileIdInState(
+  deps: ActiveProfileStateWriteDependencies,
+  profileId: string | undefined,
+): Promise<void> {
+  if (deps.isRemoteFilesMode) {
+    if (profileId) {
+      deps.writeSharedActiveProfile(profileId)
+    } else {
+      deps.deleteSharedActiveProfile()
+    }
+    return
+  }
+
+  await deps.currentBucket.update(deps.keys.current, profileId)
+  await deps.currentBucket.update(deps.keys.legacy, undefined)
 }

@@ -45,6 +45,7 @@ import {
   shouldMigrateLegacyProfileState,
 } from '../utils/profile-state-policy'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
+import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 import { sha256Text } from '../utils/text-hash'
 import {
   buildProfileSummaryFromAuth,
@@ -462,18 +463,11 @@ export class ProfileManager {
     }
 
     // Prefer older ids we used during development.
-    candidates.sort((a, b) => {
-      const rank = (n: string) => {
-        if (n.toLowerCase().includes('codex-switch')) {
-          return 0
-        }
-        if (n.toLowerCase().includes('codex-stats')) {
-          return 1
-        }
-        return 2
-      }
-      return rank(a) - rank(b)
-    })
+    candidates.splice(
+      0,
+      candidates.length,
+      ...sortLegacyProfileMigrationCandidates(candidates),
+    )
 
     for (const dirName of candidates) {
       const legacyProfilesPath = path.join(root, dirName, PROFILES_FILENAME)

@@ -37,7 +37,7 @@ import {
   resolveDefaultHomeActiveProfileId,
   resolveSharedActiveProfile,
 } from '../utils/shared-active-profile'
-import { asOptionalString, firstDefinedString } from '../utils/strings'
+import { asOptionalString } from '../utils/strings'
 import { buildProfileStateKeys } from '../utils/profile-state-keys'
 import {
   isNonDefaultPerHomeState,
@@ -46,6 +46,7 @@ import {
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
 import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
+import { buildProfileAuthData } from '../utils/profile-auth-data'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 import { sha256Text } from '../utils/text-hash'
@@ -150,20 +151,6 @@ export class ProfileManager {
 
   private isRemoteFilesMode(): boolean {
     return this.getResolvedStorageMode() === 'remoteFiles'
-  }
-
-  private asNonEmptyString(value: unknown): string | undefined {
-    if (typeof value !== 'string') {
-      return undefined
-    }
-    const trimmed = value.trim()
-    return trimmed ? trimmed : undefined
-  }
-
-  private pickNonEmptyString(...values: unknown[]): string | undefined {
-    return firstDefinedString(
-      ...values.map((value) => this.asNonEmptyString(value)),
-    )
   }
 
   private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
@@ -879,57 +866,7 @@ export class ProfileManager {
     }
 
     const extracted = extractAuthDataFromAuthJson(tokens.authJson)
-    const idToken = this.pickNonEmptyString(extracted?.idToken, tokens.idToken)
-    const accessToken = this.pickNonEmptyString(
-      extracted?.accessToken,
-      tokens.accessToken,
-    )
-    const refreshToken = this.pickNonEmptyString(
-      extracted?.refreshToken,
-      tokens.refreshToken,
-    )
-    if (!idToken || !accessToken || !refreshToken) {
-      return null
-    }
-    const emailFromAuth = this.pickNonEmptyString(
-      extracted?.email,
-      profile.email,
-    )
-    const planTypeFromAuth = this.pickNonEmptyString(
-      extracted?.planType,
-      profile.planType,
-    )
-    if (!emailFromAuth || !planTypeFromAuth) {
-      return null
-    }
-
-    return {
-      idToken,
-      accessToken,
-      refreshToken,
-      accountId: this.pickNonEmptyString(
-        extracted?.accountId,
-        tokens.accountId,
-        profile.accountId,
-      ),
-      defaultOrganizationId: this.pickNonEmptyString(
-        extracted?.defaultOrganizationId,
-        profile.defaultOrganizationId,
-      ),
-      defaultOrganizationTitle: this.pickNonEmptyString(
-        extracted?.defaultOrganizationTitle,
-        profile.defaultOrganizationTitle,
-      ),
-      chatgptUserId: this.pickNonEmptyString(
-        extracted?.chatgptUserId,
-        profile.chatgptUserId,
-      ),
-      userId: this.pickNonEmptyString(extracted?.userId, profile.userId),
-      subject: this.pickNonEmptyString(extracted?.subject, profile.subject),
-      email: emailFromAuth,
-      planType: planTypeFromAuth,
-      authJson: extracted?.authJson ? extracted.authJson : tokens.authJson,
-    }
+    return buildProfileAuthData(profile, tokens, extracted)
   }
 
   private getStateBucket(): vscode.Memento {

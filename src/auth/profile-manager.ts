@@ -34,7 +34,7 @@ import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
 import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
-import { asOptionalString } from '../utils/strings'
+import { asOptionalString, firstDefinedString } from '../utils/strings'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sha256Text } from '../utils/text-hash'
 import {
@@ -149,13 +149,9 @@ export class ProfileManager {
   }
 
   private pickNonEmptyString(...values: unknown[]): string | undefined {
-    for (const value of values) {
-      const v = this.asNonEmptyString(value)
-      if (v) {
-        return v
-      }
-    }
-    return undefined
+    return firstDefinedString(
+      ...values.map((value) => this.asNonEmptyString(value)),
+    )
   }
 
   private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
@@ -996,22 +992,22 @@ export class ProfileManager {
 
   private async getDefaultHomeActiveProfileId(): Promise<string | undefined> {
     if (this.isRemoteFilesMode()) {
-      return (
+      return firstDefinedString(
         readJsonFile<SharedActiveProfile>(
           getSharedActiveProfilePathForHome('default'),
-        )?.profileId ||
+        )?.profileId,
         readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
-          ?.profileId
+          ?.profileId,
       )
     }
 
     const bucket = this.getStateBucket()
     const legacyBucket = this.getLegacyStateBucket()
-    return (
-      bucket.get<string>(`${ACTIVE_PROFILE_KEY}.default`) ||
-      bucket.get<string>(ACTIVE_PROFILE_KEY) ||
-      bucket.get<string>(OLD_ACTIVE_PROFILE_KEY) ||
-      legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY)
+    return firstDefinedString(
+      bucket.get<string>(`${ACTIVE_PROFILE_KEY}.default`),
+      bucket.get<string>(ACTIVE_PROFILE_KEY),
+      bucket.get<string>(OLD_ACTIVE_PROFILE_KEY),
+      legacyBucket.get<string>(OLD_ACTIVE_PROFILE_KEY),
     )
   }
 

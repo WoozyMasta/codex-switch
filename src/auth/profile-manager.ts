@@ -45,6 +45,11 @@ import {
 } from '../utils/profile-state-policy'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
+import {
+  readLastProfileIdFromState,
+  toggleLastProfileId,
+  writeLastProfileIdToState,
+} from '../utils/profile-last-state'
 import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
 import { buildProfileAuthData } from '../utils/profile-auth-data'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
@@ -1136,49 +1141,39 @@ export class ProfileManager {
   }
 
   async getLastProfileId(): Promise<string | undefined> {
-    const bucket = this.getStateBucket()
-    const lastKey = this.lastProfileKey()
-    const v = bucket.get<string>(lastKey)
-    if (v) {
-      return v
-    }
-
-    if (this.shouldMigrateLegacyProfileState()) {
-      const legacyBucket = this.getLegacyStateBucket()
-      const old =
-        bucket.get<string>(LAST_PROFILE_KEY) ||
-        bucket.get<string>(OLD_LAST_PROFILE_KEY) ||
-        legacyBucket.get<string>(OLD_LAST_PROFILE_KEY)
-      if (old) {
-        await bucket.update(lastKey, old)
-        await bucket.update(OLD_LAST_PROFILE_KEY, undefined)
-        await bucket.update(LAST_PROFILE_KEY, undefined)
-        await legacyBucket.update(OLD_LAST_PROFILE_KEY, undefined)
-        return old
-      }
-    }
-    return undefined
+    return readLastProfileIdFromState(
+      this.getStateBucket(),
+      this.getLegacyStateBucket(),
+      {
+        current: this.lastProfileKey(),
+        currentBase: LAST_PROFILE_KEY,
+        legacy: OLD_LAST_PROFILE_KEY,
+      },
+      this.shouldMigrateLegacyProfileState(),
+    )
   }
 
   private async setLastProfileId(profileId: string | undefined): Promise<void> {
-    const bucket = this.getStateBucket()
-    await bucket.update(this.lastProfileKey(), profileId)
-    await bucket.update(OLD_LAST_PROFILE_KEY, undefined)
+    await writeLastProfileIdToState(
+      this.getStateBucket(),
+      {
+        current: this.lastProfileKey(),
+        currentBase: LAST_PROFILE_KEY,
+        legacy: OLD_LAST_PROFILE_KEY,
+      },
+      profileId,
+    )
   }
 
   async toggleLastProfileId(): Promise<string | undefined> {
     const active = await this.getActiveProfileId()
     const last = await this.getLastProfileId()
-    if (!last) {
-      return undefined
-    }
-
-    const ok = await this.setActiveProfileId(last)
-    if (ok && active) {
-      // Swap so a second click toggles back.
-      await this.setLastProfileId(active)
-    }
-    return ok ? last : undefined
+    return toggleLastProfileId(
+      active,
+      last,
+      async (profileId) => this.setActiveProfileId(profileId),
+      async (profileId) => this.setLastProfileId(profileId),
+    )
   }
 
   async reconcileActiveProfileWithCodexAuthFile(): Promise<void> {

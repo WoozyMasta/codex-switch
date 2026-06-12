@@ -33,6 +33,7 @@ import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-po
 import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
+import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -353,19 +354,13 @@ export class ProfileManager {
       return null
     }
     const home = this.getActiveCodexHome()
-    const perHome = readJsonFile<SharedActiveProfile>(
-      getSharedActiveProfilePathForHome(home.id),
+    return resolveSharedActiveProfile(
+      readJsonFile<SharedActiveProfile>(
+        getSharedActiveProfilePathForHome(home.id),
+      ),
+      readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath()),
+      home.isDefault,
     )
-    if (perHome) {
-      return perHome
-    }
-
-    // Compatibility fallback for existing users. Only the default home may
-    // inherit the old single active-profile marker.
-    if (home.isDefault) {
-      return readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
-    }
-    return null
   }
 
   private writeSharedActiveProfile(profileId: string): void {

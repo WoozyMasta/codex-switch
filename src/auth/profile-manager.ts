@@ -50,6 +50,10 @@ import {
   setActiveProfileIdInState,
 } from '../utils/profile-active-state'
 import {
+  findProfileByPreservationIdentity,
+  maybeReplaceProfileAuthWithLive,
+} from '../utils/profile-auth-preservation'
+import {
   readLastProfileIdFromState,
   toggleLastProfileId,
   writeLastProfileIdToState,
@@ -173,44 +177,6 @@ export class ProfileManager {
 
   private async loadLiveCodexAuthData(): Promise<AuthData | null> {
     return loadAuthDataFromFile(this.getActiveCodexAuthPath())
-  }
-
-  private async maybeReplaceProfileAuthWithLive(
-    profile: ProfileSummary,
-    liveAuth: AuthData,
-  ): Promise<boolean> {
-    const storedAuth = await this.loadAuthData(profile.id)
-    if (!matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)) {
-      return false
-    }
-
-    if (!shouldReplaceStoredProfileAuthWithLive(storedAuth, liveAuth)) {
-      return false
-    }
-    return this.replaceProfileAuth(profile.id, liveAuth)
-  }
-
-  private async findProfileByPreservationIdentity(
-    liveAuth: AuthData,
-    preferredProfileId?: string,
-  ): Promise<ProfileSummary | undefined> {
-    const profiles = await this.listProfiles()
-    const orderedProfiles = preferredProfileId
-      ? [
-          ...profiles.filter((p) => p.id === preferredProfileId),
-          ...profiles.filter((p) => p.id !== preferredProfileId),
-        ]
-      : profiles
-
-    for (const profile of orderedProfiles) {
-      const storedAuth = await this.loadAuthData(profile.id)
-      if (
-        matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)
-      ) {
-        return profile
-      }
-    }
-    return undefined
   }
 
   private getActiveCodexHome() {
@@ -744,7 +710,15 @@ export class ProfileManager {
         return
       }
 
-      await this.maybeReplaceProfileAuthWithLive(profile, liveAuth)
+      await maybeReplaceProfileAuthWithLive(
+        {
+          loadAuthData: (profileId) => this.loadAuthData(profileId),
+          replaceProfileAuth: (profileId, authData) =>
+            this.replaceProfileAuth(profileId, authData),
+        },
+        profile,
+        liveAuth,
+      )
     } catch {
       // Best-effort preservation; switching should continue.
     }
@@ -757,7 +731,11 @@ export class ProfileManager {
     }
 
     const activeId = await this.getActiveProfileId()
-    const matchingProfile = await this.findProfileByPreservationIdentity(
+    const matchingProfile = await findProfileByPreservationIdentity(
+      {
+        listProfiles: () => this.listProfiles(),
+        loadAuthData: (profileId) => this.loadAuthData(profileId),
+      },
       liveAuth,
       activeId,
     )
@@ -766,7 +744,15 @@ export class ProfileManager {
       return { status: 'unsaved' }
     }
 
-    await this.maybeReplaceProfileAuthWithLive(matchingProfile, liveAuth)
+    await maybeReplaceProfileAuthWithLive(
+      {
+        loadAuthData: (profileId) => this.loadAuthData(profileId),
+        replaceProfileAuth: (profileId, authData) =>
+          this.replaceProfileAuth(profileId, authData),
+      },
+      matchingProfile,
+      liveAuth,
+    )
 
     return { status: 'saved' }
   }
@@ -787,13 +773,26 @@ export class ProfileManager {
       return
     }
 
-    const matchingProfile =
-      await this.findProfileByPreservationIdentity(liveAuth)
+    const matchingProfile = await findProfileByPreservationIdentity(
+      {
+        listProfiles: () => this.listProfiles(),
+        loadAuthData: (profileId) => this.loadAuthData(profileId),
+      },
+      liveAuth,
+    )
     if (!matchingProfile) {
       return
     }
 
-    await this.maybeReplaceProfileAuthWithLive(matchingProfile, liveAuth)
+    await maybeReplaceProfileAuthWithLive(
+      {
+        loadAuthData: (profileId) => this.loadAuthData(profileId),
+        replaceProfileAuth: (profileId, authData) =>
+          this.replaceProfileAuth(profileId, authData),
+      },
+      matchingProfile,
+      liveAuth,
+    )
   }
 
   async createProfile(
@@ -1167,11 +1166,23 @@ export class ProfileManager {
           activeStoredAuth,
         )
       ) {
-        await this.maybeReplaceProfileAuthWithLive(activeProfile, liveAuth)
+        await maybeReplaceProfileAuthWithLive(
+          {
+            loadAuthData: (profileId) => this.loadAuthData(profileId),
+            replaceProfileAuth: (profileId, authData) =>
+              this.replaceProfileAuth(profileId, authData),
+          },
+          activeProfile,
+          liveAuth,
+        )
         return
       }
 
-      const matched = await this.findProfileByPreservationIdentity(
+      const matched = await findProfileByPreservationIdentity(
+        {
+          listProfiles: () => this.listProfiles(),
+          loadAuthData: (profileId) => this.loadAuthData(profileId),
+        },
         liveAuth,
         activeProfile ? activeProfile.id : undefined,
       )
@@ -1193,7 +1204,15 @@ export class ProfileManager {
           },
           matched.id,
         )
-        await this.maybeReplaceProfileAuthWithLive(matched, liveAuth)
+        await maybeReplaceProfileAuthWithLive(
+          {
+            loadAuthData: (profileId) => this.loadAuthData(profileId),
+            replaceProfileAuth: (profileId, authData) =>
+              this.replaceProfileAuth(profileId, authData),
+          },
+          matched,
+          liveAuth,
+        )
         return
       }
 

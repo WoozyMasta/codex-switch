@@ -27,11 +27,11 @@ import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import {
   buildIdentitySnapshot,
   compareIdentitySnapshots,
-  type IdentitySnapshot,
 } from '../utils/auth-identity'
 import { parseImportEntry } from '../utils/import-entry'
 import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
 import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
+import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -173,48 +173,6 @@ export class ProfileManager {
     )
   }
 
-  private matchesPreservationIdentity(
-    storedIdentity: IdentitySnapshot,
-    liveAuth: AuthData,
-  ): boolean {
-    return (
-      compareIdentitySnapshots(
-        storedIdentity,
-        buildIdentitySnapshot(liveAuth),
-      ) === 'exact'
-    )
-  }
-
-  private getStoredPreservationIdentity(
-    profile: ProfileSummary,
-    storedAuth: AuthData | null,
-  ): IdentitySnapshot {
-    return buildIdentitySnapshot({
-      defaultOrganizationId: this.pickNonEmptyString(
-        storedAuth?.defaultOrganizationId,
-        profile.defaultOrganizationId,
-      ),
-      chatgptUserId: this.pickNonEmptyString(
-        storedAuth?.chatgptUserId,
-        profile.chatgptUserId,
-      ),
-      userId: this.pickNonEmptyString(storedAuth?.userId, profile.userId),
-      subject: this.pickNonEmptyString(storedAuth?.subject, profile.subject),
-    })
-  }
-
-  private matchesPreservationIdentityForProfile(
-    profile: ProfileSummary,
-    liveAuth: AuthData,
-    storedAuth: AuthData | null,
-  ): boolean {
-    const storedIdentity = this.getStoredPreservationIdentity(
-      profile,
-      storedAuth,
-    )
-    return this.matchesPreservationIdentity(storedIdentity, liveAuth)
-  }
-
   private async loadLiveCodexAuthData(): Promise<AuthData | null> {
     return loadAuthDataFromFile(this.getActiveCodexAuthPath())
   }
@@ -224,9 +182,7 @@ export class ProfileManager {
     liveAuth: AuthData,
   ): Promise<boolean> {
     const storedAuth = await this.loadAuthData(profile.id)
-    if (
-      !this.matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)
-    ) {
+    if (!matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)) {
       return false
     }
 
@@ -251,11 +207,7 @@ export class ProfileManager {
     for (const profile of orderedProfiles) {
       const storedAuth = await this.loadAuthData(profile.id)
       if (
-        this.matchesPreservationIdentityForProfile(
-          profile,
-          liveAuth,
-          storedAuth,
-        )
+        matchesPreservationIdentityForProfile(profile, liveAuth, storedAuth)
       ) {
         return profile
       }
@@ -1271,7 +1223,7 @@ export class ProfileManager {
       const liveAuth = await this.loadLiveCodexAuthData()
       if (selectedProfile && liveAuth) {
         if (
-          this.matchesPreservationIdentityForProfile(
+          matchesPreservationIdentityForProfile(
             selectedProfile,
             liveAuth,
             authData,
@@ -1367,7 +1319,7 @@ export class ProfileManager {
         : null
       if (
         activeProfile &&
-        this.matchesPreservationIdentityForProfile(
+        matchesPreservationIdentityForProfile(
           activeProfile,
           liveAuth,
           activeStoredAuth,

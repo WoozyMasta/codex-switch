@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { createHash, randomUUID } from 'crypto'
+import { randomUUID } from 'crypto'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import {
   extractAuthDataFromAuthJson,
@@ -36,6 +36,7 @@ import { resolveStorageMode } from '../utils/storage-mode'
 import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
 import { asOptionalString } from '../utils/strings'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
+import { sha256Text } from '../utils/text-hash'
 
 type ProfileTokens = Pick<
   AuthData,
@@ -204,10 +205,6 @@ export class ProfileManager {
     return undefined
   }
 
-  private computeHash(content: string): string {
-    return createHash('sha256').update(content).digest('hex')
-  }
-
   private getActiveCodexHome() {
     return this.codexHomeManager.getActiveHome()
   }
@@ -226,7 +223,7 @@ export class ProfileManager {
         return undefined
       }
       const content = fs.readFileSync(authPath, 'utf8')
-      return this.computeHash(content)
+      return sha256Text(content)
     } catch {
       return undefined
     }
@@ -239,7 +236,7 @@ export class ProfileManager {
     const content = buildCodexAuthJson(authData)
     syncCodexAuthFile(this.getActiveCodexAuthPath(), authData)
     this.lastSyncedProfileId = profileId
-    this.lastSyncedAuthHash = this.computeHash(content)
+    this.lastSyncedAuthHash = sha256Text(content)
   }
 
   private getStorageDir(): string {

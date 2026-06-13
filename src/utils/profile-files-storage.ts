@@ -5,10 +5,16 @@ import {
   type ProfilesFileState as ParsedProfilesFileState,
 } from './profiles-file-state'
 
-export async function readProfilesFileState(deps: {
+export interface ProfileFilesStorageDeps {
   ensureStorageDir: () => void
   getProfilesPath: () => string
-}): Promise<
+  existsSync?: (path: string) => boolean
+  readFileSync?: (path: string, encoding: 'utf8') => string
+}
+
+export async function readProfilesFileState(
+  deps: ProfileFilesStorageDeps,
+): Promise<
   | ParsedProfilesFileState
   | {
       kind: 'missing'
@@ -17,12 +23,14 @@ export async function readProfilesFileState(deps: {
 > {
   deps.ensureStorageDir()
   const filePath = deps.getProfilesPath()
-  if (!existsSync(filePath)) {
+  const fileExists = deps.existsSync ?? existsSync
+  const fileReadFileSync = deps.readFileSync ?? readFileSync
+  if (!fileExists(filePath)) {
     return { kind: 'missing', path: filePath }
   }
 
   try {
-    const raw = readFileSync(filePath, 'utf8')
+    const raw = fileReadFileSync(filePath, 'utf8')
     return parseProfilesFileState(raw, filePath)
   } catch (error) {
     return {
@@ -33,11 +41,11 @@ export async function readProfilesFileState(deps: {
   }
 }
 
-export async function readProfilesFile(deps: {
-  ensureStorageDir: () => void
-  getProfilesPath: () => string
-  showReadErrorMessage: (path: string) => void
-}): Promise<ProfilesFileV1> {
+export async function readProfilesFile(
+  deps: ProfileFilesStorageDeps & {
+    showReadErrorMessage: (path: string) => void
+  },
+): Promise<ProfilesFileV1> {
   const state = await readProfilesFileState(deps)
   if (state.kind === 'valid') {
     return state.file
@@ -60,11 +68,11 @@ export function writeProfilesFile(
   deps.writeJsonFile(deps.getProfilesPath(), data)
 }
 
-export async function requireWritableProfilesFile(deps: {
-  ensureStorageDir: () => void
-  getProfilesPath: () => string
-  showWriteErrorMessage: (path: string) => void
-}): Promise<ProfilesFileV1 | null> {
+export async function requireWritableProfilesFile(
+  deps: ProfileFilesStorageDeps & {
+    showWriteErrorMessage: (path: string) => void
+  },
+): Promise<ProfilesFileV1 | null> {
   const state = await readProfilesFileState(deps)
   if (state.kind === 'corrupt') {
     deps.showWriteErrorMessage(state.path)

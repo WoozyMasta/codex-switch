@@ -4,13 +4,9 @@ import * as os from 'os'
 import * as path from 'path'
 import * as readline from 'readline'
 import { buildCodexAuthJson } from './codex-auth-sync'
-import { ProfileManager } from './profile-manager'
-import { AuthData, ProfileRateLimits, ProfileSummary } from '../types'
-import {
-  CodexCliCommand,
-  resolveCodexCliCommand,
-} from '../utils/codex-cli-resolver'
-import { debugLog } from '../utils/log'
+import type { ProfileManager } from './profile-manager'
+import type { AuthData, ProfileRateLimits, ProfileSummary } from '../types'
+import type { CodexCliCommand } from '../utils/codex-cli-resolver'
 import { normalizeRateLimitResponse } from '../utils/rate-limit-normalizer'
 
 const RATE_LIMIT_CACHE_TTL_MS = 60 * 1000
@@ -50,6 +46,8 @@ interface DecorateProfilesOptions {
 
 interface ProfileRateLimitServiceDeps {
   now?: () => number
+  resolveCodexCliCommand?: () => CodexCliCommand | null
+  debugLog?: (...args: unknown[]) => void
 }
 
 interface AppServerWaiter {
@@ -63,6 +61,7 @@ class CodexAppServerClient {
   private readonly lineReader: readline.Interface
   private readonly clientVersion: string
   private readonly codexCliCommand: CodexCliCommand
+  private readonly debugLog: (...args: unknown[]) => void
   private readonly onStdoutLine = (line: string) => {
     this.handleLine(line)
   }
@@ -98,9 +97,11 @@ class CodexAppServerClient {
     codexHomePath: string,
     clientVersion: string,
     codexCliCommand: CodexCliCommand,
+    debugLog: (...args: unknown[]) => void,
   ) {
     this.clientVersion = clientVersion
     this.codexCliCommand = codexCliCommand
+    this.debugLog = debugLog
     const env = {
       ...process.env,
       CODEX_HOME: codexHomePath,
@@ -150,14 +151,14 @@ class CodexAppServerClient {
 
     try {
       await this.sendLifecycleRequest('shutdown').catch((error) => {
-        debugLog(
+        this.debugLog(
           'Codex app-server shutdown request failed:',
           error instanceof Error ? error.message : error,
         )
       })
     } finally {
       await this.sendLifecycleNotification('exit').catch((error) => {
-        debugLog(
+        this.debugLog(
           'Codex app-server exit notification failed:',
           error instanceof Error ? error.message : error,
         )
@@ -307,7 +308,7 @@ class CodexAppServerClient {
     try {
       message = JSON.parse(trimmed)
     } catch (error) {
-      debugLog('Ignoring non-JSON stdout from Codex app-server:', error)
+      this.debugLog('Ignoring non-JSON stdout from Codex app-server:', error)
       return
     }
 
@@ -416,6 +417,8 @@ class CodexAppServerClient {
 export class ProfileRateLimitService {
   private readonly clientVersion: string
   private readonly now: () => number
+  private readonly resolveCodexCliCommand: () => CodexCliCommand | null
+  private readonly debugLog: (...args: unknown[]) => void
   private readonly cache = new Map<string, CacheEntry>()
   private readonly inflight = new Map<
     string,
@@ -433,6 +436,8 @@ export class ProfileRateLimitService {
   constructor(clientVersion: string, deps: ProfileRateLimitServiceDeps = {}) {
     this.clientVersion = clientVersion
     this.now = deps.now ?? Date.now
+    this.resolveCodexCliCommand = deps.resolveCodexCliCommand ?? (() => null)
+    this.debugLog = deps.debugLog ?? (() => undefined)
   }
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
@@ -468,7 +473,7 @@ export class ProfileRateLimitService {
     profiles: ProfileSummary[],
     options: DecorateProfilesOptions = {},
   ): Promise<ProfileSummary[]> {
-    const codexCliCommand = resolveCodexCliCommand()
+    const codexCliCommand = this.resolveCodexCliCommand()
     const forceRefreshIds = new Set(options.forceRefreshProfileIds || [])
 
     return await Promise.all(
@@ -586,6 +591,7 @@ export class ProfileRateLimitService {
             codexCliCommand,
             signal,
             this.now,
+            this.debugLog,
           ),
         signal,
       )
@@ -595,7 +601,7 @@ export class ProfileRateLimitService {
       if (isAbortError(error) || signal.aborted) {
         return this.getCachedRateLimits(profile) ?? null
       }
-      debugLog(
+      this.debugLog(
         `Rate limits unavailable for profile ${profile.id}:`,
         error instanceof Error ? error.message : error,
       )
@@ -713,6 +719,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
   codexCliCommand: CodexCliCommand,
   signal?: AbortSignal,
   now: () => number = Date.now,
+  debugLog: (...args: unknown[]) => void = () => undefined,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
     return null
@@ -739,6 +746,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
       tempHomePath,
       clientVersion,
       codexCliCommand,
+      debugLog,
     )
     try {
       await client.initialize()
@@ -749,13 +757,14 @@ async function queryRateLimitsViaTemporaryCodexHome(
     }
   } finally {
     signal?.removeEventListener('abort', onAbort)
-    await removeTemporaryCodexHome(tempHomePath, authFilePath)
+    await removeTemporaryCodexHome(tempHomePath, authFilePath, debugLog)
   }
 }
 
 async function removeTemporaryCodexHome(
   tempHomePath: string,
   authFilePath: string,
+  debugLog: (...args: unknown[]) => void = () => undefined,
 ): Promise<void> {
   try {
     await fs.unlink(authFilePath)

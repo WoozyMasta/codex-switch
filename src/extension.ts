@@ -3,6 +3,7 @@ import { ProfileManager } from './auth/profile-manager'
 import { ProfileRateLimitService } from './auth/profile-rate-limit-service'
 import { CodexHomeManager } from './codex-home/codex-home-manager'
 import { ResolvedCodexHome } from './types'
+import { resolveCodexCliCommand } from './utils/codex-cli-resolver'
 import {
   createStatusBarItem,
   getStatusBarItem,
@@ -37,6 +38,10 @@ export function activate(context: vscode.ExtensionContext) {
   profileManager = new ProfileManager(context, codexHomeManager)
   profileRateLimitService = new ProfileRateLimitService(
     String(context.extension.packageJSON.version || 'unknown'),
+    {
+      debugLog,
+      resolveCodexCliCommand,
+    },
   )
   const runtime: RuntimeContext = {
     home: codexHomeManager.getActiveHome(),

@@ -1,4 +1,4 @@
-import { ProfileSummary } from '../types'
+import type { ProfileRateLimits, ProfileSummary } from '../types'
 
 const PROFILE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -40,6 +40,66 @@ function parseProfileTimestamp(value: unknown): string | null {
   return new Date(parsed).toISOString()
 }
 
+function parseProfileRateLimitWindow(
+  value: unknown,
+): ProfileRateLimits['fiveHour'] | undefined {
+  if (value === null) {
+    return null
+  }
+  const window = asObject(value)
+  if (!window) {
+    return undefined
+  }
+
+  const usedPercent = window.usedPercent
+  const remainingPercent = window.remainingPercent
+  const resetsAt = window.resetsAt
+  if (
+    typeof usedPercent !== 'number' ||
+    !Number.isFinite(usedPercent) ||
+    typeof remainingPercent !== 'number' ||
+    !Number.isFinite(remainingPercent)
+  ) {
+    return undefined
+  }
+  if (
+    resetsAt !== undefined &&
+    resetsAt !== null &&
+    (typeof resetsAt !== 'number' || !Number.isFinite(resetsAt))
+  ) {
+    return undefined
+  }
+
+  return { usedPercent, remainingPercent, resetsAt: resetsAt ?? undefined }
+}
+
+function parseProfileRateLimits(
+  value: unknown,
+): ProfileRateLimits | null | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (value === null) {
+    return null
+  }
+
+  const rateLimits = asObject(value)
+  if (!rateLimits) {
+    return undefined
+  }
+
+  const fiveHour = parseProfileRateLimitWindow(rateLimits.fiveHour)
+  const weekly = parseProfileRateLimitWindow(rateLimits.weekly)
+  if (fiveHour === undefined || weekly === undefined) {
+    return undefined
+  }
+
+  return {
+    fiveHour,
+    weekly,
+  }
+}
+
 export function parseProfileSummary(value: unknown): ProfileSummary | null {
   const profile = asObject(value)
   if (!profile) {
@@ -52,7 +112,20 @@ export function parseProfileSummary(value: unknown): ProfileSummary | null {
   const planType = asOptionalString(profile.planType)
   const createdAt = parseProfileTimestamp(profile.createdAt)
   const updatedAt = parseProfileTimestamp(profile.updatedAt)
-  if (!id || !name || !email || !planType || !createdAt || !updatedAt) {
+  const hasRateLimits = Object.prototype.hasOwnProperty.call(
+    profile,
+    'rateLimits',
+  )
+  const rateLimits = parseProfileRateLimits(profile.rateLimits)
+  if (
+    !id ||
+    !name ||
+    !email ||
+    !planType ||
+    !createdAt ||
+    !updatedAt ||
+    (hasRateLimits && rateLimits === undefined)
+  ) {
     return null
   }
 
@@ -71,5 +144,6 @@ export function parseProfileSummary(value: unknown): ProfileSummary | null {
     subject: asOptionalString(profile.subject),
     createdAt,
     updatedAt,
+    rateLimits,
   }
 }

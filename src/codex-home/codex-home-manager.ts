@@ -18,18 +18,20 @@ function normalizePathForId(value: string): string {
 }
 
 interface CodexHomeManagerDeps {
+  initialCodexHome?: string
   codexHomeEnabled?: boolean
   useWslAuthPath?: boolean
 }
 
 export class CodexHomeManager {
-  private readonly initialCodexHome = process.env.CODEX_HOME
+  private readonly initialCodexHome: string | undefined
   private readonly codexHomeEnabled: boolean
   private readonly useWslAuthPath: boolean
   private readonly activeHome: ResolvedCodexHome
   private readonly wslCustomHomeUnsupported: boolean
 
   constructor(deps: CodexHomeManagerDeps = {}) {
+    this.initialCodexHome = deps.initialCodexHome
     this.codexHomeEnabled = deps.codexHomeEnabled ?? false
     this.useWslAuthPath = deps.useWslAuthPath ?? shouldUseWslAuthPath()
     this.activeHome = this.resolveActiveHome()

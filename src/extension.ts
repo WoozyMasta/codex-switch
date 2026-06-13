@@ -35,6 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem)
 
   codexHomeManager = new CodexHomeManager({
+    initialCodexHome: process.env.CODEX_HOME,
     codexHomeEnabled: vscode.workspace
       .getConfiguration('codexSwitch')
       .get<boolean>('codexHome.enabled', false),

@@ -48,6 +48,10 @@ interface DecorateProfilesOptions {
   forceRefreshProfileIds?: readonly string[]
 }
 
+interface ProfileRateLimitServiceDeps {
+  now?: () => number
+}
+
 interface AppServerWaiter {
   resolve: () => void
   reject: (error: Error) => void
@@ -411,6 +415,7 @@ class CodexAppServerClient {
 
 export class ProfileRateLimitService {
   private readonly clientVersion: string
+  private readonly now: () => number
   private readonly cache = new Map<string, CacheEntry>()
   private readonly inflight = new Map<
     string,
@@ -425,8 +430,9 @@ export class ProfileRateLimitService {
   private readonly appServerWaitQueue: AppServerWaiter[] = []
   private disposed = false
 
-  constructor(clientVersion: string) {
+  constructor(clientVersion: string, deps: ProfileRateLimitServiceDeps = {}) {
     this.clientVersion = clientVersion
+    this.now = deps.now ?? Date.now
   }
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
@@ -579,6 +585,7 @@ export class ProfileRateLimitService {
             this.clientVersion,
             codexCliCommand,
             signal,
+            this.now,
           ),
         signal,
       )
@@ -656,7 +663,7 @@ export class ProfileRateLimitService {
   ): void {
     this.cache.set(profile.id, {
       profileUpdatedAt: profile.updatedAt,
-      fetchedAt: Date.now(),
+      fetchedAt: this.now(),
       rateLimits,
     })
   }
@@ -666,16 +673,16 @@ export class ProfileRateLimitService {
     if (existing && existing.profileUpdatedAt === profile.updatedAt) {
       this.cache.set(profile.id, {
         ...existing,
-        lastFailureAt: Date.now(),
+        lastFailureAt: this.now(),
       })
       return
     }
 
     this.cache.set(profile.id, {
       profileUpdatedAt: profile.updatedAt,
-      fetchedAt: Date.now(),
+      fetchedAt: this.now(),
       rateLimits: null,
-      lastFailureAt: Date.now(),
+      lastFailureAt: this.now(),
     })
   }
 
@@ -689,13 +696,13 @@ export class ProfileRateLimitService {
       return false
     }
 
-    return Date.now() - entry.lastFailureAt < RATE_LIMIT_FAILURE_BACKOFF_MS
+    return this.now() - entry.lastFailureAt < RATE_LIMIT_FAILURE_BACKOFF_MS
   }
 
   private isFresh(profile: ProfileSummary, entry: CacheEntry): boolean {
     return (
       entry.profileUpdatedAt === profile.updatedAt &&
-      Date.now() - entry.fetchedAt < RATE_LIMIT_CACHE_TTL_MS
+      this.now() - entry.fetchedAt < RATE_LIMIT_CACHE_TTL_MS
     )
   }
 }
@@ -705,6 +712,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
   clientVersion: string,
   codexCliCommand: CodexCliCommand,
   signal?: AbortSignal,
+  now: () => number = Date.now,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
     return null
@@ -735,7 +743,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
     try {
       await client.initialize()
       const response = await client.readRateLimits()
-      return normalizeRateLimitResponse(response, Math.floor(Date.now() / 1000))
+      return normalizeRateLimitResponse(response, Math.floor(now() / 1000))
     } finally {
       await client.dispose()
     }

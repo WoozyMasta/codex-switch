@@ -18,16 +18,19 @@ function normalizePathForId(value: string): string {
 }
 
 interface CodexHomeManagerDeps {
+  codexHomeEnabled?: boolean
   useWslAuthPath?: boolean
 }
 
 export class CodexHomeManager {
   private readonly initialCodexHome = process.env.CODEX_HOME
+  private readonly codexHomeEnabled: boolean
   private readonly useWslAuthPath: boolean
   private readonly activeHome: ResolvedCodexHome
   private readonly wslCustomHomeUnsupported: boolean
 
   constructor(deps: CodexHomeManagerDeps = {}) {
+    this.codexHomeEnabled = deps.codexHomeEnabled ?? false
     this.useWslAuthPath = deps.useWslAuthPath ?? shouldUseWslAuthPath()
     this.activeHome = this.resolveActiveHome()
     this.wslCustomHomeUnsupported =
@@ -37,12 +40,8 @@ export class CodexHomeManager {
       !this.activeHome.isDefault
   }
 
-  private getConfiguration(): vscode.WorkspaceConfiguration {
-    return vscode.workspace.getConfiguration('codexSwitch')
-  }
-
   isEnabled(): boolean {
-    return this.getConfiguration().get<boolean>('codexHome.enabled', false)
+    return this.codexHomeEnabled
   }
 
   private resolveActiveHome(): ResolvedCodexHome {

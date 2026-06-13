@@ -35,6 +35,9 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem)
 
   codexHomeManager = new CodexHomeManager({
+    codexHomeEnabled: vscode.workspace
+      .getConfiguration('codexSwitch')
+      .get<boolean>('codexHome.enabled', false),
     useWslAuthPath: vscode.workspace
       .getConfiguration('chatgpt')
       .get<boolean>('runCodexInWindowsSubsystemForLinux', false),

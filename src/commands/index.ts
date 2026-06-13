@@ -795,6 +795,7 @@ export function registerCommands(
       if (profiles.length === 0) {
         return
       }
+      const activeProfileId = await profileManager.getActiveProfileId()
 
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
@@ -823,6 +824,13 @@ export function registerCommands(
           throw new Error(vscode.l10n.t('Profile was not deleted.'))
         }
         await onAuthChanged()
+        if (activeProfileId === pick.profileId) {
+          vscode.window.showInformationMessage(
+            vscode.l10n.t(
+              'Deleted the active profile. The current auth.json remains as an unsaved login.',
+            ),
+          )
+        }
       } catch (error) {
         const message =
           error instanceof Error && error.message

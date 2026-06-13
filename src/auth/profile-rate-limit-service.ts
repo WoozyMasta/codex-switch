@@ -44,11 +44,17 @@ interface DecorateProfilesOptions {
   forceRefreshProfileIds?: readonly string[]
 }
 
+type SpawnAppServer = (
+  codexCommand: CodexCliCommand,
+  env: Record<string, string | undefined>,
+) => ChildProcessWithoutNullStreams
+
 interface ProfileRateLimitServiceDeps {
   env?: typeof process.env
   now?: () => number
   resolveCodexCliCommand?: () => CodexCliCommand | null
   debugLog?: (...args: unknown[]) => void
+  spawnAppServer?: SpawnAppServer
 }
 
 interface AppServerWaiter {
@@ -63,6 +69,7 @@ class CodexAppServerClient {
   private readonly clientVersion: string
   private readonly codexCliCommand: CodexCliCommand
   private readonly debugLog: (...args: unknown[]) => void
+  private readonly spawnAppServer: SpawnAppServer
   private readonly onStdoutLine = (line: string) => {
     this.handleLine(line)
   }
@@ -100,16 +107,18 @@ class CodexAppServerClient {
     codexCliCommand: CodexCliCommand,
     debugLog: (...args: unknown[]) => void,
     env: typeof process.env = process.env,
+    spawnAppServer: SpawnAppServer = spawnCodexAppServer,
   ) {
     this.clientVersion = clientVersion
     this.codexCliCommand = codexCliCommand
     this.debugLog = debugLog
+    this.spawnAppServer = spawnAppServer
     const childEnv = {
       ...env,
       CODEX_HOME: codexHomePath,
     }
 
-    this.child = spawnAppServer(this.codexCliCommand, childEnv)
+    this.child = this.spawnAppServer(this.codexCliCommand, childEnv)
     this.child.stdout.setEncoding('utf8')
     this.child.stderr.setEncoding('utf8')
     this.child.stderr.on('data', this.onStderrData)
@@ -422,6 +431,7 @@ export class ProfileRateLimitService {
   private readonly now: () => number
   private readonly resolveCodexCliCommand: () => CodexCliCommand | null
   private readonly debugLog: (...args: unknown[]) => void
+  private readonly spawnAppServer: SpawnAppServer
   private readonly cache = new Map<string, CacheEntry>()
   private readonly inflight = new Map<
     string,
@@ -442,6 +452,7 @@ export class ProfileRateLimitService {
     this.now = deps.now ?? Date.now
     this.resolveCodexCliCommand = deps.resolveCodexCliCommand ?? (() => null)
     this.debugLog = deps.debugLog ?? (() => undefined)
+    this.spawnAppServer = deps.spawnAppServer ?? spawnCodexAppServer
   }
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
@@ -597,6 +608,7 @@ export class ProfileRateLimitService {
             this.now,
             this.debugLog,
             this.env,
+            this.spawnAppServer,
           ),
         signal,
       )
@@ -726,6 +738,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
   now: () => number = Date.now,
   debugLog: (...args: unknown[]) => void = () => undefined,
   env: typeof process.env = process.env,
+  spawnAppServer: SpawnAppServer = spawnCodexAppServer,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
     return null
@@ -754,6 +767,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
       codexCliCommand,
       debugLog,
       env,
+      spawnAppServer,
     )
     try {
       await client.initialize()
@@ -812,7 +826,7 @@ function createAbortError(): Error {
   return error
 }
 
-function spawnAppServer(
+function spawnCodexAppServer(
   codexCommand: CodexCliCommand,
   env: Record<string, string | undefined>,
 ): ChildProcessWithoutNullStreams {

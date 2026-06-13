@@ -2,6 +2,10 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { AuthData } from '../types'
 
+interface CodexAuthSyncDeps {
+  now?: () => number
+}
+
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object'
 }
@@ -39,11 +43,16 @@ export function buildCodexAuthJson(authData: AuthData): string {
   return `${JSON.stringify({ tokens }, null, 2)}\n`
 }
 
-export function syncCodexAuthFile(authPath: string, authData: AuthData) {
+export function syncCodexAuthFile(
+  authPath: string,
+  authData: AuthData,
+  deps: CodexAuthSyncDeps = {},
+) {
   const dir = path.dirname(authPath)
   fs.mkdirSync(dir, { recursive: true })
+  const now = deps.now ?? Date.now
 
-  const tmpPath = path.join(dir, `auth.json.tmp.${process.pid}.${Date.now()}`)
+  const tmpPath = path.join(dir, `auth.json.tmp.${process.pid}.${now()}`)
   const content = buildCodexAuthJson(authData)
 
   fs.writeFileSync(tmpPath, content, { encoding: 'utf8' })

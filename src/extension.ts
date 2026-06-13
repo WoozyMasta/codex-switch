@@ -11,7 +11,7 @@ import {
 } from './ui/status-bar'
 import { registerCommands } from './commands'
 import { restartExtensionHostOrReloadWindow } from './utils/vscode-restart'
-import { debugLog, errorLog } from './utils/log'
+import { debugLog, errorLog, setDebugLoggingEnabledResolver } from './utils/log'
 import {
   DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS,
   mergeRefreshOptions,
@@ -23,6 +23,17 @@ let profileManager: ProfileManager | undefined
 let codexHomeManager: CodexHomeManager | undefined
 let profileRateLimitService: ProfileRateLimitService | undefined
 let refreshProfileUiGeneration = 0
+
+setDebugLoggingEnabledResolver(() => {
+  const codexSwitchConfig = vscode.workspace.getConfiguration('codexSwitch')
+  if (codexSwitchConfig.has('debugLogging')) {
+    return !!codexSwitchConfig.get<boolean>('debugLogging', false)
+  }
+
+  return !!vscode.workspace
+    .getConfiguration('codexUsage')
+    .get<boolean>('debugLogging', false)
+})
 
 interface RuntimeContext {
   home: ResolvedCodexHome

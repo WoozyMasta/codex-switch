@@ -1,6 +1,20 @@
 import * as vscode from 'vscode'
 
+type DebugLoggingEnabledResolver = () => boolean
+
+let debugLoggingEnabledResolver: DebugLoggingEnabledResolver | undefined
+
+export function setDebugLoggingEnabledResolver(
+  resolver: DebugLoggingEnabledResolver | undefined,
+): void {
+  debugLoggingEnabledResolver = resolver
+}
+
 export function isDebugLoggingEnabled(): boolean {
+  if (debugLoggingEnabledResolver) {
+    return debugLoggingEnabledResolver()
+  }
+
   const newCfg = vscode.workspace.getConfiguration('codexSwitch')
   if (newCfg.has('debugLogging')) {
     return !!newCfg.get<boolean>('debugLogging', false)

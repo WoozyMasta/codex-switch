@@ -685,6 +685,10 @@ export class ProfileManager {
       return false
     }
 
+    const previousTokens = await this.readStoredTokens(profileId)
+    const tokens = buildProfileTokensFromAuth(authData)
+    await this.writeStoredTokens(profileId, tokens)
+
     file.profiles[idx] = {
       ...file.profiles[idx],
       email: authData.email,
@@ -697,11 +701,22 @@ export class ProfileManager {
       subject: authData.subject,
       updatedAt: new Date().toISOString(),
     }
-    writeProfilesFile(this.profilesFileStorageDeps(), file)
 
-    const tokens = buildProfileTokensFromAuth(authData)
-    await this.writeStoredTokens(profileId, tokens)
-    return true
+    try {
+      writeProfilesFile(this.profilesFileStorageDeps(), file)
+      return true
+    } catch (error) {
+      try {
+        if (previousTokens) {
+          await this.writeStoredTokens(profileId, previousTokens)
+        } else {
+          await this.deleteStoredTokens(profileId)
+        }
+      } catch {
+        // Best-effort rollback.
+      }
+      throw error
+    }
   }
 
   private async preserveStoredProfileAuthFromLive(
@@ -812,12 +827,21 @@ export class ProfileManager {
     const id = randomUUID()
 
     const profile = buildProfileSummaryFromAuth(id, name, authData, now)
+    const tokens = buildProfileTokensFromAuth(authData)
+
+    await this.writeStoredTokens(id, tokens)
 
     file.profiles.push(profile)
-    writeProfilesFile(this.profilesFileStorageDeps(), file)
-
-    const tokens = buildProfileTokensFromAuth(authData)
-    await this.writeStoredTokens(id, tokens)
+    try {
+      writeProfilesFile(this.profilesFileStorageDeps(), file)
+    } catch (error) {
+      try {
+        await this.deleteStoredTokens(id)
+      } catch {
+        // Best-effort rollback.
+      }
+      throw error
+    }
 
     return profile
   }

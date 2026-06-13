@@ -14,6 +14,8 @@ const WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS = 60 * 1000
 interface AuthManagerClockDeps {
   now?: () => number
   useWslAuthPath?: boolean
+  env?: typeof process.env
+  execFileSync?: typeof execFileSync
 }
 
 let cachedWslAuthPath: string | null | undefined
@@ -129,8 +131,10 @@ export function extractAuthDataFromAuthJson(
 /**
  * Resolve default Codex home path.
  */
-export function getDefaultCodexHomePath(): string {
-  return resolveDefaultCodexHomePath(process.env.CODEX_HOME)
+export function getDefaultCodexHomePath(
+  deps: AuthManagerClockDeps = {},
+): string {
+  return resolveDefaultCodexHomePath(deps.env?.CODEX_HOME)
 }
 
 export function getDefaultCodexAuthPathForHome(
@@ -142,7 +146,7 @@ export function getDefaultCodexAuthPathForHome(
     return localPath
   }
 
-  const wslPath = getCachedWslDefaultCodexAuthPath(deps.now)
+  const wslPath = getCachedWslDefaultCodexAuthPath(deps.now, deps.execFileSync)
   return wslPath || localPath
 }
 
@@ -167,6 +171,7 @@ export function shouldUseWslAuthPath(enabled?: boolean): boolean {
 
 function getCachedWslDefaultCodexAuthPath(
   now: () => number = Date.now,
+  execFileSyncFn: typeof execFileSync = execFileSync,
 ): string | null {
   const current = now()
   if (
@@ -176,7 +181,7 @@ function getCachedWslDefaultCodexAuthPath(
     return cachedWslAuthPath
   }
 
-  const resolved = resolveWslDefaultCodexAuthPath()
+  const resolved = resolveWslDefaultCodexAuthPath(now, execFileSyncFn)
   cachedWslAuthPath = resolved
   cachedWslAuthPathAt = current
   return resolved
@@ -184,10 +189,11 @@ function getCachedWslDefaultCodexAuthPath(
 
 function resolveWslDefaultCodexAuthPath(
   now: () => number = Date.now,
+  execFileSyncFn: typeof execFileSync = execFileSync,
 ): string | null {
   try {
     // Convert WSL ~/.codex/auth.json to a Windows path (for example \\wsl$\<distro>\...).
-    const out = execFileSync(
+    const out = execFileSyncFn(
       'wsl.exe',
       ['sh', '-lc', 'wslpath -w ~/.codex/auth.json'],
       { encoding: 'utf8', windowsHide: true },

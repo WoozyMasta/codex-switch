@@ -17,17 +17,26 @@ export interface CodexCliCommand {
   args: string[]
 }
 
-export function resolveCodexCliCommand(): CodexCliCommand | null {
-  const configuredCodexCommand = resolveConfiguredCodexCommand()
+export interface CodexCliResolverDeps {
+  env?: typeof process.env
+  platform?: typeof process.platform
+}
+
+export function resolveCodexCliCommand(
+  deps: CodexCliResolverDeps = {},
+): CodexCliCommand | null {
+  const configuredCodexCommand = resolveConfiguredCodexCommand(deps)
   if (configuredCodexCommand) {
     return configuredCodexCommand
   }
 
-  const executable = findCodexExecutable()
-  return executable ? createCodexCommand(executable) : null
+  const executable = findCodexExecutable(deps)
+  return executable ? createCodexCommand(executable, deps) : null
 }
 
-function resolveConfiguredCodexCommand(): CodexCliCommand | null {
+function resolveConfiguredCodexCommand(
+  deps: CodexCliResolverDeps,
+): CodexCliCommand | null {
   const configuredPath = vscode.workspace
     .getConfiguration('codexSwitch')
     .get<string>('codexCliPath', '')
@@ -37,16 +46,17 @@ function resolveConfiguredCodexCommand(): CodexCliCommand | null {
     return null
   }
 
-  const executable = resolveConfiguredCodexExecutable(configuredPath)
+  const executable = resolveConfiguredCodexExecutable(configuredPath, deps)
   if (!executable) {
     return null
   }
 
-  return createCodexCommand(executable)
+  return createCodexCommand(executable, deps)
 }
 
 function resolveConfiguredCodexExecutable(
   configuredPath: string,
+  deps: CodexCliResolverDeps,
 ): string | null {
   const candidate = configuredPath.trim()
   if (!candidate) {
@@ -58,16 +68,18 @@ function resolveConfiguredCodexExecutable(
     return isExecutableFile(resolvedPath) ? resolvedPath : null
   }
 
-  return findCodexExecutable(candidate)
+  return findCodexExecutable(deps, candidate)
 }
 
-function createCodexCommand(executable: string): CodexCliCommand {
-  if (
-    process.platform === 'win32' &&
-    executable.toLowerCase().endsWith('.cmd')
-  ) {
+function createCodexCommand(
+  executable: string,
+  deps: CodexCliResolverDeps,
+): CodexCliCommand {
+  const platform = deps.platform ?? process.platform
+  const env = deps.env ?? process.env
+  if (platform === 'win32' && executable.toLowerCase().endsWith('.cmd')) {
     return {
-      command: process.env.ComSpec || 'cmd.exe',
+      command: env.ComSpec || 'cmd.exe',
       // Keep the batch command shape fixed. Only the resolved absolute path is
       // interpolated, and it is quoted before cmd.exe sees it.
       args: [
@@ -86,9 +98,12 @@ function createCodexCommand(executable: string): CodexCliCommand {
   }
 }
 
-function findCodexExecutable(commandName = 'codex'): string | null {
-  const candidateNames = buildExecutableCandidateNames(commandName)
-  for (const dir of getCodexSearchDirectories()) {
+function findCodexExecutable(
+  deps: CodexCliResolverDeps,
+  commandName = 'codex',
+): string | null {
+  const candidateNames = buildExecutableCandidateNames(commandName, deps)
+  for (const dir of getCodexSearchDirectories(deps)) {
     for (const filename of candidateNames) {
       const candidate = path.join(dir, filename)
       if (isExecutableFile(candidate)) {
@@ -100,7 +115,8 @@ function findCodexExecutable(commandName = 'codex'): string | null {
   return null
 }
 
-function getCodexSearchDirectories(): string[] {
+function getCodexSearchDirectories(deps: CodexCliResolverDeps): string[] {
+  const env = deps.env ?? process.env
   const dirs: string[] = []
   const addDir = (dir: string | undefined) => {
     if (dir && !dirs.some((existing) => isSamePath(existing, dir))) {
@@ -108,23 +124,26 @@ function getCodexSearchDirectories(): string[] {
     }
   }
 
-  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+  for (const dir of (env.PATH || '').split(path.delimiter)) {
     addDir(dir)
   }
 
-  addCommonCodexSearchDirectories(addDir)
+  addCommonCodexSearchDirectories(addDir, deps)
 
-  for (const dir of getBundledCodexSearchDirectories()) {
+  for (const dir of getBundledCodexSearchDirectories(deps)) {
     addDir(dir)
   }
 
   return dirs
 }
 
-function buildExecutableCandidateNames(commandName: string): string[] {
+function buildExecutableCandidateNames(
+  commandName: string,
+  deps: CodexCliResolverDeps,
+): string[] {
   const names = [commandName]
 
-  if (process.platform === 'win32') {
+  if ((deps.platform ?? process.platform) === 'win32') {
     const lower = commandName.toLowerCase()
     if (!lower.endsWith('.exe') && !lower.endsWith('.cmd')) {
       names.push(`${commandName}.exe`, `${commandName}.cmd`)
@@ -146,27 +165,22 @@ function isPathLike(value: string): boolean {
 
 function addCommonCodexSearchDirectories(
   addDir: (dir: string | undefined) => void,
+  deps: CodexCliResolverDeps,
 ): void {
+  const env = deps.env ?? process.env
+  const platform = deps.platform ?? process.platform
   addDir(path.join(os.homedir(), '.codex', 'bin'))
   addDir(path.join(os.homedir(), '.local', 'bin'))
   addDir(path.join(os.homedir(), '.cargo', 'bin'))
 
-  if (process.platform === 'win32') {
-    addDir(
-      process.env.APPDATA && path.join(process.env.APPDATA, NPM_BIN_DIRECTORY),
-    )
-    addDir(
-      process.env.LOCALAPPDATA &&
-        path.join(process.env.LOCALAPPDATA, NPM_BIN_DIRECTORY),
-    )
+  if (platform === 'win32') {
+    addDir(env.APPDATA && path.join(env.APPDATA, NPM_BIN_DIRECTORY))
+    addDir(env.LOCALAPPDATA && path.join(env.LOCALAPPDATA, NPM_BIN_DIRECTORY))
     addDir(path.join(os.homedir(), 'AppData', 'Roaming', NPM_BIN_DIRECTORY))
     addDir(path.join(os.homedir(), 'AppData', 'Local', NPM_BIN_DIRECTORY))
+    addDir(env.ProgramFiles && path.join(env.ProgramFiles, 'nodejs'))
     addDir(
-      process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'nodejs'),
-    )
-    addDir(
-      process.env['ProgramFiles(x86)'] &&
-        path.join(process.env['ProgramFiles(x86)'], 'nodejs'),
+      env['ProgramFiles(x86)'] && path.join(env['ProgramFiles(x86)'], 'nodejs'),
     )
     return
   }
@@ -176,8 +190,10 @@ function addCommonCodexSearchDirectories(
   addDir('/usr/bin')
 }
 
-function getBundledCodexSearchDirectories(): string[] {
-  if (process.platform !== 'win32') {
+function getBundledCodexSearchDirectories(
+  deps: CodexCliResolverDeps,
+): string[] {
+  if ((deps.platform ?? process.platform) !== 'win32') {
     return []
   }
 

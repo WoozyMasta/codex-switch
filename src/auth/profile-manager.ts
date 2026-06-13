@@ -29,8 +29,7 @@ import {
 } from '../utils/auth-identity'
 import { parseImportEntry } from '../utils/import-entry'
 import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
-import { parseProfilesFile, type ProfilesFileV1 } from '../utils/profiles-file'
-import { parseProfilesFileState } from '../utils/profiles-file-state'
+import { parseProfilesFile } from '../utils/profiles-file'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
 import {
@@ -45,6 +44,12 @@ import {
 } from '../utils/profile-state-policy'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
+import {
+  readProfilesFile,
+  requireWritableProfilesFile,
+  writeProfilesFile,
+} from '../utils/profile-files-storage'
+import type { ProfilesFileV1 } from '../utils/profiles-file'
 import {
   deleteStoredProfileTokens,
   readStoredProfileTokens,
@@ -77,28 +82,6 @@ import {
   buildProfileTokensFromAuth,
   type ProfileTokens,
 } from '../utils/profile-records'
-
-interface ProfilesFileStateMissing {
-  kind: 'missing'
-  path: string
-}
-
-interface ProfilesFileStateValid {
-  kind: 'valid'
-  path: string
-  file: ProfilesFileV1
-}
-
-interface ProfilesFileStateCorrupt {
-  kind: 'corrupt'
-  path: string
-  reason: string
-}
-
-type ProfilesFileState =
-  | ProfilesFileStateMissing
-  | ProfilesFileStateValid
-  | ProfilesFileStateCorrupt
 
 const PROFILES_FILENAME = 'profiles.json'
 const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
@@ -229,6 +212,35 @@ export class ProfileManager {
     return resolveProfilesPath(this.isRemoteFilesMode(), this.getStorageDir())
   }
 
+  private profilesFileStorageDeps(): {
+    ensureStorageDir: () => void
+    getProfilesPath: () => string
+    writeJsonFile: (path: string, data: ProfilesFileV1) => void
+    showReadErrorMessage: (path: string) => void
+    showWriteErrorMessage: (path: string) => void
+  } {
+    return {
+      ensureStorageDir: () => this.ensureStorageDir(),
+      getProfilesPath: () => this.getProfilesPath(),
+      writeJsonFile: (path: string, data: ProfilesFileV1) =>
+        writeJsonFile(path, data),
+      showReadErrorMessage: (path: string) =>
+        void vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Profile storage at {0} is corrupted and was not loaded.',
+            path,
+          ),
+        ),
+      showWriteErrorMessage: (path: string) =>
+        void vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Profile storage at {0} is corrupted and cannot be modified.',
+            path,
+          ),
+        ),
+    }
+  }
+
   private ensureStorageDir() {
     if (this.isRemoteFilesMode()) {
       ensureSharedStoreDirs()
@@ -239,61 +251,6 @@ export class ProfileManager {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true })
     }
-  }
-
-  private async readProfilesFileState(): Promise<ProfilesFileState> {
-    this.ensureStorageDir()
-    const filePath = this.getProfilesPath()
-    if (!fs.existsSync(filePath)) {
-      return { kind: 'missing', path: filePath }
-    }
-
-    try {
-      const raw = fs.readFileSync(filePath, 'utf8')
-      return parseProfilesFileState(raw, filePath)
-    } catch (error) {
-      return {
-        kind: 'corrupt',
-        path: filePath,
-        reason: error instanceof Error ? error.message : String(error),
-      }
-    }
-  }
-
-  private async readProfilesFile(): Promise<ProfilesFileV1> {
-    const state = await this.readProfilesFileState()
-    if (state.kind === 'valid') {
-      return state.file
-    }
-    if (state.kind === 'corrupt') {
-      void vscode.window.showErrorMessage(
-        vscode.l10n.t(
-          'Profile storage at {0} is corrupted and was not loaded.',
-          state.path,
-        ),
-      )
-    }
-    return { version: 1, profiles: [] }
-  }
-
-  private writeProfilesFile(data: ProfilesFileV1) {
-    this.ensureStorageDir()
-    writeJsonFile(this.getProfilesPath(), data)
-  }
-
-  private async requireWritableProfilesFile(): Promise<ProfilesFileV1 | null> {
-    const state = await this.readProfilesFileState()
-    if (state.kind === 'corrupt') {
-      void vscode.window.showErrorMessage(
-        vscode.l10n.t(
-          'Profile storage at {0} is corrupted and cannot be modified.',
-          state.path,
-        ),
-      )
-      return null
-    }
-
-    return state.kind === 'valid' ? state.file : { version: 1, profiles: [] }
   }
 
   private readSharedActiveProfile(): SharedActiveProfile | null {
@@ -450,7 +407,7 @@ export class ProfileManager {
       return
     }
 
-    const current = await this.readProfilesFile()
+    const current = await readProfilesFile(this.profilesFileStorageDeps())
     if (current.profiles.length > 0) {
       await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
       return
@@ -507,7 +464,10 @@ export class ProfileManager {
 
         // Only migrate the profile list. Tokens are stored in SecretStorage and cannot be
         // read across extension ids.
-        this.writeProfilesFile({ version: 1, profiles: legacy.profiles })
+        writeProfilesFile(this.profilesFileStorageDeps(), {
+          version: 1,
+          profiles: legacy.profiles,
+        })
 
         void vscode.window.showInformationMessage(
           vscode.l10n.t(
@@ -525,7 +485,7 @@ export class ProfileManager {
 
   async listProfiles(): Promise<ProfileSummary[]> {
     await this.tryMigrateLegacyProfilesOnce()
-    const file = await this.readProfilesFile()
+    const file = await readProfilesFile(this.profilesFileStorageDeps())
     return [...file.profiles].sort((a, b) => a.name.localeCompare(b.name))
   }
 
@@ -646,14 +606,14 @@ export class ProfileManager {
       return undefined
     }
 
-    const file = await this.readProfilesFile()
+    const file = await readProfilesFile(this.profilesFileStorageDeps())
     return findMatchingProfileIdForAuth(file.profiles, authData)
   }
 
   async findDuplicateProfile(
     authData: AuthData,
   ): Promise<ProfileSummary | undefined> {
-    const file = await this.readProfilesFile()
+    const file = await readProfilesFile(this.profilesFileStorageDeps())
     return file.profiles.find((p) => this.matchesAuth(p, authData))
   }
 
@@ -714,7 +674,9 @@ export class ProfileManager {
     profileId: string,
     authData: AuthData,
   ): Promise<boolean> {
-    const file = await this.requireWritableProfilesFile()
+    const file = await requireWritableProfilesFile(
+      this.profilesFileStorageDeps(),
+    )
     if (!file) {
       return false
     }
@@ -735,7 +697,7 @@ export class ProfileManager {
       subject: authData.subject,
       updatedAt: new Date().toISOString(),
     }
-    this.writeProfilesFile(file)
+    writeProfilesFile(this.profilesFileStorageDeps(), file)
 
     const tokens = buildProfileTokensFromAuth(authData)
     await this.writeStoredTokens(profileId, tokens)
@@ -839,7 +801,9 @@ export class ProfileManager {
     name: string,
     authData: AuthData,
   ): Promise<ProfileSummary> {
-    const file = await this.requireWritableProfilesFile()
+    const file = await requireWritableProfilesFile(
+      this.profilesFileStorageDeps(),
+    )
     if (!file) {
       throw new Error('Profile storage is corrupted and cannot be modified.')
     }
@@ -850,7 +814,7 @@ export class ProfileManager {
     const profile = buildProfileSummaryFromAuth(id, name, authData, now)
 
     file.profiles.push(profile)
-    this.writeProfilesFile(file)
+    writeProfilesFile(this.profilesFileStorageDeps(), file)
 
     const tokens = buildProfileTokensFromAuth(authData)
     await this.writeStoredTokens(id, tokens)
@@ -859,7 +823,9 @@ export class ProfileManager {
   }
 
   async renameProfile(profileId: string, newName: string): Promise<boolean> {
-    const file = await this.requireWritableProfilesFile()
+    const file = await requireWritableProfilesFile(
+      this.profilesFileStorageDeps(),
+    )
     if (!file) {
       return false
     }
@@ -872,12 +838,14 @@ export class ProfileManager {
       name: newName,
       updatedAt: new Date().toISOString(),
     }
-    this.writeProfilesFile(file)
+    writeProfilesFile(this.profilesFileStorageDeps(), file)
     return true
   }
 
   async deleteProfile(profileId: string): Promise<boolean> {
-    const file = await this.requireWritableProfilesFile()
+    const file = await requireWritableProfilesFile(
+      this.profilesFileStorageDeps(),
+    )
     if (!file) {
       return false
     }
@@ -886,7 +854,7 @@ export class ProfileManager {
     if (file.profiles.length === before) {
       return false
     }
-    this.writeProfilesFile(file)
+    writeProfilesFile(this.profilesFileStorageDeps(), file)
 
     await this.deleteStoredTokens(profileId)
 

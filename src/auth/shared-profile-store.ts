@@ -1,6 +1,8 @@
-import * as fs from 'fs'
-import * as os from 'os'
-import * as path from 'path'
+/* eslint-disable @typescript-eslint/no-require-imports */
+import fs = require('fs')
+import os = require('os')
+import path = require('path')
+/* eslint-enable @typescript-eslint/no-require-imports */
 import { randomUUID } from 'crypto'
 
 export const SHARED_STORE_DIRNAME = '.codex-switch'
@@ -43,24 +45,32 @@ export function getSharedProfileSecretsPath(profileId: string): string {
 }
 
 export function ensureSharedStoreDirs(): void {
-  fs.mkdirSync(getSharedStoreRoot(), { recursive: true, mode: 0o700 })
-  fs.mkdirSync(getSharedProfilesDir(), { recursive: true, mode: 0o700 })
-  fs.mkdirSync(getSharedActiveProfilesDir(), {
+  const storeRoot = getSharedStoreRoot()
+  const profilesDir = getSharedProfilesDir()
+  const activeProfilesDir = getSharedActiveProfilesDir()
+
+  fs.mkdirSync(storeRoot, { recursive: true, mode: 0o700 })
+  fs.mkdirSync(profilesDir, { recursive: true, mode: 0o700 })
+  fs.mkdirSync(activeProfilesDir, {
     recursive: true,
     mode: 0o700,
   })
 
   if (process.platform !== 'win32') {
-    for (const dir of [
-      getSharedStoreRoot(),
-      getSharedProfilesDir(),
-      getSharedActiveProfilesDir(),
-    ]) {
-      try {
-        fs.chmodSync(dir, 0o700)
-      } catch {
-        // Ignore best-effort permission correction failures.
-      }
+    try {
+      fs.chmodSync(storeRoot, 0o700)
+    } catch {
+      // Ignore best-effort permission correction failures.
+    }
+    try {
+      fs.chmodSync(profilesDir, 0o700)
+    } catch {
+      // Ignore best-effort permission correction failures.
+    }
+    try {
+      fs.chmodSync(activeProfilesDir, 0o700)
+    } catch {
+      // Ignore best-effort permission correction failures.
     }
   }
 }

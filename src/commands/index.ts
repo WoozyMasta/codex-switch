@@ -10,6 +10,7 @@ import { buildProfileMetaDisplay } from '../ui/profile-display'
 import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
+import { writeJsonFile } from '../auth/shared-profile-store'
 
 /**
  * Register all extension commands
@@ -649,8 +650,34 @@ export function registerCommands(
         return
       }
 
+      const exportLabel = vscode.l10n.t('Export')
+      const warning = await vscode.window.showWarningMessage(
+        vscode.l10n.t(
+          'This will export profile tokens and auth data as unencrypted JSON.',
+        ),
+        { modal: true },
+        exportLabel,
+      )
+      if (warning !== exportLabel) {
+        return
+      }
+
+      if (fs.existsSync(saveUri.fsPath)) {
+        const overwrite = await vscode.window.showWarningMessage(
+          vscode.l10n.t(
+            'File {0} already exists. Overwrite it?',
+            saveUri.fsPath,
+          ),
+          { modal: true },
+          exportLabel,
+        )
+        if (overwrite !== exportLabel) {
+          return
+        }
+      }
+
       const { data, skipped } = await profileManager.exportProfilesForTransfer()
-      fs.writeFileSync(saveUri.fsPath, JSON.stringify(data, null, 2), 'utf8')
+      writeJsonFile(saveUri.fsPath, data)
 
       vscode.window.showInformationMessage(
         vscode.l10n.t(

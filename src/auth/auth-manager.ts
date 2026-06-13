@@ -11,6 +11,10 @@ import {
 const WSL_AUTH_PATH_CACHE_TTL_MS = 60 * 1000
 const WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS = 60 * 1000
 
+interface AuthManagerClockDeps {
+  now?: () => number
+}
+
 let cachedWslAuthPath: string | null | undefined
 let cachedWslAuthPathAt = 0
 let lastWslAuthResolveErrorAt = 0
@@ -128,13 +132,16 @@ export function getDefaultCodexHomePath(): string {
   return resolveDefaultCodexHomePath(process.env.CODEX_HOME)
 }
 
-export function getDefaultCodexAuthPathForHome(codexHomePath: string): string {
+export function getDefaultCodexAuthPathForHome(
+  codexHomePath: string,
+  deps: AuthManagerClockDeps = {},
+): string {
   const localPath = getCodexAuthPathForHome(codexHomePath)
   if (!shouldUseWslAuthPath()) {
     return localPath
   }
 
-  const wslPath = getCachedWslDefaultCodexAuthPath()
+  const wslPath = getCachedWslDefaultCodexAuthPath(deps.now)
   return wslPath || localPath
 }
 
@@ -154,22 +161,26 @@ export function shouldUseWslAuthPath(): boolean {
     .get<boolean>('runCodexInWindowsSubsystemForLinux', false)
 }
 
-function getCachedWslDefaultCodexAuthPath(): string | null {
-  const now = Date.now()
+function getCachedWslDefaultCodexAuthPath(
+  now: () => number = Date.now,
+): string | null {
+  const current = now()
   if (
     cachedWslAuthPath !== undefined &&
-    now - cachedWslAuthPathAt < WSL_AUTH_PATH_CACHE_TTL_MS
+    current - cachedWslAuthPathAt < WSL_AUTH_PATH_CACHE_TTL_MS
   ) {
     return cachedWslAuthPath
   }
 
   const resolved = resolveWslDefaultCodexAuthPath()
   cachedWslAuthPath = resolved
-  cachedWslAuthPathAt = now
+  cachedWslAuthPathAt = current
   return resolved
 }
 
-function resolveWslDefaultCodexAuthPath(): string | null {
+function resolveWslDefaultCodexAuthPath(
+  now: () => number = Date.now,
+): string | null {
   try {
     // Convert WSL ~/.codex/auth.json to a Windows path (for example \\wsl$\<distro>\...).
     const out = execFileSync(
@@ -180,12 +191,12 @@ function resolveWslDefaultCodexAuthPath(): string | null {
     const p = String(out || '').trim()
     return p || null
   } catch (error) {
-    const now = Date.now()
+    const current = now()
     if (
-      now - lastWslAuthResolveErrorAt >=
+      current - lastWslAuthResolveErrorAt >=
       WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS
     ) {
-      lastWslAuthResolveErrorAt = now
+      lastWslAuthResolveErrorAt = current
       errorLog('Error resolving WSL auth file path:', error)
     }
     return null

@@ -16,6 +16,10 @@ export interface SharedActiveProfile {
   updatedAt: string
 }
 
+interface SharedProfileStoreClockDeps {
+  now?: () => number
+}
+
 export function getSharedStoreRoot(): string {
   return path.join(os.homedir(), SHARED_STORE_DIRNAME)
 }
@@ -86,7 +90,11 @@ export function readJsonFile<T>(filePath: string): T | null {
   }
 }
 
-export function writeJsonFile(filePath: string, data: unknown): void {
+export function writeJsonFile(
+  filePath: string,
+  data: unknown,
+  deps: SharedProfileStoreClockDeps = {},
+): void {
   const dir = path.dirname(filePath)
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   if (process.platform !== 'win32') {
@@ -99,7 +107,7 @@ export function writeJsonFile(filePath: string, data: unknown): void {
 
   const tmpPath = path.join(
     dir,
-    `${path.basename(filePath)}.tmp.${process.pid}.${Date.now()}.${randomUUID()}`,
+    `${path.basename(filePath)}.tmp.${process.pid}.${(deps.now ?? Date.now)()}.${randomUUID()}`,
   )
   const content = `${JSON.stringify(data, null, 2)}\n`
 

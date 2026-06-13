@@ -34,7 +34,11 @@ export function activate(context: vscode.ExtensionContext) {
   const statusBarItem = createStatusBarItem()
   context.subscriptions.push(statusBarItem)
 
-  codexHomeManager = new CodexHomeManager()
+  codexHomeManager = new CodexHomeManager({
+    useWslAuthPath: vscode.workspace
+      .getConfiguration('chatgpt')
+      .get<boolean>('runCodexInWindowsSubsystemForLinux', false),
+  })
   profileManager = new ProfileManager(context, codexHomeManager)
   profileRateLimitService = new ProfileRateLimitService(
     String(context.extension.packageJSON.version || 'unknown'),

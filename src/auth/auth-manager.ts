@@ -13,6 +13,7 @@ const WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS = 60 * 1000
 
 interface AuthManagerClockDeps {
   now?: () => number
+  useWslAuthPath?: boolean
 }
 
 let cachedWslAuthPath: string | null | undefined
@@ -137,7 +138,7 @@ export function getDefaultCodexAuthPathForHome(
   deps: AuthManagerClockDeps = {},
 ): string {
   const localPath = getCodexAuthPathForHome(codexHomePath)
-  if (!shouldUseWslAuthPath()) {
+  if (!shouldUseWslAuthPath(deps.useWslAuthPath)) {
     return localPath
   }
 
@@ -152,9 +153,12 @@ export function getDefaultCodexAuthPath(): string {
   return getDefaultCodexAuthPathForHome(getDefaultCodexHomePath())
 }
 
-export function shouldUseWslAuthPath(): boolean {
+export function shouldUseWslAuthPath(enabled?: boolean): boolean {
   if (process.platform !== 'win32') {
     return false
+  }
+  if (enabled !== undefined) {
+    return enabled
   }
   return !!vscode.workspace
     .getConfiguration('chatgpt')

@@ -17,16 +17,25 @@ function normalizePathForId(value: string): string {
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
+interface CodexHomeManagerDeps {
+  useWslAuthPath?: boolean
+}
+
 export class CodexHomeManager {
   private readonly initialCodexHome = process.env.CODEX_HOME
-  private readonly activeHome = this.resolveActiveHome()
-  private readonly wslCustomHomeUnsupported =
-    process.platform === 'win32' &&
-    shouldUseWslAuthPath() &&
-    this.activeHome.source === 'environment' &&
-    !this.activeHome.isDefault
+  private readonly useWslAuthPath: boolean
+  private readonly activeHome: ResolvedCodexHome
+  private readonly wslCustomHomeUnsupported: boolean
 
-  constructor() {}
+  constructor(deps: CodexHomeManagerDeps = {}) {
+    this.useWslAuthPath = deps.useWslAuthPath ?? shouldUseWslAuthPath()
+    this.activeHome = this.resolveActiveHome()
+    this.wslCustomHomeUnsupported =
+      process.platform === 'win32' &&
+      this.useWslAuthPath &&
+      this.activeHome.source === 'environment' &&
+      !this.activeHome.isDefault
+  }
 
   private getConfiguration(): vscode.WorkspaceConfiguration {
     return vscode.workspace.getConfiguration('codexSwitch')
@@ -53,7 +62,9 @@ export class CodexHomeManager {
       name: isDefault ? 'default' : path.basename(fsPath) || 'CODEX_HOME',
       fsPath,
       envValue,
-      authPath: getDefaultCodexAuthPathForHome(fsPath),
+      authPath: getDefaultCodexAuthPathForHome(fsPath, {
+        useWslAuthPath: this.useWslAuthPath,
+      }),
       source: this.initialCodexHome ? 'environment' : 'default',
       isDefault,
       usesPerHomeState: usePerHomeState,
@@ -65,7 +76,7 @@ export class CodexHomeManager {
   }
 
   buildLoginCommand(home = this.activeHome): string {
-    if (shouldUseWslAuthPath() && home.isDefault) {
+    if (this.useWslAuthPath && home.isDefault) {
       return 'wsl codex login'
     }
 

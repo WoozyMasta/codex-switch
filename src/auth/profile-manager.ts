@@ -46,6 +46,11 @@ import {
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
 import {
+  deleteStoredProfileTokens,
+  readStoredProfileTokens,
+  writeStoredProfileTokens,
+} from '../utils/profile-token-storage'
+import {
   resolveActiveProfileId,
   setActiveProfileIdInState,
 } from '../utils/profile-active-state'
@@ -70,12 +75,8 @@ import { sha256Text } from '../utils/text-hash'
 import {
   buildProfileSummaryFromAuth,
   buildProfileTokensFromAuth,
+  type ProfileTokens,
 } from '../utils/profile-records'
-
-type ProfileTokens = Pick<
-  AuthData,
-  'idToken' | 'accessToken' | 'refreshToken' | 'accountId' | 'authJson'
->
 
 interface ProfilesFileStateMissing {
   kind: 'missing'
@@ -338,10 +339,78 @@ export class ProfileManager {
   private async readStoredTokens(
     profileId: string,
   ): Promise<ProfileTokens | null> {
-    if (this.isRemoteFilesMode()) {
-      return this.readRemoteProfileTokens(profileId)
-    }
+    return readStoredProfileTokens(
+      {
+        isRemoteFilesMode: this.isRemoteFilesMode(),
+        readRemoteProfileTokens: (value) => this.readRemoteProfileTokens(value),
+        writeRemoteProfileTokens: (value, tokens) =>
+          this.writeRemoteProfileTokens(value, tokens),
+        deleteRemoteProfileTokens: (value) =>
+          this.deleteRemoteProfileTokens(value),
+        readLocalStoredTokens: (value) => this.readLocalStoredTokens(value),
+        writeLocalStoredTokens: (value, tokens) =>
+          this.writeLocalStoredTokens(value, tokens),
+        deleteLocalStoredTokens: (value) => this.deleteLocalStoredTokens(value),
+      },
+      profileId,
+    )
+  }
 
+  private async writeStoredTokens(
+    profileId: string,
+    tokens: ProfileTokens,
+  ): Promise<void> {
+    await writeStoredProfileTokens(
+      {
+        isRemoteFilesMode: this.isRemoteFilesMode(),
+        readRemoteProfileTokens: (value) => this.readRemoteProfileTokens(value),
+        writeRemoteProfileTokens: (value, storedTokens) =>
+          this.writeRemoteProfileTokens(value, storedTokens),
+        deleteRemoteProfileTokens: (value) =>
+          this.deleteRemoteProfileTokens(value),
+        readLocalStoredTokens: (value) => this.readLocalStoredTokens(value),
+        writeLocalStoredTokens: (value, storedTokens) =>
+          this.writeLocalStoredTokens(value, storedTokens),
+        deleteLocalStoredTokens: (value) => this.deleteLocalStoredTokens(value),
+      },
+      profileId,
+      tokens,
+    )
+  }
+
+  private async deleteStoredTokens(profileId: string): Promise<void> {
+    await deleteStoredProfileTokens(
+      {
+        isRemoteFilesMode: this.isRemoteFilesMode(),
+        readRemoteProfileTokens: (value) => this.readRemoteProfileTokens(value),
+        writeRemoteProfileTokens: (value, storedTokens) =>
+          this.writeRemoteProfileTokens(value, storedTokens),
+        deleteRemoteProfileTokens: (value) =>
+          this.deleteRemoteProfileTokens(value),
+        readLocalStoredTokens: (value) => this.readLocalStoredTokens(value),
+        writeLocalStoredTokens: (value, storedTokens) =>
+          this.writeLocalStoredTokens(value, storedTokens),
+        deleteLocalStoredTokens: (value) => this.deleteLocalStoredTokens(value),
+      },
+      profileId,
+    )
+  }
+
+  private writeRemoteProfileTokens(
+    profileId: string,
+    tokens: ProfileTokens,
+  ): void {
+    ensureSharedStoreDirs()
+    writeJsonFile(getSharedProfileSecretsPath(profileId), tokens)
+  }
+
+  private deleteRemoteProfileTokens(profileId: string): void {
+    deleteFileIfExists(getSharedProfileSecretsPath(profileId))
+  }
+
+  private async readLocalStoredTokens(
+    profileId: string,
+  ): Promise<ProfileTokens | null> {
     const keys = buildProfileSecretKeys(profileId)
     const raw =
       (await this.context.secrets.get(keys.current)) ||
@@ -357,26 +426,15 @@ export class ProfileManager {
     }
   }
 
-  private async writeStoredTokens(
+  private async writeLocalStoredTokens(
     profileId: string,
     tokens: ProfileTokens,
   ): Promise<void> {
-    if (this.isRemoteFilesMode()) {
-      ensureSharedStoreDirs()
-      writeJsonFile(getSharedProfileSecretsPath(profileId), tokens)
-      return
-    }
-
     const keys = buildProfileSecretKeys(profileId)
     await this.context.secrets.store(keys.current, JSON.stringify(tokens))
   }
 
-  private async deleteStoredTokens(profileId: string): Promise<void> {
-    if (this.isRemoteFilesMode()) {
-      deleteFileIfExists(getSharedProfileSecretsPath(profileId))
-      return
-    }
-
+  private async deleteLocalStoredTokens(profileId: string): Promise<void> {
     const keys = buildProfileSecretKeys(profileId)
     await this.context.secrets.delete(keys.current)
     await this.context.secrets.delete(keys.legacy)

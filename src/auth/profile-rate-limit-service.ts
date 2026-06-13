@@ -55,6 +55,7 @@ interface ProfileRateLimitServiceDeps {
   resolveCodexCliCommand?: () => CodexCliCommand | null
   debugLog?: (...args: unknown[]) => void
   spawnAppServer?: SpawnAppServer
+  tempHomeFs?: typeof fs
 }
 
 interface AppServerWaiter {
@@ -432,6 +433,7 @@ export class ProfileRateLimitService {
   private readonly resolveCodexCliCommand: () => CodexCliCommand | null
   private readonly debugLog: (...args: unknown[]) => void
   private readonly spawnAppServer: SpawnAppServer
+  private readonly tempHomeFs: typeof fs
   private readonly cache = new Map<string, CacheEntry>()
   private readonly inflight = new Map<
     string,
@@ -453,6 +455,7 @@ export class ProfileRateLimitService {
     this.resolveCodexCliCommand = deps.resolveCodexCliCommand ?? (() => null)
     this.debugLog = deps.debugLog ?? (() => undefined)
     this.spawnAppServer = deps.spawnAppServer ?? spawnCodexAppServer
+    this.tempHomeFs = deps.tempHomeFs ?? fs
   }
 
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
@@ -609,6 +612,7 @@ export class ProfileRateLimitService {
             this.debugLog,
             this.env,
             this.spawnAppServer,
+            this.tempHomeFs,
           ),
         signal,
       )
@@ -739,12 +743,13 @@ async function queryRateLimitsViaTemporaryCodexHome(
   debugLog: (...args: unknown[]) => void = () => undefined,
   env: typeof process.env = process.env,
   spawnAppServer: SpawnAppServer = spawnCodexAppServer,
+  tempHomeFs: typeof fs = fs,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
     return null
   }
 
-  const tempHomePath = await fs.mkdtemp(
+  const tempHomePath = await tempHomeFs.mkdtemp(
     path.join(os.tmpdir(), 'codex-switch-rate-limits-'),
   )
   const authFilePath = path.join(tempHomePath, 'auth.json')
@@ -755,8 +760,8 @@ async function queryRateLimitsViaTemporaryCodexHome(
 
   try {
     signal?.addEventListener('abort', onAbort, { once: true })
-    await fs.chmod(tempHomePath, 0o700).catch(() => undefined)
-    await fs.writeFile(authFilePath, buildCodexAuthJson(authData), {
+    await tempHomeFs.chmod(tempHomePath, 0o700).catch(() => undefined)
+    await tempHomeFs.writeFile(authFilePath, buildCodexAuthJson(authData), {
       encoding: 'utf8',
       mode: 0o600,
     })
@@ -778,7 +783,12 @@ async function queryRateLimitsViaTemporaryCodexHome(
     }
   } finally {
     signal?.removeEventListener('abort', onAbort)
-    await removeTemporaryCodexHome(tempHomePath, authFilePath, debugLog)
+    await removeTemporaryCodexHome(
+      tempHomePath,
+      authFilePath,
+      debugLog,
+      tempHomeFs,
+    )
   }
 }
 
@@ -786,19 +796,20 @@ async function removeTemporaryCodexHome(
   tempHomePath: string,
   authFilePath: string,
   debugLog: (...args: unknown[]) => void = () => undefined,
+  tempHomeFs: typeof fs = fs,
 ): Promise<void> {
   try {
-    await fs.unlink(authFilePath)
+    await tempHomeFs.unlink(authFilePath)
   } catch {
     try {
-      await fs.writeFile(authFilePath, '{}', 'utf8')
+      await tempHomeFs.writeFile(authFilePath, '{}', 'utf8')
     } catch {
       // Best effort: avoid leaving token-bearing temp files behind.
     }
   }
 
   try {
-    await fs.rm(tempHomePath, {
+    await tempHomeFs.rm(tempHomePath, {
       recursive: true,
       force: true,
       maxRetries: 5,

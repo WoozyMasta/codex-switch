@@ -45,6 +45,7 @@ interface DecorateProfilesOptions {
 }
 
 interface ProfileRateLimitServiceDeps {
+  env?: typeof process.env
   now?: () => number
   resolveCodexCliCommand?: () => CodexCliCommand | null
   debugLog?: (...args: unknown[]) => void
@@ -98,16 +99,17 @@ class CodexAppServerClient {
     clientVersion: string,
     codexCliCommand: CodexCliCommand,
     debugLog: (...args: unknown[]) => void,
+    env: typeof process.env = process.env,
   ) {
     this.clientVersion = clientVersion
     this.codexCliCommand = codexCliCommand
     this.debugLog = debugLog
-    const env = {
-      ...process.env,
+    const childEnv = {
+      ...env,
       CODEX_HOME: codexHomePath,
     }
 
-    this.child = spawnAppServer(this.codexCliCommand, env)
+    this.child = spawnAppServer(this.codexCliCommand, childEnv)
     this.child.stdout.setEncoding('utf8')
     this.child.stderr.setEncoding('utf8')
     this.child.stderr.on('data', this.onStderrData)
@@ -416,6 +418,7 @@ class CodexAppServerClient {
 
 export class ProfileRateLimitService {
   private readonly clientVersion: string
+  private readonly env: typeof process.env
   private readonly now: () => number
   private readonly resolveCodexCliCommand: () => CodexCliCommand | null
   private readonly debugLog: (...args: unknown[]) => void
@@ -435,6 +438,7 @@ export class ProfileRateLimitService {
 
   constructor(clientVersion: string, deps: ProfileRateLimitServiceDeps = {}) {
     this.clientVersion = clientVersion
+    this.env = deps.env ?? process.env
     this.now = deps.now ?? Date.now
     this.resolveCodexCliCommand = deps.resolveCodexCliCommand ?? (() => null)
     this.debugLog = deps.debugLog ?? (() => undefined)
@@ -592,6 +596,7 @@ export class ProfileRateLimitService {
             signal,
             this.now,
             this.debugLog,
+            this.env,
           ),
         signal,
       )
@@ -720,6 +725,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
   signal?: AbortSignal,
   now: () => number = Date.now,
   debugLog: (...args: unknown[]) => void = () => undefined,
+  env: typeof process.env = process.env,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
     return null
@@ -747,6 +753,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
       clientVersion,
       codexCliCommand,
       debugLog,
+      env,
     )
     try {
       await client.initialize()

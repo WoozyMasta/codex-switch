@@ -86,27 +86,29 @@ test('profile file storage helpers handle missing, valid, and corrupt files', as
   })
   assert.deepEqual(readErrors, [filePath])
 
-  const originalReadFileSync = fs.readFileSync
-  try {
-    fs.readFileSync = (() => {
+  const injectedBoom = {
+    ...deps,
+    readFileSync: () => {
       throw 'boom'
-    }) as typeof fs.readFileSync
-    assert.deepEqual(await readProfilesFileState(deps), {
-      kind: 'corrupt',
-      path: filePath,
-      reason: 'boom',
-    })
-    fs.readFileSync = (() => {
-      throw new Error('kaboom')
-    }) as typeof fs.readFileSync
-    assert.deepEqual(await readProfilesFileState(deps), {
-      kind: 'corrupt',
-      path: filePath,
-      reason: 'kaboom',
-    })
-  } finally {
-    fs.readFileSync = originalReadFileSync
+    },
   }
+  assert.deepEqual(await readProfilesFileState(injectedBoom), {
+    kind: 'corrupt',
+    path: filePath,
+    reason: 'boom',
+  })
+
+  const injectedKaboom = {
+    ...deps,
+    readFileSync: () => {
+      throw new Error('kaboom')
+    },
+  }
+  assert.deepEqual(await readProfilesFileState(injectedKaboom), {
+    kind: 'corrupt',
+    path: filePath,
+    reason: 'kaboom',
+  })
 
   const writable = makeDeps(filePath)
   await writeProfilesFile(writable.deps, { version: 1, profiles: [] })

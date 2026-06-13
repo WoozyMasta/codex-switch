@@ -5,20 +5,27 @@ import { setTimeout as delay } from 'timers/promises'
 const LOCK_RETRY_DELAY_MS = 50
 const LOCK_STALE_MS = 30_000
 
+interface ProfilesFileLockDeps {
+  now?: () => number
+}
+
 function isEEXIST(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === 'EEXIST'
 }
 
-function isStaleLock(lockPath: string): boolean {
+function isStaleLock(lockPath: string, now: () => number): boolean {
   const stat = statSync(lockPath)
-  if (Date.now() - stat.mtimeMs > LOCK_STALE_MS) {
+  if (now() - stat.mtimeMs > LOCK_STALE_MS) {
     return true
   }
   return false
 }
 
-async function waitForLockRelease(lockPath: string): Promise<void> {
-  if (isStaleLock(lockPath)) {
+async function waitForLockRelease(
+  lockPath: string,
+  now: () => number,
+): Promise<void> {
+  if (isStaleLock(lockPath, now)) {
     unlinkSync(lockPath)
     return
   }
@@ -29,7 +36,9 @@ async function waitForLockRelease(lockPath: string): Promise<void> {
 export async function withProfilesFileLock<T>(
   profilesPath: string,
   action: () => Promise<T>,
+  deps: ProfilesFileLockDeps = {},
 ): Promise<T> {
+  const now = deps.now ?? Date.now
   const lockPath = `${profilesPath}.lock`
   mkdirSync(dirname(lockPath), { recursive: true, mode: 0o700 })
 
@@ -39,7 +48,7 @@ export async function withProfilesFileLock<T>(
         lockPath,
         `${JSON.stringify({
           pid: process.pid,
-          createdAt: new Date().toISOString(),
+          createdAt: new Date(now()).toISOString(),
         })}\n`,
         {
           encoding: 'utf8',
@@ -52,7 +61,7 @@ export async function withProfilesFileLock<T>(
       if (!isEEXIST(error)) {
         throw error
       }
-      await waitForLockRelease(lockPath)
+      await waitForLockRelease(lockPath, now)
     }
   }
 

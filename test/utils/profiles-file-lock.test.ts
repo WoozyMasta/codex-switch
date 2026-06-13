@@ -58,6 +58,29 @@ test('withProfilesFileLock clears stale lock files', async () => {
   assert.equal(fs.existsSync(lockPath), false)
 })
 
+test('withProfilesFileLock uses injected clock for stale lock detection', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-lock-'))
+  const profilesPath = path.join(dir, 'profiles.json')
+  const lockPath = `${profilesPath}.lock`
+
+  fs.writeFileSync(lockPath, 'broken-lock', 'utf8')
+
+  let ran = false
+  await withProfilesFileLock(
+    profilesPath,
+    async () => {
+      ran = true
+      assert.equal(fs.existsSync(lockPath), true)
+    },
+    {
+      now: () => new Date('2100-01-01T00:00:00.000Z').getTime(),
+    },
+  )
+
+  assert.equal(ran, true)
+  assert.equal(fs.existsSync(lockPath), false)
+})
+
 test('withProfilesFileLock propagates unexpected acquisition errors', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-lock-'))
   const profilesPath = path.join(dir, 'profiles.json')

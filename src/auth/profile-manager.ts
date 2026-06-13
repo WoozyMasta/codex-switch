@@ -44,6 +44,7 @@ import {
 } from '../utils/profile-state-policy'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
+import { withProfilesFileLock } from '../utils/profiles-file-lock'
 import {
   readProfilesFile,
   requireWritableProfilesFile,
@@ -674,49 +675,52 @@ export class ProfileManager {
     profileId: string,
     authData: AuthData,
   ): Promise<boolean> {
-    const file = await requireWritableProfilesFile(
-      this.profilesFileStorageDeps(),
-    )
-    if (!file) {
-      return false
-    }
-    const idx = file.profiles.findIndex((p) => p.id === profileId)
-    if (idx === -1) {
-      return false
-    }
-
     const previousTokens = await this.readStoredTokens(profileId)
     const tokens = buildProfileTokensFromAuth(authData)
-    await this.writeStoredTokens(profileId, tokens)
 
-    file.profiles[idx] = {
-      ...file.profiles[idx],
-      email: authData.email,
-      planType: authData.planType,
-      accountId: authData.accountId,
-      defaultOrganizationId: authData.defaultOrganizationId,
-      defaultOrganizationTitle: authData.defaultOrganizationTitle,
-      chatgptUserId: authData.chatgptUserId,
-      userId: authData.userId,
-      subject: authData.subject,
-      updatedAt: new Date().toISOString(),
-    }
-
-    try {
-      writeProfilesFile(this.profilesFileStorageDeps(), file)
-      return true
-    } catch (error) {
-      try {
-        if (previousTokens) {
-          await this.writeStoredTokens(profileId, previousTokens)
-        } else {
-          await this.deleteStoredTokens(profileId)
-        }
-      } catch {
-        // Best-effort rollback.
+    return withProfilesFileLock(this.getProfilesPath(), async () => {
+      const file = await requireWritableProfilesFile(
+        this.profilesFileStorageDeps(),
+      )
+      if (!file) {
+        return false
       }
-      throw error
-    }
+      const idx = file.profiles.findIndex((p) => p.id === profileId)
+      if (idx === -1) {
+        return false
+      }
+
+      await this.writeStoredTokens(profileId, tokens)
+
+      file.profiles[idx] = {
+        ...file.profiles[idx],
+        email: authData.email,
+        planType: authData.planType,
+        accountId: authData.accountId,
+        defaultOrganizationId: authData.defaultOrganizationId,
+        defaultOrganizationTitle: authData.defaultOrganizationTitle,
+        chatgptUserId: authData.chatgptUserId,
+        userId: authData.userId,
+        subject: authData.subject,
+        updatedAt: new Date().toISOString(),
+      }
+
+      try {
+        writeProfilesFile(this.profilesFileStorageDeps(), file)
+        return true
+      } catch (error) {
+        try {
+          if (previousTokens) {
+            await this.writeStoredTokens(profileId, previousTokens)
+          } else {
+            await this.deleteStoredTokens(profileId)
+          }
+        } catch {
+          // Best-effort rollback.
+        }
+        throw error
+      }
+    })
   }
 
   private async preserveStoredProfileAuthFromLive(
@@ -816,82 +820,88 @@ export class ProfileManager {
     name: string,
     authData: AuthData,
   ): Promise<ProfileSummary> {
-    const file = await requireWritableProfilesFile(
-      this.profilesFileStorageDeps(),
-    )
-    if (!file) {
-      throw new Error('Profile storage is corrupted and cannot be modified.')
-    }
-
     const now = new Date().toISOString()
     const id = randomUUID()
 
     const profile = buildProfileSummaryFromAuth(id, name, authData, now)
     const tokens = buildProfileTokensFromAuth(authData)
 
-    await this.writeStoredTokens(id, tokens)
-
-    file.profiles.push(profile)
-    try {
-      writeProfilesFile(this.profilesFileStorageDeps(), file)
-    } catch (error) {
-      try {
-        await this.deleteStoredTokens(id)
-      } catch {
-        // Best-effort rollback.
+    await withProfilesFileLock(this.getProfilesPath(), async () => {
+      const file = await requireWritableProfilesFile(
+        this.profilesFileStorageDeps(),
+      )
+      if (!file) {
+        throw new Error('Profile storage is corrupted and cannot be modified.')
       }
-      throw error
-    }
+
+      await this.writeStoredTokens(id, tokens)
+
+      file.profiles.push(profile)
+      try {
+        writeProfilesFile(this.profilesFileStorageDeps(), file)
+      } catch (error) {
+        try {
+          await this.deleteStoredTokens(id)
+        } catch {
+          // Best-effort rollback.
+        }
+        throw error
+      }
+    })
 
     return profile
   }
 
   async renameProfile(profileId: string, newName: string): Promise<boolean> {
-    const file = await requireWritableProfilesFile(
-      this.profilesFileStorageDeps(),
-    )
-    if (!file) {
-      return false
-    }
-    const idx = file.profiles.findIndex((p) => p.id === profileId)
-    if (idx === -1) {
-      return false
-    }
-    file.profiles[idx] = {
-      ...file.profiles[idx],
-      name: newName,
-      updatedAt: new Date().toISOString(),
-    }
-    writeProfilesFile(this.profilesFileStorageDeps(), file)
-    return true
+    return withProfilesFileLock(this.getProfilesPath(), async () => {
+      const file = await requireWritableProfilesFile(
+        this.profilesFileStorageDeps(),
+      )
+      if (!file) {
+        return false
+      }
+      const idx = file.profiles.findIndex((p) => p.id === profileId)
+      if (idx === -1) {
+        return false
+      }
+      file.profiles[idx] = {
+        ...file.profiles[idx],
+        name: newName,
+        updatedAt: new Date().toISOString(),
+      }
+      writeProfilesFile(this.profilesFileStorageDeps(), file)
+      return true
+    })
   }
 
   async deleteProfile(profileId: string): Promise<boolean> {
-    const file = await requireWritableProfilesFile(
-      this.profilesFileStorageDeps(),
-    )
-    if (!file) {
-      return false
-    }
-    const before = file.profiles.length
-    file.profiles = file.profiles.filter((p) => p.id !== profileId)
-    if (file.profiles.length === before) {
-      return false
-    }
-    writeProfilesFile(this.profilesFileStorageDeps(), file)
+    return withProfilesFileLock(this.getProfilesPath(), async () => {
+      const file = await requireWritableProfilesFile(
+        this.profilesFileStorageDeps(),
+      )
+      if (!file) {
+        return false
+      }
+      const before = file.profiles.length
+      file.profiles = file.profiles.filter((p) => p.id !== profileId)
+      if (file.profiles.length === before) {
+        return false
+      }
+      writeProfilesFile(this.profilesFileStorageDeps(), file)
 
-    await this.deleteStoredTokens(profileId)
+      await this.deleteStoredTokens(profileId)
 
-    // Clean up active/last if they point to deleted profile.
-    const active = await this.getActiveProfileId()
-    const last = await this.getLastProfileId()
-    if (active === profileId) {
-      await this.setActiveProfileId(undefined)
-    }
-    if (last === profileId) {
-      await this.setLastProfileId(undefined)
-    }
-    return true
+      // Clean up active/last if they point to deleted profile.
+      const active = await this.getActiveProfileId()
+      const last = await this.getLastProfileId()
+      if (active === profileId) {
+        await this.setActiveProfileId(undefined)
+      }
+      if (last === profileId) {
+        await this.setLastProfileId(undefined)
+      }
+      return true
+    })
   }
 
   async loadAuthData(profileId: string): Promise<AuthData | null> {

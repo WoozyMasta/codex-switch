@@ -54,6 +54,10 @@ import {
   maybeReplaceProfileAuthWithLive,
 } from '../utils/profile-auth-preservation'
 import {
+  captureLiveAuthForMatchingProfile,
+  maybeSyncProfileAuthToCodexAuthFile,
+} from '../utils/profile-live-auth-sync'
+import {
   readLastProfileIdFromState,
   toggleLastProfileId,
   writeLastProfileIdToState,
@@ -680,22 +684,6 @@ export class ProfileManager {
     return true
   }
 
-  private async maybeSyncToCodexAuthFile(profileId: string): Promise<void> {
-    if (!profileId) {
-      return
-    }
-    if (this.lastSyncedProfileId === profileId) {
-      return
-    }
-
-    const authData = await this.loadAuthData(profileId)
-    if (!authData) {
-      return
-    }
-
-    this.syncProfileAuthToCodexAuthFile(profileId, authData)
-  }
-
   private async preserveStoredProfileAuthFromLive(
     profileId: string,
   ): Promise<void> {
@@ -760,38 +748,32 @@ export class ProfileManager {
   private async captureLiveAuthForMatchingProfile(
     authPath: string,
   ): Promise<void> {
-    const hash = this.readAuthFileHash(authPath)
-    if (!hash) {
-      return
-    }
-    if (hash === this.lastSyncedAuthHash) {
-      return
-    }
-
-    const liveAuth = await this.loadLiveCodexAuthData()
-    if (!liveAuth) {
-      return
-    }
-
-    const matchingProfile = await findProfileByPreservationIdentity(
+    await captureLiveAuthForMatchingProfile(
       {
-        listProfiles: () => this.listProfiles(),
-        loadAuthData: (profileId) => this.loadAuthData(profileId),
+        lastSyncedAuthHash: this.lastSyncedAuthHash,
+        readAuthFileHash: (value) => this.readAuthFileHash(value),
+        loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
+        findProfileByPreservationIdentity: (liveAuth, preferredProfileId) =>
+          findProfileByPreservationIdentity(
+            {
+              listProfiles: () => this.listProfiles(),
+              loadAuthData: (profileId) => this.loadAuthData(profileId),
+            },
+            liveAuth,
+            preferredProfileId,
+          ),
+        maybeReplaceProfileAuthWithLive: (profile, liveAuth) =>
+          maybeReplaceProfileAuthWithLive(
+            {
+              loadAuthData: (profileId) => this.loadAuthData(profileId),
+              replaceProfileAuth: (profileId, authData) =>
+                this.replaceProfileAuth(profileId, authData),
+            },
+            profile,
+            liveAuth,
+          ),
       },
-      liveAuth,
-    )
-    if (!matchingProfile) {
-      return
-    }
-
-    await maybeReplaceProfileAuthWithLive(
-      {
-        loadAuthData: (profileId) => this.loadAuthData(profileId),
-        replaceProfileAuth: (profileId, authData) =>
-          this.replaceProfileAuth(profileId, authData),
-      },
-      matchingProfile,
-      liveAuth,
+      authPath,
     )
   }
 
@@ -1237,7 +1219,15 @@ export class ProfileManager {
     }
 
     if (activeId) {
-      await this.maybeSyncToCodexAuthFile(activeId)
+      await maybeSyncProfileAuthToCodexAuthFile(
+        {
+          lastSyncedProfileId: this.lastSyncedProfileId,
+          loadAuthData: (profileId) => this.loadAuthData(profileId),
+          syncProfileAuthToCodexAuthFile: (profileId, authData) =>
+            this.syncProfileAuthToCodexAuthFile(profileId, authData),
+        },
+        activeId,
+      )
     }
   }
 
@@ -1246,7 +1236,15 @@ export class ProfileManager {
     if (!active) {
       return
     }
-    await this.maybeSyncToCodexAuthFile(active)
+    await maybeSyncProfileAuthToCodexAuthFile(
+      {
+        lastSyncedProfileId: this.lastSyncedProfileId,
+        loadAuthData: (profileId) => this.loadAuthData(profileId),
+        syncProfileAuthToCodexAuthFile: (profileId, authData) =>
+          this.syncProfileAuthToCodexAuthFile(profileId, authData),
+      },
+      active,
+    )
   }
 
   createWatchers(

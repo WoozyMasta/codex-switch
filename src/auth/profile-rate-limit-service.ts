@@ -52,6 +52,7 @@ type SpawnAppServer = (
 interface ProfileRateLimitServiceDeps {
   env?: typeof process.env
   now?: () => number
+  tmpdir?: () => string
   resolveCodexCliCommand?: () => CodexCliCommand | null
   debugLog?: (...args: unknown[]) => void
   spawnAppServer?: SpawnAppServer
@@ -430,6 +431,7 @@ export class ProfileRateLimitService {
   private readonly clientVersion: string
   private readonly env: typeof process.env
   private readonly now: () => number
+  private readonly tmpdir: () => string
   private readonly resolveCodexCliCommand: () => CodexCliCommand | null
   private readonly debugLog: (...args: unknown[]) => void
   private readonly spawnAppServer: SpawnAppServer
@@ -452,6 +454,7 @@ export class ProfileRateLimitService {
     this.clientVersion = clientVersion
     this.env = deps.env ?? process.env
     this.now = deps.now ?? Date.now
+    this.tmpdir = deps.tmpdir ?? os.tmpdir
     this.resolveCodexCliCommand = deps.resolveCodexCliCommand ?? (() => null)
     this.debugLog = deps.debugLog ?? (() => undefined)
     this.spawnAppServer = deps.spawnAppServer ?? spawnCodexAppServer
@@ -609,6 +612,7 @@ export class ProfileRateLimitService {
             codexCliCommand,
             signal,
             this.now,
+            this.tmpdir,
             this.debugLog,
             this.env,
             this.spawnAppServer,
@@ -740,6 +744,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
   codexCliCommand: CodexCliCommand,
   signal?: AbortSignal,
   now: () => number = Date.now,
+  tmpdir: () => string = os.tmpdir,
   debugLog: (...args: unknown[]) => void = () => undefined,
   env: typeof process.env = process.env,
   spawnAppServer: SpawnAppServer = spawnCodexAppServer,
@@ -750,7 +755,7 @@ async function queryRateLimitsViaTemporaryCodexHome(
   }
 
   const tempHomePath = await tempHomeFs.mkdtemp(
-    path.join(os.tmpdir(), 'codex-switch-rate-limits-'),
+    path.join(tmpdir(), 'codex-switch-rate-limits-'),
   )
   const authFilePath = path.join(tempHomePath, 'auth.json')
   let client: CodexAppServerClient | undefined

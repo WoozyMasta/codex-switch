@@ -1,5 +1,4 @@
 import * as fs from 'fs'
-import * as vscode from 'vscode'
 import { execFileSync } from 'child_process'
 import { AuthData } from '../types'
 import { errorLog } from '../utils/log'
@@ -164,9 +163,7 @@ export function shouldUseWslAuthPath(enabled?: boolean): boolean {
   if (enabled !== undefined) {
     return enabled
   }
-  return !!vscode.workspace
-    .getConfiguration('chatgpt')
-    .get<boolean>('runCodexInWindowsSubsystemForLinux', false)
+  return false
 }
 
 function getCachedWslDefaultCodexAuthPath(

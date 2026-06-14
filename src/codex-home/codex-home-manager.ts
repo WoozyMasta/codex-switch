@@ -3,10 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import { createHash } from 'crypto'
 import { ResolvedCodexHome } from '../types'
-import {
-  getDefaultCodexAuthPathForHome,
-  shouldUseWslAuthPath,
-} from '../auth/auth-manager'
+import { getDefaultCodexAuthPathForHome } from '../auth/auth-manager'
 
 function hashValue(value: string): string {
   return createHash('sha256').update(value).digest('hex').slice(0, 16)
@@ -33,7 +30,7 @@ export class CodexHomeManager {
   constructor(deps: CodexHomeManagerDeps = {}) {
     this.initialCodexHome = deps.initialCodexHome
     this.codexHomeEnabled = deps.codexHomeEnabled ?? false
-    this.useWslAuthPath = deps.useWslAuthPath ?? shouldUseWslAuthPath()
+    this.useWslAuthPath = deps.useWslAuthPath ?? false
     this.activeHome = this.resolveActiveHome()
     this.wslCustomHomeUnsupported =
       process.platform === 'win32' &&

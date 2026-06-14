@@ -1,3 +1,4 @@
+import * as fs from 'fs'
 import * as vscode from 'vscode'
 import { ProfileManager } from './auth/profile-manager'
 import { ProfileRateLimitService } from './auth/profile-rate-limit-service'
@@ -55,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
       .get<boolean>('runCodexInWindowsSubsystemForLinux', false),
   })
   profileManager = new ProfileManager(context, codexHomeManager, {
+    fs,
     getConfiguration: vscode.workspace.getConfiguration,
     remoteName: vscode.env.remoteName,
     globalState: context.globalState,

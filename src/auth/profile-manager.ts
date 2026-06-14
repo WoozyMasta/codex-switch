@@ -121,6 +121,7 @@ interface PrepareForNewLoginChatResult {
 }
 
 interface ProfileManagerDeps {
+  fs?: typeof fs
   getConfiguration?: typeof vscode.workspace.getConfiguration
   remoteName?: string
   globalState?: vscode.Memento
@@ -141,6 +142,7 @@ export class ProfileManager {
     private codexHomeManager: CodexHomeManager,
     deps: ProfileManagerDeps = {},
   ) {
+    this.fs = deps.fs ?? fs
     this.getConfiguration =
       deps.getConfiguration ?? vscode.workspace.getConfiguration
     this.remoteName = deps.remoteName ?? vscode.env.remoteName
@@ -152,6 +154,7 @@ export class ProfileManager {
 
   private lastSyncedProfileId: string | undefined
   private lastSyncedAuthHash: string | undefined
+  private readonly fs: typeof fs
   private readonly getConfiguration: typeof vscode.workspace.getConfiguration
   private readonly remoteName: string | undefined
   private readonly globalState: vscode.Memento
@@ -203,10 +206,10 @@ export class ProfileManager {
 
   private readAuthFileHash(authPath: string): string | undefined {
     try {
-      if (!fs.existsSync(authPath)) {
+      if (!this.fs.existsSync(authPath)) {
         return undefined
       }
-      const content = fs.readFileSync(authPath, 'utf8')
+      const content = this.fs.readFileSync(authPath, 'utf8')
       return sha256Text(content)
     } catch {
       return undefined
@@ -270,8 +273,8 @@ export class ProfileManager {
     }
 
     const dir = this.getStorageDir()
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
+    if (!this.fs.existsSync(dir)) {
+      this.fs.mkdirSync(dir, { recursive: true })
     }
   }
 
@@ -436,7 +439,7 @@ export class ProfileManager {
     }
 
     const root = this.getGlobalStorageRoot()
-    if (!fs.existsSync(root)) {
+    if (!this.fs.existsSync(root)) {
       await this.globalState.update(MIGRATED_LEGACY_KEY, true)
       return
     }
@@ -445,7 +448,7 @@ export class ProfileManager {
     const candidates: string[] = []
 
     try {
-      const entries = fs.readdirSync(root, { withFileTypes: true })
+      const entries = this.fs.readdirSync(root, { withFileTypes: true })
       for (const e of entries) {
         if (!e.isDirectory()) {
           continue
@@ -473,12 +476,12 @@ export class ProfileManager {
 
     for (const dirName of candidates) {
       const legacyProfilesPath = path.join(root, dirName, PROFILES_FILENAME)
-      if (!fs.existsSync(legacyProfilesPath)) {
+      if (!this.fs.existsSync(legacyProfilesPath)) {
         continue
       }
 
       try {
-        const raw = fs.readFileSync(legacyProfilesPath, 'utf8')
+        const raw = this.fs.readFileSync(legacyProfilesPath, 'utf8')
         const legacy = parseProfilesFile(raw)
         if (!legacy || legacy.profiles.length === 0) {
           continue
@@ -991,7 +994,7 @@ export class ProfileManager {
   }
 
   private isActiveCodexAuthFileMissing(): boolean {
-    return !fs.existsSync(this.getActiveCodexAuthPath())
+    return !this.fs.existsSync(this.getActiveCodexAuthPath())
   }
 
   private async getDefaultHomeActiveProfileId(): Promise<string | undefined> {
@@ -1090,13 +1093,13 @@ export class ProfileManager {
     this.lastSyncedProfileId = undefined
     this.lastSyncedAuthHash = undefined
 
-    if (!fs.existsSync(authPath)) {
+    if (!this.fs.existsSync(authPath)) {
       return {
         removedAuthFile: false,
       }
     }
 
-    fs.unlinkSync(authPath)
+    this.fs.unlinkSync(authPath)
 
     return {
       removedAuthFile: true,

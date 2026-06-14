@@ -54,7 +54,14 @@ export function activate(context: vscode.ExtensionContext) {
       .getConfiguration('chatgpt')
       .get<boolean>('runCodexInWindowsSubsystemForLinux', false),
   })
-  profileManager = new ProfileManager(context, codexHomeManager)
+  profileManager = new ProfileManager(context, codexHomeManager, {
+    getConfiguration: vscode.workspace.getConfiguration,
+    remoteName: vscode.env.remoteName,
+    globalState: context.globalState,
+    workspaceState: context.workspaceState,
+    secrets: context.secrets,
+    globalStorageUri: context.globalStorageUri,
+  })
   profileRateLimitService = new ProfileRateLimitService(
     String(context.extension.packageJSON.version || 'unknown'),
     {

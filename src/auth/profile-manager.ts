@@ -120,6 +120,15 @@ interface PrepareForNewLoginChatResult {
   removedAuthFile: boolean
 }
 
+interface ProfileManagerDeps {
+  getConfiguration?: typeof vscode.workspace.getConfiguration
+  remoteName?: string
+  globalState?: vscode.Memento
+  workspaceState?: vscode.Memento
+  secrets?: vscode.SecretStorage
+  globalStorageUri?: vscode.Uri
+}
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -130,13 +139,28 @@ export class ProfileManager {
   constructor(
     private context: vscode.ExtensionContext,
     private codexHomeManager: CodexHomeManager,
-  ) {}
+    deps: ProfileManagerDeps = {},
+  ) {
+    this.getConfiguration =
+      deps.getConfiguration ?? vscode.workspace.getConfiguration
+    this.remoteName = deps.remoteName ?? vscode.env.remoteName
+    this.globalState = deps.globalState ?? context.globalState
+    this.workspaceState = deps.workspaceState ?? context.workspaceState
+    this.secrets = deps.secrets ?? context.secrets
+    this.globalStorageUri = deps.globalStorageUri ?? context.globalStorageUri
+  }
 
   private lastSyncedProfileId: string | undefined
   private lastSyncedAuthHash: string | undefined
+  private readonly getConfiguration: typeof vscode.workspace.getConfiguration
+  private readonly remoteName: string | undefined
+  private readonly globalState: vscode.Memento
+  private readonly workspaceState: vscode.Memento
+  private readonly secrets: vscode.SecretStorage
+  private readonly globalStorageUri: vscode.Uri
 
   private getConfiguredStorageMode(): StorageMode {
-    const cfg = vscode.workspace.getConfiguration('codexSwitch')
+    const cfg = this.getConfiguration('codexSwitch')
     const raw = cfg.get<StorageMode>('storageMode', 'auto')
     if (raw === 'secretStorage' || raw === 'remoteFiles' || raw === 'auto') {
       return raw
@@ -145,10 +169,7 @@ export class ProfileManager {
   }
 
   private getResolvedStorageMode(): Exclude<StorageMode, 'auto'> {
-    return resolveStorageMode(
-      this.getConfiguredStorageMode(),
-      vscode.env.remoteName,
-    )
+    return resolveStorageMode(this.getConfiguredStorageMode(), this.remoteName)
   }
 
   private isRemoteFilesMode(): boolean {
@@ -206,7 +227,7 @@ export class ProfileManager {
     if (this.isRemoteFilesMode()) {
       return getSharedStoreRoot()
     }
-    return this.context.globalStorageUri.fsPath
+    return this.globalStorageUri.fsPath
   }
 
   private getProfilesPath(): string {
@@ -371,8 +392,8 @@ export class ProfileManager {
   ): Promise<ProfileTokens | null> {
     const keys = buildProfileSecretKeys(profileId)
     const raw =
-      (await this.context.secrets.get(keys.current)) ||
-      (await this.context.secrets.get(keys.legacy))
+      (await this.secrets.get(keys.current)) ||
+      (await this.secrets.get(keys.legacy))
     if (!raw) {
       return null
     }
@@ -389,34 +410,34 @@ export class ProfileManager {
     tokens: ProfileTokens,
   ): Promise<void> {
     const keys = buildProfileSecretKeys(profileId)
-    await this.context.secrets.store(keys.current, JSON.stringify(tokens))
+    await this.secrets.store(keys.current, JSON.stringify(tokens))
   }
 
   private async deleteLocalStoredTokens(profileId: string): Promise<void> {
     const keys = buildProfileSecretKeys(profileId)
-    await this.context.secrets.delete(keys.current)
-    await this.context.secrets.delete(keys.legacy)
+    await this.secrets.delete(keys.current)
+    await this.secrets.delete(keys.legacy)
   }
 
   private getGlobalStorageRoot(): string {
     // .../User/globalStorage/<publisher.name> -> .../User/globalStorage
-    return path.dirname(this.context.globalStorageUri.fsPath)
+    return path.dirname(this.globalStorageUri.fsPath)
   }
 
   private async tryMigrateLegacyProfilesOnce(): Promise<void> {
-    if (this.context.globalState.get<boolean>(MIGRATED_LEGACY_KEY)) {
+    if (this.globalState.get<boolean>(MIGRATED_LEGACY_KEY)) {
       return
     }
 
     const current = await readProfilesFile(this.profilesFileStorageDeps())
     if (current.profiles.length > 0) {
-      await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+      await this.globalState.update(MIGRATED_LEGACY_KEY, true)
       return
     }
 
     const root = this.getGlobalStorageRoot()
     if (!fs.existsSync(root)) {
-      await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+      await this.globalState.update(MIGRATED_LEGACY_KEY, true)
       return
     }
 
@@ -439,7 +460,7 @@ export class ProfileManager {
         candidates.push(name)
       }
     } catch {
-      await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+      await this.globalState.update(MIGRATED_LEGACY_KEY, true)
       return
     }
 
@@ -481,7 +502,7 @@ export class ProfileManager {
       }
     }
 
-    await this.context.globalState.update(MIGRATED_LEGACY_KEY, true)
+    await this.globalState.update(MIGRATED_LEGACY_KEY, true)
   }
 
   async listProfiles(): Promise<ProfileSummary[]> {
@@ -920,30 +941,31 @@ export class ProfileManager {
   }
 
   private getStateBucket(): vscode.Memento {
-    const newCfg = vscode.workspace.getConfiguration('codexSwitch')
+    const newCfg = this.getConfiguration('codexSwitch')
     const scopeFromNew = newCfg.get<'global' | 'workspace'>(
       'activeProfileScope',
     )
     const scope =
       scopeFromNew ||
-      vscode.workspace
-        .getConfiguration('codexUsage')
-        .get<'global' | 'workspace'>('activeProfileScope', 'global')
+      this.getConfiguration('codexUsage').get<'global' | 'workspace'>(
+        'activeProfileScope',
+        'global',
+      )
     return resolveProfileStateBucket(
       scope,
-      this.context.globalState,
-      this.context.workspaceState,
+      this.globalState,
+      this.workspaceState,
     )
   }
 
   private getLegacyStateBucket(): vscode.Memento {
-    const scope = vscode.workspace
-      .getConfiguration('codexUsage')
-      .get<'global' | 'workspace'>('activeProfileScope', 'global')
+    const scope = this.getConfiguration('codexUsage').get<
+      'global' | 'workspace'
+    >('activeProfileScope', 'global')
     return resolveProfileStateBucket(
       scope,
-      this.context.globalState,
-      this.context.workspaceState,
+      this.globalState,
+      this.workspaceState,
     )
   }
 
@@ -960,7 +982,7 @@ export class ProfileManager {
   }
 
   private shouldInheritDefaultProfileWhenEmpty(): boolean {
-    const cfg = vscode.workspace.getConfiguration('codexSwitch')
+    const cfg = this.getConfiguration('codexSwitch')
     return cfg.get<boolean>('codexHome.inheritDefaultProfileWhenEmpty', true)
   }
 

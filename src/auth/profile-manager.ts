@@ -10,14 +10,11 @@ import {
 import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
 import {
   SharedActiveProfile,
-  getSharedActiveProfilesDir,
-  SHARED_ACTIVE_PROFILE_FILENAME,
   deleteFileIfExists,
   ensureSharedStoreDirs,
   getSharedActiveProfilePath,
   getSharedActiveProfilePathForHome,
   getSharedProfileSecretsPath,
-  getSharedProfilesDir,
   getSharedStoreRoot,
   readJsonFile,
   writeJsonFile,
@@ -86,6 +83,7 @@ import {
   type ExportedSettingsV1,
   type ImportProfilesResult,
 } from './profile-transfer-service'
+import { ProfileAuthSyncService } from './profile-auth-sync-service'
 
 const PROFILES_FILENAME = 'profiles.json'
 const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
@@ -153,6 +151,40 @@ export class ProfileManager {
       setActiveProfileId: (profileId) => this.setActiveProfileId(profileId),
       setLastProfileId: (profileId) => this.setLastProfileId(profileId),
     })
+    this.profileAuthSyncService = new ProfileAuthSyncService({
+      getActiveProfileId: () => this.getActiveProfileId(),
+      getProfile: (profileId) => this.getProfile(profileId),
+      loadAuthData: (profileId) => this.loadAuthData(profileId),
+      loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
+      getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
+      setLastProfileId: (profileId) => this.setLastProfileId(profileId),
+      setActiveProfileIdInState: async (profileId) =>
+        setActiveProfileIdInState(
+          {
+            isRemoteFilesMode: this.isRemoteFilesMode(),
+            currentBucket: this.getStateBucket(),
+            keys: {
+              current: this.activeProfileKey(),
+              legacy: OLD_ACTIVE_PROFILE_KEY,
+            },
+            writeSharedActiveProfile: (value) =>
+              this.writeSharedActiveProfile(value),
+            deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+          },
+          profileId,
+        ),
+      syncActiveProfileToCodexAuthFile: () =>
+        this.syncActiveProfileToCodexAuthFile(),
+      captureLiveAuthForMatchingProfile: (authPath) =>
+        this.captureLiveAuthForMatchingProfile(authPath),
+      listProfiles: () => this.listProfiles(),
+      replaceProfileAuth: (profileId, authData) =>
+        this.replaceProfileAuth(profileId, authData),
+      createFileSystemWatcher: this.createFileSystemWatcher,
+      uriFile: this.uriFile,
+      relativePattern: this.relativePattern,
+      isRemoteFilesMode: () => this.isRemoteFilesMode(),
+    })
   }
 
   private lastSyncedProfileId: string | undefined
@@ -176,6 +208,7 @@ export class ProfileManager {
     pattern: string,
   ) => vscode.RelativePattern
   private readonly profileTransferService: ProfileTransferService
+  private readonly profileAuthSyncService: ProfileAuthSyncService
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = this.getConfiguration('codexSwitch')
@@ -1141,103 +1174,7 @@ export class ProfileManager {
   }
 
   async reconcileActiveProfileWithCodexAuthFile(): Promise<void> {
-    const activeId = await this.getActiveProfileId()
-    const activeProfile = activeId ? await this.getProfile(activeId) : undefined
-    const liveAuth = await this.loadLiveCodexAuthData()
-
-    if (liveAuth) {
-      const activeStoredAuth = activeProfile
-        ? await this.loadAuthData(activeProfile.id)
-        : null
-      if (
-        activeProfile &&
-        matchesPreservationIdentityForProfile(
-          activeProfile,
-          liveAuth,
-          activeStoredAuth,
-        )
-      ) {
-        await maybeReplaceProfileAuthWithLive(
-          {
-            loadAuthData: (profileId) => this.loadAuthData(profileId),
-            replaceProfileAuth: (profileId, authData) =>
-              this.replaceProfileAuth(profileId, authData),
-          },
-          activeProfile,
-          liveAuth,
-        )
-        return
-      }
-
-      const matched = await findProfileByPreservationIdentity(
-        {
-          listProfiles: () => this.listProfiles(),
-          loadAuthData: (profileId) => this.loadAuthData(profileId),
-        },
-        liveAuth,
-        activeProfile ? activeProfile.id : undefined,
-      )
-      if (matched) {
-        if (activeProfile && activeId && activeId !== matched.id) {
-          await this.setLastProfileId(activeId)
-        }
-        await setActiveProfileIdInState(
-          {
-            isRemoteFilesMode: this.isRemoteFilesMode(),
-            currentBucket: this.getStateBucket(),
-            keys: {
-              current: this.activeProfileKey(),
-              legacy: OLD_ACTIVE_PROFILE_KEY,
-            },
-            writeSharedActiveProfile: (profileId) =>
-              this.writeSharedActiveProfile(profileId),
-            deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
-          },
-          matched.id,
-        )
-        await maybeReplaceProfileAuthWithLive(
-          {
-            loadAuthData: (profileId) => this.loadAuthData(profileId),
-            replaceProfileAuth: (profileId, authData) =>
-              this.replaceProfileAuth(profileId, authData),
-          },
-          matched,
-          liveAuth,
-        )
-        return
-      }
-
-      if (activeId) {
-        await this.setLastProfileId(activeId)
-      }
-      await setActiveProfileIdInState(
-        {
-          isRemoteFilesMode: this.isRemoteFilesMode(),
-          currentBucket: this.getStateBucket(),
-          keys: {
-            current: this.activeProfileKey(),
-            legacy: OLD_ACTIVE_PROFILE_KEY,
-          },
-          writeSharedActiveProfile: (profileId) =>
-            this.writeSharedActiveProfile(profileId),
-          deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
-        },
-        undefined,
-      )
-      return
-    }
-
-    if (activeId) {
-      await maybeSyncProfileAuthToCodexAuthFile(
-        {
-          lastSyncedProfileId: this.lastSyncedProfileId,
-          loadAuthData: (profileId) => this.loadAuthData(profileId),
-          syncProfileAuthToCodexAuthFile: (profileId, authData) =>
-            this.syncProfileAuthToCodexAuthFile(profileId, authData),
-        },
-        activeId,
-      )
-    }
+    await this.profileAuthSyncService.reconcileActiveProfileWithCodexAuthFile()
   }
 
   async syncActiveProfileToCodexAuthFile(): Promise<void> {
@@ -1260,93 +1197,6 @@ export class ProfileManager {
     onChanged: () => void,
     authPath?: string,
   ): vscode.Disposable[] {
-    const disposables: vscode.Disposable[] = []
-    const fire = () => {
-      try {
-        onChanged()
-      } catch {
-        // ignore refresh errors from file watchers
-      }
-    }
-
-    const resolvedAuthPath = authPath || this.getActiveCodexAuthPath()
-    let authDebounceTimer: ReturnType<typeof setTimeout> | undefined
-    const scheduleAuthCapture = () => {
-      if (authDebounceTimer) {
-        clearTimeout(authDebounceTimer)
-      }
-      authDebounceTimer = setTimeout(() => {
-        void (async () => {
-          try {
-            await this.captureLiveAuthForMatchingProfile(resolvedAuthPath)
-          } catch {
-            // Best-effort capture.
-          }
-          fire()
-        })()
-      }, 700)
-    }
-
-    disposables.push(
-      this.createDisposable(() => {
-        if (authDebounceTimer) {
-          clearTimeout(authDebounceTimer)
-        }
-      }),
-    )
-
-    const authDir = path.dirname(resolvedAuthPath)
-    const authWatcher = this.createFileSystemWatcher(
-      this.relativePattern(this.uriFile(authDir), 'auth.json'),
-    )
-    authWatcher.onDidCreate(scheduleAuthCapture)
-    authWatcher.onDidChange(scheduleAuthCapture)
-    authWatcher.onDidDelete(fire)
-    disposables.push(authWatcher)
-
-    if (this.isRemoteFilesMode()) {
-      const profilesWatcher = this.createFileSystemWatcher(
-        this.relativePattern(
-          this.uriFile(getSharedStoreRoot()),
-          PROFILES_FILENAME,
-        ),
-      )
-      profilesWatcher.onDidCreate(fire)
-      profilesWatcher.onDidChange(fire)
-      profilesWatcher.onDidDelete(fire)
-      disposables.push(profilesWatcher)
-
-      const activeWatcher = this.createFileSystemWatcher(
-        this.relativePattern(
-          this.uriFile(getSharedActiveProfilesDir()),
-          '*.json',
-        ),
-      )
-      activeWatcher.onDidCreate(fire)
-      activeWatcher.onDidChange(fire)
-      activeWatcher.onDidDelete(fire)
-      disposables.push(activeWatcher)
-
-      const legacyActiveWatcher = this.createFileSystemWatcher(
-        this.relativePattern(
-          this.uriFile(getSharedStoreRoot()),
-          SHARED_ACTIVE_PROFILE_FILENAME,
-        ),
-      )
-      legacyActiveWatcher.onDidCreate(fire)
-      legacyActiveWatcher.onDidChange(fire)
-      legacyActiveWatcher.onDidDelete(fire)
-      disposables.push(legacyActiveWatcher)
-
-      const tokenWatcher = this.createFileSystemWatcher(
-        this.relativePattern(this.uriFile(getSharedProfilesDir()), '*.json'),
-      )
-      tokenWatcher.onDidCreate(fire)
-      tokenWatcher.onDidChange(fire)
-      tokenWatcher.onDidDelete(fire)
-      disposables.push(tokenWatcher)
-    }
-
-    return disposables
+    return this.profileAuthSyncService.createWatchers(onChanged, authPath)
   }
 }

@@ -132,6 +132,13 @@ interface ProfileManagerDeps {
   showErrorMessage?: typeof vscode.window.showErrorMessage
   showInformationMessage?: typeof vscode.window.showInformationMessage
   showWarningMessage?: typeof vscode.window.showWarningMessage
+  translate?: typeof vscode.l10n.t
+  createDisposable?: (dispose: () => void) => vscode.Disposable
+  uriFile?: (path: string) => vscode.Uri
+  relativePattern?: (
+    base: vscode.Uri,
+    pattern: string,
+  ) => vscode.RelativePattern
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -162,6 +169,13 @@ export class ProfileManager {
       deps.showInformationMessage ?? vscode.window.showInformationMessage
     this.showWarningMessage =
       deps.showWarningMessage ?? vscode.window.showWarningMessage
+    this.translate = deps.translate ?? vscode.l10n.t
+    this.createDisposable =
+      deps.createDisposable ?? ((dispose) => new vscode.Disposable(dispose))
+    this.uriFile = deps.uriFile ?? vscode.Uri.file
+    this.relativePattern =
+      deps.relativePattern ??
+      ((base, pattern) => new vscode.RelativePattern(base, pattern))
   }
 
   private lastSyncedProfileId: string | undefined
@@ -177,6 +191,13 @@ export class ProfileManager {
   private readonly showErrorMessage: typeof vscode.window.showErrorMessage
   private readonly showInformationMessage: typeof vscode.window.showInformationMessage
   private readonly showWarningMessage: typeof vscode.window.showWarningMessage
+  private readonly translate: typeof vscode.l10n.t
+  private readonly createDisposable: (dispose: () => void) => vscode.Disposable
+  private readonly uriFile: (path: string) => vscode.Uri
+  private readonly relativePattern: (
+    base: vscode.Uri,
+    pattern: string,
+  ) => vscode.RelativePattern
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = this.getConfiguration('codexSwitch')
@@ -267,14 +288,14 @@ export class ProfileManager {
         writeJsonFile(path, data),
       showReadErrorMessage: (path: string) =>
         void this.showErrorMessage(
-          vscode.l10n.t(
+          this.translate(
             'Profile storage at {0} is corrupted and was not loaded.',
             path,
           ),
         ),
       showWriteErrorMessage: (path: string) =>
         void this.showErrorMessage(
-          vscode.l10n.t(
+          this.translate(
             'Profile storage at {0} is corrupted and cannot be modified.',
             path,
           ),
@@ -511,7 +532,7 @@ export class ProfileManager {
         })
 
         void this.showInformationMessage(
-          vscode.l10n.t(
+          this.translate(
             'Found profiles from a previous install. Please re-import auth.json for each profile to restore tokens.',
           ),
         )
@@ -662,16 +683,16 @@ export class ProfileManager {
     profileId: string,
   ): Promise<AuthData | null> {
     const profile = await this.getProfile(profileId)
-    const recoverLabel = vscode.l10n.t('Recover from remote store')
-    const importLabel = vscode.l10n.t('Import current ~/.codex/auth.json')
-    const deleteLabel = vscode.l10n.t('Delete broken profile')
+    const recoverLabel = this.translate('Recover from remote store')
+    const importLabel = this.translate('Import current ~/.codex/auth.json')
+    const deleteLabel = this.translate('Delete broken profile')
 
     const canRecoverFromRemote =
       !this.isRemoteFilesMode() &&
       this.readRemoteProfileTokens(profileId) != null
 
     const pick = await this.showWarningMessage(
-      vscode.l10n.t(
+      this.translate(
         'Profile "{0}" is missing tokens. Restore it before switching.',
         profile?.name || profileId,
       ),
@@ -693,7 +714,7 @@ export class ProfileManager {
       const authData = await loadAuthDataFromFile(this.getActiveCodexAuthPath())
       if (!authData) {
         void this.showErrorMessage(
-          vscode.l10n.t(
+          this.translate(
             'Could not read auth from {0}. Run "codex login" first.',
             this.getActiveCodexAuthPath(),
           ),
@@ -1380,7 +1401,7 @@ export class ProfileManager {
     }
 
     disposables.push(
-      new vscode.Disposable(() => {
+      this.createDisposable(() => {
         if (authDebounceTimer) {
           clearTimeout(authDebounceTimer)
         }
@@ -1389,7 +1410,7 @@ export class ProfileManager {
 
     const authDir = path.dirname(resolvedAuthPath)
     const authWatcher = this.createFileSystemWatcher(
-      new vscode.RelativePattern(vscode.Uri.file(authDir), 'auth.json'),
+      this.relativePattern(this.uriFile(authDir), 'auth.json'),
     )
     authWatcher.onDidCreate(scheduleAuthCapture)
     authWatcher.onDidChange(scheduleAuthCapture)
@@ -1398,8 +1419,8 @@ export class ProfileManager {
 
     if (this.isRemoteFilesMode()) {
       const profilesWatcher = this.createFileSystemWatcher(
-        new vscode.RelativePattern(
-          vscode.Uri.file(getSharedStoreRoot()),
+        this.relativePattern(
+          this.uriFile(getSharedStoreRoot()),
           PROFILES_FILENAME,
         ),
       )
@@ -1409,8 +1430,8 @@ export class ProfileManager {
       disposables.push(profilesWatcher)
 
       const activeWatcher = this.createFileSystemWatcher(
-        new vscode.RelativePattern(
-          vscode.Uri.file(getSharedActiveProfilesDir()),
+        this.relativePattern(
+          this.uriFile(getSharedActiveProfilesDir()),
           '*.json',
         ),
       )
@@ -1420,8 +1441,8 @@ export class ProfileManager {
       disposables.push(activeWatcher)
 
       const legacyActiveWatcher = this.createFileSystemWatcher(
-        new vscode.RelativePattern(
-          vscode.Uri.file(getSharedStoreRoot()),
+        this.relativePattern(
+          this.uriFile(getSharedStoreRoot()),
           SHARED_ACTIVE_PROFILE_FILENAME,
         ),
       )
@@ -1431,10 +1452,7 @@ export class ProfileManager {
       disposables.push(legacyActiveWatcher)
 
       const tokenWatcher = this.createFileSystemWatcher(
-        new vscode.RelativePattern(
-          vscode.Uri.file(getSharedProfilesDir()),
-          '*.json',
-        ),
+        this.relativePattern(this.uriFile(getSharedProfilesDir()), '*.json'),
       )
       tokenWatcher.onDidCreate(fire)
       tokenWatcher.onDidChange(fire)

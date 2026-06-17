@@ -63,6 +63,15 @@ export function activate(context: vscode.ExtensionContext) {
     workspaceState: context.workspaceState,
     secrets: context.secrets,
     globalStorageUri: context.globalStorageUri,
+    createFileSystemWatcher: vscode.workspace.createFileSystemWatcher,
+    showErrorMessage: vscode.window.showErrorMessage,
+    showInformationMessage: vscode.window.showInformationMessage,
+    showWarningMessage: vscode.window.showWarningMessage,
+    translate: vscode.l10n.t,
+    createDisposable: (dispose) => new vscode.Disposable(dispose),
+    uriFile: vscode.Uri.file,
+    relativePattern: (base, pattern) =>
+      new vscode.RelativePattern(base, pattern),
   })
   profileRateLimitService = new ProfileRateLimitService(
     String(context.extension.packageJSON.version || 'unknown'),

@@ -1,10 +1,8 @@
-import * as fs from 'fs'
 import * as vscode from 'vscode'
 import { ProfileManager } from './auth/profile-manager'
 import { ProfileRateLimitService } from './auth/profile-rate-limit-service'
 import { CodexHomeManager } from './codex-home/codex-home-manager'
 import { ResolvedCodexHome } from './types'
-import { resolveCodexCliCommand } from './utils/codex-cli-resolver'
 import {
   createStatusBarItem,
   getStatusBarItem,
@@ -19,6 +17,10 @@ import {
   normalizeRateLimitAutoRefreshIntervalSeconds,
   type RefreshProfileUiOptions,
 } from './utils/refresh-options'
+import {
+  createExtensionServices,
+  type ExtensionRuntimeContext,
+} from './extension-services'
 
 let profileManager: ProfileManager | undefined
 let codexHomeManager: CodexHomeManager | undefined
@@ -36,53 +38,17 @@ setDebugLoggingEnabledResolver(() => {
     .get<boolean>('debugLogging', false)
 })
 
-interface RuntimeContext {
-  home: ResolvedCodexHome
-}
-
 export function activate(context: vscode.ExtensionContext) {
   debugLog('Codex Switch activated')
 
   const statusBarItem = createStatusBarItem()
   context.subscriptions.push(statusBarItem)
 
-  codexHomeManager = new CodexHomeManager({
-    initialCodexHome: process.env.CODEX_HOME,
-    codexHomeEnabled: vscode.workspace
-      .getConfiguration('codexSwitch')
-      .get<boolean>('codexHome.enabled', false),
-    useWslAuthPath: vscode.workspace
-      .getConfiguration('chatgpt')
-      .get<boolean>('runCodexInWindowsSubsystemForLinux', false),
-  })
-  profileManager = new ProfileManager(codexHomeManager, {
-    fs,
-    getConfiguration: vscode.workspace.getConfiguration,
-    remoteName: vscode.env.remoteName,
-    globalState: context.globalState,
-    workspaceState: context.workspaceState,
-    secrets: context.secrets,
-    globalStorageUri: context.globalStorageUri,
-    createFileSystemWatcher: vscode.workspace.createFileSystemWatcher,
-    showErrorMessage: vscode.window.showErrorMessage,
-    showInformationMessage: vscode.window.showInformationMessage,
-    showWarningMessage: vscode.window.showWarningMessage,
-    translate: vscode.l10n.t,
-    createDisposable: (dispose) => new vscode.Disposable(dispose),
-    uriFile: vscode.Uri.file,
-    relativePattern: (base, pattern) =>
-      new vscode.RelativePattern(base, pattern),
-  })
-  profileRateLimitService = new ProfileRateLimitService(
-    String(context.extension.packageJSON.version || 'unknown'),
-    {
-      debugLog,
-      resolveCodexCliCommand,
-    },
-  )
-  const runtime: RuntimeContext = {
-    home: codexHomeManager.getActiveHome(),
-  }
+  const services = createExtensionServices(context)
+  codexHomeManager = services.codexHomeManager
+  profileManager = services.profileManager
+  profileRateLimitService = services.profileRateLimitService
+  const runtime: ExtensionRuntimeContext = services.runtime
 
   if (codexHomeManager.isWslCustomHomeUnsupported()) {
     vscode.window.showErrorMessage(

@@ -112,7 +112,6 @@ export class ProfileManager {
     this.createFileSystemWatcher = deps.createFileSystemWatcher
     this.showErrorMessage = deps.showErrorMessage
     this.showInformationMessage = deps.showInformationMessage
-    this.showWarningMessage = deps.showWarningMessage
     this.translate = deps.translate
     this.createDisposable = deps.createDisposable
     this.uriFile = deps.uriFile
@@ -166,7 +165,7 @@ export class ProfileManager {
       writeStoredTokens: (profileId, tokens) =>
         this.writeStoredTokens(profileId, tokens),
       isRemoteFilesMode: () => this.isRemoteFilesMode(),
-      showWarningMessage: this.showWarningMessage,
+      showWarningMessage: deps.showWarningMessage,
       showErrorMessage: this.showErrorMessage,
       translate: this.translate,
     })
@@ -226,7 +225,6 @@ export class ProfileManager {
   private readonly createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
   private readonly showErrorMessage: typeof vscode.window.showErrorMessage
   private readonly showInformationMessage: typeof vscode.window.showInformationMessage
-  private readonly showWarningMessage: typeof vscode.window.showWarningMessage
   private readonly translate: typeof vscode.l10n.t
   private readonly createDisposable: (dispose: () => void) => vscode.Disposable
   private readonly uriFile: (path: string) => vscode.Uri
@@ -626,59 +624,6 @@ export class ProfileManager {
   ): Promise<ProfileSummary | undefined> {
     const file = await readProfilesFile(this.profilesFileStorageDeps())
     return file.profiles.find((p) => this.matchesAuth(p, authData))
-  }
-
-  private async recoverMissingTokens(
-    profileId: string,
-  ): Promise<AuthData | null> {
-    const profile = await this.getProfile(profileId)
-    const recoverLabel = this.translate('Recover from remote store')
-    const importLabel = this.translate('Import current ~/.codex/auth.json')
-    const deleteLabel = this.translate('Delete broken profile')
-
-    const canRecoverFromRemote =
-      !this.isRemoteFilesMode() &&
-      this.readRemoteProfileTokens(profileId) != null
-
-    const pick = await this.showWarningMessage(
-      this.translate(
-        'Profile "{0}" is missing tokens. Restore it before switching.',
-        profile?.name || profileId,
-      ),
-      { modal: true },
-      ...(canRecoverFromRemote ? [recoverLabel] : []),
-      importLabel,
-      deleteLabel,
-    )
-
-    if (pick === recoverLabel) {
-      const tokens = this.readRemoteProfileTokens(profileId)
-      if (tokens) {
-        await this.writeStoredTokens(profileId, tokens)
-        return this.loadAuthData(profileId)
-      }
-    }
-
-    if (pick === importLabel) {
-      const authData = await loadAuthDataFromFile(this.getActiveCodexAuthPath())
-      if (!authData) {
-        void this.showErrorMessage(
-          this.translate(
-            'Could not read auth from {0}. Run "codex login" first.',
-            this.getActiveCodexAuthPath(),
-          ),
-        )
-        return null
-      }
-      await this.replaceProfileAuth(profileId, authData)
-      return authData
-    }
-
-    if (pick === deleteLabel) {
-      await this.deleteProfile(profileId)
-    }
-
-    return null
   }
 
   async replaceProfileAuth(

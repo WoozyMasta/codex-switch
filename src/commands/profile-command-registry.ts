@@ -1,0 +1,962 @@
+import * as vscode from 'vscode'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as os from 'os'
+import { ProfileManager } from '../auth/profile-manager'
+import { ProfileRateLimitService } from '../auth/profile-rate-limit-service'
+import { loadAuthDataFromFile } from '../auth/auth-manager'
+import { CodexHomeManager } from '../codex-home/codex-home-manager'
+import { buildProfileMetaDisplay } from '../ui/profile-display'
+import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
+import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
+import { ResolvedCodexHome } from '../types'
+import { writeJsonFile } from '../auth/shared-profile-store'
+
+/**
+ * Register all extension commands
+ */
+export function registerCommands(
+  context: vscode.ExtensionContext,
+  profileManager: ProfileManager,
+  codexHomeManager: CodexHomeManager,
+  runtimeHome: ResolvedCodexHome,
+  profileRateLimitService: ProfileRateLimitService,
+  onAuthChanged: (options?: {
+    forceRateLimitRefresh?: boolean
+  }) => Promise<void>,
+) {
+  type StatusBarClickBehavior = 'cycle' | 'toggleLast' | 'selector'
+
+  const maybeRestartAfterProfileSwitch = async () => {
+    const reloadAfterSwitch = vscode.workspace
+      .getConfiguration('codexSwitch')
+      .get<boolean>('reloadWindowAfterProfileSwitch', false)
+    if (!reloadAfterSwitch) {
+      return
+    }
+
+    await restartExtensionHostOrReloadWindow()
+  }
+
+  const reloadAfterAuthReset = async (): Promise<void> => {
+    await restartExtensionHostOrReloadWindow()
+  }
+
+  const getLoginCommandText = (): string =>
+    codexHomeManager.buildLoginCommand(runtimeHome)
+
+  const getStatusBarClickBehavior = (): StatusBarClickBehavior => {
+    const raw = vscode.workspace
+      .getConfiguration('codexSwitch')
+      .get<StatusBarClickBehavior>('statusBarClickBehavior', 'cycle')
+
+    if (raw === 'toggleLast') {
+      return 'toggleLast'
+    }
+    if (raw === 'selector') {
+      return 'selector'
+    }
+    return 'cycle'
+  }
+
+  const getDefaultSettingsExportUri = (): vscode.Uri => {
+    const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    const baseDir = workspacePath || os.homedir()
+    return vscode.Uri.file(path.join(baseDir, 'codex-switch-profiles.json'))
+  }
+
+  const showProfileMutationError = (
+    actionLabel: string,
+    error: unknown,
+    fallbackMessage: string,
+  ): void => {
+    const message =
+      error instanceof Error && error.message ? error.message : fallbackMessage
+    vscode.window.showErrorMessage(
+      vscode.l10n.t('Failed to {0}: {1}', actionLabel, message),
+    )
+  }
+
+  const addCurrentAuthJsonAsProfile = async (
+    restartAfterImport: boolean,
+  ): Promise<boolean> => {
+    try {
+      const authPath = profileManager.getActiveCodexAuthPath()
+      const loginCommandText = getLoginCommandText()
+      const authData = await loadAuthDataFromFile(authPath)
+      if (!authData) {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t(
+            'Could not read auth from {0}. Run "{1}" first.',
+            authPath,
+            loginCommandText,
+          ),
+        )
+        return false
+      }
+
+      const existing = await profileManager.findDuplicateProfile(authData)
+      if (existing) {
+        const replaceLabel = vscode.l10n.t('Replace')
+        const pick = await vscode.window.showWarningMessage(
+          vscode.l10n.t(
+            'This account is already saved as profile "{0}". Replace it?',
+            existing.name,
+          ),
+          { modal: true },
+          replaceLabel,
+        )
+        if (pick !== replaceLabel) {
+          return false
+        }
+
+        if (!(await profileManager.replaceProfileAuth(existing.id, authData))) {
+          throw new Error(vscode.l10n.t('Failed to update the saved profile.'))
+        }
+        if (!(await profileManager.setActiveProfileId(existing.id))) {
+          throw new Error(
+            vscode.l10n.t('Failed to activate the saved profile.'),
+          )
+        }
+        await onAuthChanged()
+        if (restartAfterImport) {
+          await maybeRestartAfterProfileSwitch()
+        }
+        return true
+      }
+
+      const defaultName =
+        authData.email && authData.email !== 'Unknown'
+          ? authData.email.split('@')[0]
+          : 'profile'
+
+      const name = await vscode.window.showInputBox({
+        prompt: vscode.l10n.t(
+          'Profile name (for example "work" or "personal")',
+        ),
+        value: defaultName,
+      })
+      if (!name || !name.trim()) {
+        return false
+      }
+
+      const profile = await profileManager.createProfile(name, authData)
+      if (!(await profileManager.setActiveProfileId(profile.id))) {
+        throw new Error(vscode.l10n.t('Failed to activate the new profile.'))
+      }
+      await onAuthChanged()
+      if (restartAfterImport) {
+        await maybeRestartAfterProfileSwitch()
+      }
+      return true
+    } catch (error) {
+      showProfileMutationError(
+        vscode.l10n.t('save the current auth as a profile'),
+        error,
+        vscode.l10n.t('Unknown profile creation error.'),
+      )
+      return false
+    }
+  }
+
+  const ensureLiveAuthIsSavedBeforeReplacing = async (
+    operationName: string,
+  ): Promise<boolean> => {
+    const result = await profileManager.preserveLiveAuthForMatchingProfile()
+
+    if (result.status !== 'unsaved') {
+      return true
+    }
+
+    const saveAndContinueLabel = vscode.l10n.t('Save Profile and Continue')
+    const continueWithoutSavingLabel = vscode.l10n.t('Continue without saving')
+
+    const pick = await vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        'The current Codex account is not saved in Codex Switch. If you continue to {0}, this local login will be removed or overwritten and you will need to sign in again to recover it.',
+        operationName,
+      ),
+      { modal: true },
+      saveAndContinueLabel,
+      continueWithoutSavingLabel,
+    )
+
+    if (!pick) {
+      return false
+    }
+    if (pick === continueWithoutSavingLabel) {
+      return true
+    }
+    if (pick === saveAndContinueLabel) {
+      return addCurrentAuthJsonAsProfile(false)
+    }
+    return false
+  }
+
+  const ensureCodexCliForRateLimits = async (): Promise<boolean> => {
+    if (resolveCodexCliCommand()) {
+      return true
+    }
+
+    const setPathLabel = vscode.l10n.t('Set CLI Path')
+    const openSettingsLabel = vscode.l10n.t('Open Settings')
+    const pick = await vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        'Codex CLI was not found. Set the Codex CLI path to refresh account limits.',
+      ),
+      setPathLabel,
+      openSettingsLabel,
+    )
+
+    if (pick === openSettingsLabel) {
+      await vscode.commands.executeCommand(
+        'workbench.action.openSettings',
+        'codexSwitch.codexCliPath',
+      )
+      return false
+    }
+
+    if (pick !== setPathLabel) {
+      return false
+    }
+
+    const selection = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      openLabel: setPathLabel,
+      title: vscode.l10n.t('Select Codex CLI binary'),
+      filters:
+        process.platform === 'win32'
+          ? { Executables: ['exe', 'cmd'], All: ['*'] }
+          : undefined,
+    })
+
+    if (!selection?.[0]) {
+      return false
+    }
+
+    await vscode.workspace
+      .getConfiguration('codexSwitch')
+      .update(
+        'codexCliPath',
+        selection[0].fsPath,
+        vscode.ConfigurationTarget.Global,
+      )
+    vscode.window.showInformationMessage(vscode.l10n.t('Codex CLI path saved.'))
+    return true
+  }
+
+  // Login command
+  const loginCommand = vscode.commands.registerCommand(
+    'codex-switch.login',
+    async () => {
+      const loginCommandText = getLoginCommandText()
+      const manageLabel = vscode.l10n.t('Manage profiles')
+      const openTerminalLabel = vscode.l10n.t('Open terminal')
+      const copyCommandLabel = vscode.l10n.t('Copy command')
+
+      const selection = await vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'Authentication required. Add a profile or run "{0}".',
+          loginCommandText,
+        ),
+        manageLabel,
+        openTerminalLabel,
+        copyCommandLabel,
+      )
+
+      if (selection === manageLabel) {
+        await vscode.commands.executeCommand('codex-switch.profile.manage')
+      } else if (selection === openTerminalLabel) {
+        const terminal = codexHomeManager.createCodexTerminal(
+          undefined,
+          runtimeHome,
+        )
+        terminal.show()
+        terminal.sendText(loginCommandText)
+      } else if (selection === copyCommandLabel) {
+        vscode.env.clipboard.writeText(loginCommandText)
+        vscode.window.showInformationMessage(
+          vscode.l10n.t('Command "{0}" copied to clipboard.', loginCommandText),
+        )
+      }
+    },
+  )
+
+  const switchProfileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.switch',
+    async () => {
+      const rawProfiles = await profileManager.listProfiles()
+      if (rawProfiles.length === 0) {
+        await vscode.commands.executeCommand('codex-switch.profile.manage')
+        return
+      }
+
+      const activeId = await profileManager.getActiveProfileId()
+
+      type ProfilePick = vscode.QuickPickItem & { profileId: string }
+      const toProfilePicks = (profiles: typeof rawProfiles): ProfilePick[] =>
+        profiles.map((p) => ({
+          label: p.name,
+          description: buildProfileMetaDisplay(p.planType, p.rateLimits),
+          detail: [
+            p.email && p.email !== 'Unknown' ? p.email : undefined,
+            p.id === activeId ? vscode.l10n.t('Active') : undefined,
+          ]
+            .filter((value): value is string => Boolean(value))
+            .join(' • '),
+          profileId: p.id,
+        }))
+
+      const quickPick = vscode.window.createQuickPick<ProfilePick>()
+      quickPick.placeholder = vscode.l10n.t('Switch profile')
+      quickPick.items = toProfilePicks(
+        profileRateLimitService.applyCachedRateLimits(rawProfiles),
+      )
+      quickPick.busy = true
+
+      let disposed = false
+      let pickedProfileId: string | undefined
+      const pickPromise = new Promise<string | undefined>((resolve) => {
+        quickPick.onDidAccept(() => {
+          pickedProfileId = quickPick.selectedItems[0]?.profileId
+          quickPick.hide()
+        })
+        quickPick.onDidHide(() => {
+          disposed = true
+          quickPick.dispose()
+          resolve(pickedProfileId)
+        })
+      })
+
+      quickPick.show()
+
+      void profileRateLimitService
+        .decorateProfiles(profileManager, rawProfiles)
+        .then((profiles) => {
+          if (!disposed) {
+            quickPick.items = toProfilePicks(profiles)
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (!disposed) {
+            quickPick.busy = false
+          }
+        })
+
+      const profileId = await pickPromise
+      if (!profileId) {
+        return
+      }
+      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
+        vscode.l10n.t('switch profiles'),
+      )
+      if (!canReplaceLiveAuth) {
+        return
+      }
+      const ok = await profileManager.setActiveProfileId(profileId)
+      if (!ok) {
+        return
+      }
+      await onAuthChanged()
+      await maybeRestartAfterProfileSwitch()
+    },
+  )
+
+  const refreshRateLimitsCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.refresh',
+    async () => {
+      if (!(await ensureCodexCliForRateLimits())) {
+        return
+      }
+
+      await onAuthChanged({ forceRateLimitRefresh: true })
+    },
+  )
+
+  const activateProfileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.activate',
+    async (profileId?: string) => {
+      if (!profileId) {
+        await vscode.commands.executeCommand('codex-switch.profile.switch')
+        return
+      }
+
+      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
+        vscode.l10n.t('switch profiles'),
+      )
+      if (!canReplaceLiveAuth) {
+        return
+      }
+
+      const ok = await profileManager.setActiveProfileId(profileId)
+      if (!ok) {
+        return
+      }
+
+      await onAuthChanged()
+      await maybeRestartAfterProfileSwitch()
+    },
+  )
+
+  const toggleLastProfileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.toggleLast',
+    async () => {
+      const behavior = getStatusBarClickBehavior()
+      if (behavior === 'selector') {
+        await vscode.commands.executeCommand('codex-switch.profile.switch')
+        return
+      }
+
+      if (behavior === 'toggleLast') {
+        const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
+          vscode.l10n.t('switch profiles'),
+        )
+        if (!canReplaceLiveAuth) {
+          return
+        }
+
+        const newId = await profileManager.toggleLastProfileId()
+        if (!newId) {
+          await vscode.commands.executeCommand('codex-switch.profile.switch')
+          return
+        }
+        await onAuthChanged()
+        await maybeRestartAfterProfileSwitch()
+        return
+      }
+
+      const profiles = await profileManager.listProfiles()
+      if (profiles.length === 0) {
+        await vscode.commands.executeCommand('codex-switch.profile.manage')
+        return
+      }
+
+      const activeId = await profileManager.getActiveProfileId()
+      const currentIndex = profiles.findIndex((p) => p.id === activeId)
+      const nextIndex =
+        currentIndex === -1 ? 0 : (currentIndex + 1) % profiles.length
+      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
+        vscode.l10n.t('switch profiles'),
+      )
+      if (!canReplaceLiveAuth) {
+        return
+      }
+      const ok = await profileManager.setActiveProfileId(profiles[nextIndex].id)
+      if (!ok) {
+        return
+      }
+
+      await onAuthChanged()
+      await maybeRestartAfterProfileSwitch()
+    },
+  )
+
+  const addFromCodexAuthFileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.addFromCodexAuthFile',
+    async (): Promise<boolean> => addCurrentAuthJsonAsProfile(true),
+  )
+
+  const prepareForNewLoginChatCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.prepareForNewLoginChat',
+    async () => {
+      const ok = await ensureLiveAuthIsSavedBeforeReplacing(
+        vscode.l10n.t('prepare for a new login'),
+      )
+      if (!ok) {
+        return
+      }
+
+      const result = await profileManager.prepareForNewLoginChat()
+      await onAuthChanged()
+
+      if (result.removedAuthFile) {
+        vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            'Prepared for a new Codex login. The current auth.json was removed locally and the window will reload so Chat can show the login flow.',
+          ),
+        )
+      } else {
+        vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            'Prepared for a new Codex login. No current auth.json was found and the window will reload so Chat can show the login flow.',
+          ),
+        )
+      }
+
+      await reloadAfterAuthReset()
+    },
+  )
+
+  const loginViaCliCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.login',
+    async () => {
+      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
+        vscode.l10n.t('start a new login'),
+      )
+      if (!canReplaceLiveAuth) {
+        return
+      }
+
+      const authPath = profileManager.getActiveCodexAuthPath()
+      const loginCommandText = getLoginCommandText()
+
+      const terminal = codexHomeManager.createCodexTerminal(
+        undefined,
+        runtimeHome,
+      )
+      terminal.show()
+      terminal.sendText(loginCommandText)
+
+      const start = Date.now()
+      const maxWaitMs = 10 * 60 * 1000
+
+      let watcher: fs.FSWatcher | undefined
+      let done = false
+
+      const cleanup = () => {
+        if (done) {
+          return
+        }
+        done = true
+        if (watcher) {
+          try {
+            watcher.close()
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      const promptImport = async () => {
+        if (done) {
+          return
+        }
+        cleanup()
+        const importLabel = vscode.l10n.t('Import')
+        const pick = await vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            'Codex auth file detected at {0}. Import it as a profile?',
+            authPath,
+          ),
+          importLabel,
+        )
+        if (pick === importLabel) {
+          await vscode.commands.executeCommand(
+            'codex-switch.profile.addFromCodexAuthFile',
+          )
+        }
+      }
+
+      // Try to watch for auth.json being created/updated.
+      try {
+        const dir = path.dirname(authPath)
+        if (fs.existsSync(dir)) {
+          watcher = fs.watch(
+            dir,
+            { persistent: false },
+            async (_event, filename) => {
+              if (done) {
+                return
+              }
+              if (!filename) {
+                return
+              }
+              if (String(filename).toLowerCase() !== 'auth.json') {
+                return
+              }
+              if (Date.now() - start > maxWaitMs) {
+                cleanup()
+                return
+              }
+              if (fs.existsSync(authPath)) {
+                await promptImport()
+              }
+            },
+          )
+        }
+      } catch {
+        // Best effort; fall back to manual import.
+      }
+
+      const importNowLabel = vscode.l10n.t('Import now')
+      const manageLabel = vscode.l10n.t('Manage profiles')
+      const msg = await vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'After completing the login flow, import the current environment auth.json from {0} as a profile.',
+          authPath,
+        ),
+        importNowLabel,
+        manageLabel,
+      )
+
+      if (msg === importNowLabel) {
+        cleanup()
+        await vscode.commands.executeCommand(
+          'codex-switch.profile.addFromCodexAuthFile',
+        )
+      } else if (msg === manageLabel) {
+        cleanup()
+        await vscode.commands.executeCommand('codex-switch.profile.manage')
+      } else {
+        // Let watcher run until it triggers or times out.
+        setTimeout(() => cleanup(), maxWaitMs)
+      }
+    },
+  )
+
+  const addFromFileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.addFromFile',
+    async () => {
+      const uri = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        openLabel: vscode.l10n.t('Import auth.json'),
+        filters: { JSON: ['json'] },
+      })
+      if (!uri || uri.length === 0) {
+        return
+      }
+
+      const authData = await loadAuthDataFromFile(uri[0].fsPath)
+      if (!authData) {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Selected file is not a valid auth.json.'),
+        )
+        return
+      }
+
+      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
+        vscode.l10n.t('import an auth file'),
+      )
+      if (!canReplaceLiveAuth) {
+        return
+      }
+
+      await addCurrentAuthJsonAsProfile(true)
+    },
+  )
+
+  const exportSettingsCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.exportSettings',
+    async () => {
+      const saveUri = await vscode.window.showSaveDialog({
+        saveLabel: vscode.l10n.t('Export profiles'),
+        defaultUri: getDefaultSettingsExportUri(),
+        filters: { JSON: ['json'] },
+      })
+      if (!saveUri) {
+        return
+      }
+
+      const exportLabel = vscode.l10n.t('Export')
+      const warning = await vscode.window.showWarningMessage(
+        vscode.l10n.t(
+          'This will export profile tokens and auth data as unencrypted JSON.',
+        ),
+        { modal: true },
+        exportLabel,
+      )
+      if (warning !== exportLabel) {
+        return
+      }
+
+      if (fs.existsSync(saveUri.fsPath)) {
+        const overwrite = await vscode.window.showWarningMessage(
+          vscode.l10n.t(
+            'File {0} already exists. Overwrite it?',
+            saveUri.fsPath,
+          ),
+          { modal: true },
+          exportLabel,
+        )
+        if (overwrite !== exportLabel) {
+          return
+        }
+      }
+
+      const { data, skipped } = await profileManager.exportProfilesForTransfer()
+      writeJsonFile(saveUri.fsPath, data)
+
+      vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'Exported {0} profile(s) to {1}. Skipped {2} profile(s) without tokens.',
+          data.profiles.length,
+          saveUri.fsPath,
+          skipped,
+        ),
+      )
+    },
+  )
+
+  const importSettingsCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.importSettings',
+    async () => {
+      const uri = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        openLabel: vscode.l10n.t('Import profiles'),
+        filters: { JSON: ['json'] },
+      })
+      if (!uri || uri.length === 0) {
+        return
+      }
+
+      let payload: unknown
+      try {
+        payload = JSON.parse(fs.readFileSync(uri[0].fsPath, 'utf8')) as unknown
+      } catch {
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Selected file is not a valid JSON profiles export.'),
+        )
+        return
+      }
+
+      try {
+        const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
+          vscode.l10n.t('import profiles'),
+        )
+        if (!canReplaceLiveAuth) {
+          return
+        }
+
+        const result = await profileManager.importProfilesFromTransfer(payload)
+        await onAuthChanged()
+        await maybeRestartAfterProfileSwitch()
+        vscode.window.showInformationMessage(
+          vscode.l10n.t(
+            'Import completed: created {0}, updated {1}, skipped {2}.',
+            result.created,
+            result.updated,
+            result.skipped,
+          ),
+        )
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : vscode.l10n.t('Unknown import error.')
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Failed to import profiles: {0}', message),
+        )
+      }
+    },
+  )
+
+  const renameProfileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.rename',
+    async () => {
+      const profiles = await profileManager.listProfiles()
+      if (profiles.length === 0) {
+        return
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        profiles.map((p) => ({
+          label: p.name,
+          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
+          profileId: p.id,
+        })),
+        { placeHolder: vscode.l10n.t('Rename profile') },
+      )
+      if (!pick) {
+        return
+      }
+
+      const newName = await vscode.window.showInputBox({
+        prompt: vscode.l10n.t('New profile name'),
+        value: pick.label,
+      })
+      if (!newName) {
+        return
+      }
+
+      try {
+        if (!(await profileManager.renameProfile(pick.profileId, newName))) {
+          throw new Error(vscode.l10n.t('Profile was not updated.'))
+        }
+        await onAuthChanged()
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : vscode.l10n.t('Unknown rename error.')
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Failed to rename profile: {0}', message),
+        )
+      }
+    },
+  )
+
+  const deleteProfileCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.delete',
+    async () => {
+      const profiles = await profileManager.listProfiles()
+      if (profiles.length === 0) {
+        return
+      }
+      const activeProfileId = await profileManager.getActiveProfileId()
+
+      const pick = await vscode.window.showQuickPick(
+        profiles.map((p) => ({
+          label: p.name,
+          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
+          profileId: p.id,
+        })),
+        { placeHolder: vscode.l10n.t('Delete profile') },
+      )
+      if (!pick) {
+        return
+      }
+
+      const deleteLabel = vscode.l10n.t('Delete')
+      const ok = await vscode.window.showWarningMessage(
+        vscode.l10n.t('Delete profile "{0}"?', pick.label),
+        { modal: true },
+        deleteLabel,
+      )
+      if (ok !== deleteLabel) {
+        return
+      }
+
+      try {
+        if (!(await profileManager.deleteProfile(pick.profileId))) {
+          throw new Error(vscode.l10n.t('Profile was not deleted.'))
+        }
+        await onAuthChanged()
+        if (activeProfileId === pick.profileId) {
+          vscode.window.showInformationMessage(
+            vscode.l10n.t(
+              'Deleted the active profile. The current auth.json remains as an unsaved login.',
+            ),
+          )
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message
+            ? error.message
+            : vscode.l10n.t('Unknown delete error.')
+        vscode.window.showErrorMessage(
+          vscode.l10n.t('Failed to delete profile: {0}', message),
+        )
+      }
+    },
+  )
+
+  const syncFromDefaultHomeCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.syncFromDefaultHome',
+    async () => {
+      const profileId = await profileManager.syncActiveProfileFromDefaultHome()
+      if (!profileId) {
+        vscode.window.showInformationMessage(
+          vscode.l10n.t('Default CODEX_HOME has no active profile to sync.'),
+        )
+        return
+      }
+
+      const profile = await profileManager.getProfile(profileId)
+      await onAuthChanged()
+      await maybeRestartAfterProfileSwitch()
+      vscode.window.showInformationMessage(
+        vscode.l10n.t(
+          'Synced active profile from default CODEX_HOME: {0}.',
+          profile?.name || profileId,
+        ),
+      )
+    },
+  )
+
+  const manageProfilesCommand = vscode.commands.registerCommand(
+    'codex-switch.profile.manage',
+    async () => {
+      const authPath = profileManager.getActiveCodexAuthPath()
+      const home = profileManager.getActiveCodexHomeSummary()
+      const profiles = await profileManager.listProfiles()
+      const hasProfiles = profiles.length > 0
+
+      const action = await vscode.window.showQuickPick(
+        [
+          {
+            label: vscode.l10n.t('Prepare for New Login (Chat)'),
+            description: vscode.l10n.t(
+              'Save current profile if possible, remove local auth.json, and reload Chat login',
+            ),
+            command: 'codex-switch.profile.prepareForNewLoginChat',
+          },
+          {
+            label: vscode.l10n.t('Login via Codex CLI...'),
+            command: 'codex-switch.profile.login',
+          },
+          ...(hasProfiles
+            ? [
+                {
+                  label: vscode.l10n.t('Switch profile'),
+                  command: 'codex-switch.profile.switch',
+                },
+              ]
+            : []),
+          {
+            label: vscode.l10n.t('Add from current auth.json'),
+            description: authPath,
+            command: 'codex-switch.profile.addFromCodexAuthFile',
+          },
+          {
+            label: vscode.l10n.t('Import from file...'),
+            command: 'codex-switch.profile.addFromFile',
+          },
+          {
+            label: vscode.l10n.t('Export profiles...'),
+            command: 'codex-switch.profile.exportSettings',
+          },
+          {
+            label: vscode.l10n.t('Import profiles...'),
+            command: 'codex-switch.profile.importSettings',
+          },
+          ...(home.usesPerHomeState && !home.isDefault
+            ? [
+                {
+                  label: vscode.l10n.t('Use default CODEX_HOME profile here'),
+                  description: home.fsPath,
+                  command: 'codex-switch.profile.syncFromDefaultHome',
+                },
+              ]
+            : []),
+          ...(hasProfiles
+            ? [
+                {
+                  label: vscode.l10n.t('Rename profile'),
+                  command: 'codex-switch.profile.rename',
+                },
+                {
+                  label: vscode.l10n.t('Delete profile'),
+                  command: 'codex-switch.profile.delete',
+                },
+              ]
+            : []),
+        ],
+        { placeHolder: vscode.l10n.t('Manage profiles') },
+      )
+      if (!action) {
+        return
+      }
+      await vscode.commands.executeCommand(action.command)
+    },
+  )
+
+  // Register all commands
+  context.subscriptions.push(loginCommand)
+  context.subscriptions.push(loginViaCliCommand)
+  context.subscriptions.push(refreshRateLimitsCommand)
+  context.subscriptions.push(switchProfileCommand)
+  context.subscriptions.push(activateProfileCommand)
+  context.subscriptions.push(toggleLastProfileCommand)
+  context.subscriptions.push(manageProfilesCommand)
+  context.subscriptions.push(addFromCodexAuthFileCommand)
+  context.subscriptions.push(prepareForNewLoginChatCommand)
+  context.subscriptions.push(addFromFileCommand)
+  context.subscriptions.push(exportSettingsCommand)
+  context.subscriptions.push(importSettingsCommand)
+  context.subscriptions.push(renameProfileCommand)
+  context.subscriptions.push(deleteProfileCommand)
+  context.subscriptions.push(syncFromDefaultHomeCommand)
+}

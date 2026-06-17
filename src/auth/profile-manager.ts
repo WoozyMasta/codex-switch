@@ -128,6 +128,10 @@ interface ProfileManagerDeps {
   workspaceState?: vscode.Memento
   secrets?: vscode.SecretStorage
   globalStorageUri?: vscode.Uri
+  createFileSystemWatcher?: typeof vscode.workspace.createFileSystemWatcher
+  showErrorMessage?: typeof vscode.window.showErrorMessage
+  showInformationMessage?: typeof vscode.window.showInformationMessage
+  showWarningMessage?: typeof vscode.window.showWarningMessage
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -150,6 +154,14 @@ export class ProfileManager {
     this.workspaceState = deps.workspaceState ?? context.workspaceState
     this.secrets = deps.secrets ?? context.secrets
     this.globalStorageUri = deps.globalStorageUri ?? context.globalStorageUri
+    this.createFileSystemWatcher =
+      deps.createFileSystemWatcher ?? vscode.workspace.createFileSystemWatcher
+    this.showErrorMessage =
+      deps.showErrorMessage ?? vscode.window.showErrorMessage
+    this.showInformationMessage =
+      deps.showInformationMessage ?? vscode.window.showInformationMessage
+    this.showWarningMessage =
+      deps.showWarningMessage ?? vscode.window.showWarningMessage
   }
 
   private lastSyncedProfileId: string | undefined
@@ -161,6 +173,10 @@ export class ProfileManager {
   private readonly workspaceState: vscode.Memento
   private readonly secrets: vscode.SecretStorage
   private readonly globalStorageUri: vscode.Uri
+  private readonly createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
+  private readonly showErrorMessage: typeof vscode.window.showErrorMessage
+  private readonly showInformationMessage: typeof vscode.window.showInformationMessage
+  private readonly showWarningMessage: typeof vscode.window.showWarningMessage
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = this.getConfiguration('codexSwitch')
@@ -250,14 +266,14 @@ export class ProfileManager {
       writeJsonFile: (path: string, data: ProfilesFileV1) =>
         writeJsonFile(path, data),
       showReadErrorMessage: (path: string) =>
-        void vscode.window.showErrorMessage(
+        void this.showErrorMessage(
           vscode.l10n.t(
             'Profile storage at {0} is corrupted and was not loaded.',
             path,
           ),
         ),
       showWriteErrorMessage: (path: string) =>
-        void vscode.window.showErrorMessage(
+        void this.showErrorMessage(
           vscode.l10n.t(
             'Profile storage at {0} is corrupted and cannot be modified.',
             path,
@@ -494,7 +510,7 @@ export class ProfileManager {
           profiles: legacy.profiles,
         })
 
-        void vscode.window.showInformationMessage(
+        void this.showInformationMessage(
           vscode.l10n.t(
             'Found profiles from a previous install. Please re-import auth.json for each profile to restore tokens.',
           ),
@@ -654,7 +670,7 @@ export class ProfileManager {
       !this.isRemoteFilesMode() &&
       this.readRemoteProfileTokens(profileId) != null
 
-    const pick = await vscode.window.showWarningMessage(
+    const pick = await this.showWarningMessage(
       vscode.l10n.t(
         'Profile "{0}" is missing tokens. Restore it before switching.',
         profile?.name || profileId,
@@ -676,7 +692,7 @@ export class ProfileManager {
     if (pick === importLabel) {
       const authData = await loadAuthDataFromFile(this.getActiveCodexAuthPath())
       if (!authData) {
-        void vscode.window.showErrorMessage(
+        void this.showErrorMessage(
           vscode.l10n.t(
             'Could not read auth from {0}. Run "codex login" first.',
             this.getActiveCodexAuthPath(),
@@ -1372,7 +1388,7 @@ export class ProfileManager {
     )
 
     const authDir = path.dirname(resolvedAuthPath)
-    const authWatcher = vscode.workspace.createFileSystemWatcher(
+    const authWatcher = this.createFileSystemWatcher(
       new vscode.RelativePattern(vscode.Uri.file(authDir), 'auth.json'),
     )
     authWatcher.onDidCreate(scheduleAuthCapture)
@@ -1381,7 +1397,7 @@ export class ProfileManager {
     disposables.push(authWatcher)
 
     if (this.isRemoteFilesMode()) {
-      const profilesWatcher = vscode.workspace.createFileSystemWatcher(
+      const profilesWatcher = this.createFileSystemWatcher(
         new vscode.RelativePattern(
           vscode.Uri.file(getSharedStoreRoot()),
           PROFILES_FILENAME,
@@ -1392,7 +1408,7 @@ export class ProfileManager {
       profilesWatcher.onDidDelete(fire)
       disposables.push(profilesWatcher)
 
-      const activeWatcher = vscode.workspace.createFileSystemWatcher(
+      const activeWatcher = this.createFileSystemWatcher(
         new vscode.RelativePattern(
           vscode.Uri.file(getSharedActiveProfilesDir()),
           '*.json',
@@ -1403,7 +1419,7 @@ export class ProfileManager {
       activeWatcher.onDidDelete(fire)
       disposables.push(activeWatcher)
 
-      const legacyActiveWatcher = vscode.workspace.createFileSystemWatcher(
+      const legacyActiveWatcher = this.createFileSystemWatcher(
         new vscode.RelativePattern(
           vscode.Uri.file(getSharedStoreRoot()),
           SHARED_ACTIVE_PROFILE_FILENAME,
@@ -1414,7 +1430,7 @@ export class ProfileManager {
       legacyActiveWatcher.onDidDelete(fire)
       disposables.push(legacyActiveWatcher)
 
-      const tokenWatcher = vscode.workspace.createFileSystemWatcher(
+      const tokenWatcher = this.createFileSystemWatcher(
         new vscode.RelativePattern(
           vscode.Uri.file(getSharedProfilesDir()),
           '*.json',

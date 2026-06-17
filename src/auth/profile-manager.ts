@@ -1,4 +1,4 @@
-import * as vscode from 'vscode'
+import type * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
 import { randomUUID } from 'crypto'
@@ -128,17 +128,14 @@ interface ProfileManagerDeps {
   workspaceState: vscode.Memento
   secrets: vscode.SecretStorage
   globalStorageUri: vscode.Uri
-  createFileSystemWatcher?: typeof vscode.workspace.createFileSystemWatcher
-  showErrorMessage?: typeof vscode.window.showErrorMessage
-  showInformationMessage?: typeof vscode.window.showInformationMessage
-  showWarningMessage?: typeof vscode.window.showWarningMessage
-  translate?: typeof vscode.l10n.t
-  createDisposable?: (dispose: () => void) => vscode.Disposable
-  uriFile?: (path: string) => vscode.Uri
-  relativePattern?: (
-    base: vscode.Uri,
-    pattern: string,
-  ) => vscode.RelativePattern
+  createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
+  showErrorMessage: typeof vscode.window.showErrorMessage
+  showInformationMessage: typeof vscode.window.showInformationMessage
+  showWarningMessage: typeof vscode.window.showWarningMessage
+  translate: typeof vscode.l10n.t
+  createDisposable: (dispose: () => void) => vscode.Disposable
+  uriFile: (path: string) => vscode.Uri
+  relativePattern: (base: vscode.Uri, pattern: string) => vscode.RelativePattern
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -159,21 +156,14 @@ export class ProfileManager {
     this.workspaceState = deps.workspaceState
     this.secrets = deps.secrets
     this.globalStorageUri = deps.globalStorageUri
-    this.createFileSystemWatcher =
-      deps.createFileSystemWatcher ?? vscode.workspace.createFileSystemWatcher
-    this.showErrorMessage =
-      deps.showErrorMessage ?? vscode.window.showErrorMessage
-    this.showInformationMessage =
-      deps.showInformationMessage ?? vscode.window.showInformationMessage
-    this.showWarningMessage =
-      deps.showWarningMessage ?? vscode.window.showWarningMessage
-    this.translate = deps.translate ?? vscode.l10n.t
-    this.createDisposable =
-      deps.createDisposable ?? ((dispose) => new vscode.Disposable(dispose))
-    this.uriFile = deps.uriFile ?? vscode.Uri.file
-    this.relativePattern =
-      deps.relativePattern ??
-      ((base, pattern) => new vscode.RelativePattern(base, pattern))
+    this.createFileSystemWatcher = deps.createFileSystemWatcher
+    this.showErrorMessage = deps.showErrorMessage
+    this.showInformationMessage = deps.showInformationMessage
+    this.showWarningMessage = deps.showWarningMessage
+    this.translate = deps.translate
+    this.createDisposable = deps.createDisposable
+    this.uriFile = deps.uriFile
+    this.relativePattern = deps.relativePattern
   }
 
   private lastSyncedProfileId: string | undefined

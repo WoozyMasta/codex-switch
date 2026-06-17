@@ -26,6 +26,10 @@ import {
 } from '../utils/auth-identity'
 import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
 import { parseProfilesFile } from '../utils/profiles-file'
+import {
+  findProfileByPreservationIdentity,
+  maybeReplaceProfileAuthWithLive,
+} from '../utils/profile-auth-preservation'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
 import {
@@ -56,10 +60,6 @@ import {
   setActiveProfileIdInState,
 } from '../utils/profile-active-state'
 import {
-  findProfileByPreservationIdentity,
-  maybeReplaceProfileAuthWithLive,
-} from '../utils/profile-auth-preservation'
-import {
   captureLiveAuthForMatchingProfile,
   maybeSyncProfileAuthToCodexAuthFile,
 } from '../utils/profile-live-auth-sync'
@@ -84,6 +84,7 @@ import {
   type ImportProfilesResult,
 } from './profile-transfer-service'
 import { ProfileAuthSyncService } from './profile-auth-sync-service'
+import { ProfileAuthRecoveryService } from './profile-auth-recovery-service'
 
 const PROFILES_FILENAME = 'profiles.json'
 const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
@@ -185,6 +186,25 @@ export class ProfileManager {
       relativePattern: this.relativePattern,
       isRemoteFilesMode: () => this.isRemoteFilesMode(),
     })
+    this.profileAuthRecoveryService = new ProfileAuthRecoveryService({
+      getActiveProfileId: () => this.getActiveProfileId(),
+      getProfile: (profileId) => this.getProfile(profileId),
+      listProfiles: () => this.listProfiles(),
+      loadAuthData: (profileId) => this.loadAuthData(profileId),
+      loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
+      getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
+      replaceProfileAuth: (profileId, authData) =>
+        this.replaceProfileAuth(profileId, authData),
+      deleteProfile: (profileId) => this.deleteProfile(profileId),
+      readRemoteProfileTokens: (profileId) =>
+        this.readRemoteProfileTokens(profileId),
+      writeStoredTokens: (profileId, tokens) =>
+        this.writeStoredTokens(profileId, tokens),
+      isRemoteFilesMode: () => this.isRemoteFilesMode(),
+      showWarningMessage: this.showWarningMessage,
+      showErrorMessage: this.showErrorMessage,
+      translate: this.translate,
+    })
   }
 
   private lastSyncedProfileId: string | undefined
@@ -209,6 +229,7 @@ export class ProfileManager {
   ) => vscode.RelativePattern
   private readonly profileTransferService: ProfileTransferService
   private readonly profileAuthSyncService: ProfileAuthSyncService
+  private readonly profileAuthRecoveryService: ProfileAuthRecoveryService
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = this.getConfiguration('codexSwitch')
@@ -704,99 +725,6 @@ export class ProfileManager {
     })
   }
 
-  private async preserveStoredProfileAuthFromLive(
-    profileId: string,
-  ): Promise<void> {
-    try {
-      const profile = await this.getProfile(profileId)
-      if (!profile) {
-        return
-      }
-
-      const liveAuth = await this.loadLiveCodexAuthData()
-      if (!liveAuth) {
-        return
-      }
-
-      await maybeReplaceProfileAuthWithLive(
-        {
-          loadAuthData: (profileId) => this.loadAuthData(profileId),
-          replaceProfileAuth: (profileId, authData) =>
-            this.replaceProfileAuth(profileId, authData),
-        },
-        profile,
-        liveAuth,
-      )
-    } catch {
-      // Best-effort preservation; switching should continue.
-    }
-  }
-
-  async preserveLiveAuthForMatchingProfile(): Promise<LiveAuthPreservationResult> {
-    const liveAuth = await this.loadLiveCodexAuthData()
-    if (!liveAuth) {
-      return { status: 'noLiveAuth' }
-    }
-
-    const activeId = await this.getActiveProfileId()
-    const matchingProfile = await findProfileByPreservationIdentity(
-      {
-        listProfiles: () => this.listProfiles(),
-        loadAuthData: (profileId) => this.loadAuthData(profileId),
-      },
-      liveAuth,
-      activeId,
-    )
-
-    if (!matchingProfile) {
-      return { status: 'unsaved' }
-    }
-
-    await maybeReplaceProfileAuthWithLive(
-      {
-        loadAuthData: (profileId) => this.loadAuthData(profileId),
-        replaceProfileAuth: (profileId, authData) =>
-          this.replaceProfileAuth(profileId, authData),
-      },
-      matchingProfile,
-      liveAuth,
-    )
-
-    return { status: 'saved' }
-  }
-
-  private async captureLiveAuthForMatchingProfile(
-    authPath: string,
-  ): Promise<void> {
-    await captureLiveAuthForMatchingProfile(
-      {
-        lastSyncedAuthHash: this.lastSyncedAuthHash,
-        readAuthFileHash: (value) => this.readAuthFileHash(value),
-        loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
-        findProfileByPreservationIdentity: (liveAuth, preferredProfileId) =>
-          findProfileByPreservationIdentity(
-            {
-              listProfiles: () => this.listProfiles(),
-              loadAuthData: (profileId) => this.loadAuthData(profileId),
-            },
-            liveAuth,
-            preferredProfileId,
-          ),
-        maybeReplaceProfileAuthWithLive: (profile, liveAuth) =>
-          maybeReplaceProfileAuthWithLive(
-            {
-              loadAuthData: (profileId) => this.loadAuthData(profileId),
-              replaceProfileAuth: (profileId, authData) =>
-                this.replaceProfileAuth(profileId, authData),
-            },
-            profile,
-            liveAuth,
-          ),
-      },
-      authPath,
-    )
-  }
-
   async createProfile(
     name: string,
     authData: AuthData,
@@ -883,6 +811,38 @@ export class ProfileManager {
       }
       return true
     })
+  }
+
+  private async captureLiveAuthForMatchingProfile(
+    authPath: string,
+  ): Promise<void> {
+    await captureLiveAuthForMatchingProfile(
+      {
+        lastSyncedAuthHash: this.lastSyncedAuthHash,
+        readAuthFileHash: (value) => this.readAuthFileHash(value),
+        loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
+        findProfileByPreservationIdentity: (liveAuth, preferredProfileId) =>
+          findProfileByPreservationIdentity(
+            {
+              listProfiles: () => this.listProfiles(),
+              loadAuthData: (profileId) => this.loadAuthData(profileId),
+            },
+            liveAuth,
+            preferredProfileId,
+          ),
+        maybeReplaceProfileAuthWithLive: (profile, liveAuth) =>
+          maybeReplaceProfileAuthWithLive(
+            {
+              loadAuthData: (profileId) => this.loadAuthData(profileId),
+              replaceProfileAuth: (profileId, authData) =>
+                this.replaceProfileAuth(profileId, authData),
+            },
+            profile,
+            liveAuth,
+          ),
+      },
+      authPath,
+    )
   }
 
   async loadAuthData(profileId: string): Promise<AuthData | null> {
@@ -1070,7 +1030,8 @@ export class ProfileManager {
     if (profileId) {
       authData = await this.loadAuthData(profileId)
       if (!authData) {
-        authData = await this.recoverMissingTokens(profileId)
+        authData =
+          await this.profileAuthRecoveryService.recoverMissingTokens(profileId)
         if (!authData) {
           return false
         }
@@ -1102,7 +1063,9 @@ export class ProfileManager {
     }
 
     if (prev && profileId && prev !== profileId) {
-      await this.preserveStoredProfileAuthFromLive(prev)
+      await this.profileAuthRecoveryService.preserveStoredProfileAuthFromLive(
+        prev,
+      )
       await this.setLastProfileId(prev)
     }
 
@@ -1175,6 +1138,10 @@ export class ProfileManager {
 
   async reconcileActiveProfileWithCodexAuthFile(): Promise<void> {
     await this.profileAuthSyncService.reconcileActiveProfileWithCodexAuthFile()
+  }
+
+  async preserveLiveAuthForMatchingProfile(): Promise<LiveAuthPreservationResult> {
+    return this.profileAuthRecoveryService.preserveLiveAuthForMatchingProfile()
   }
 
   async syncActiveProfileToCodexAuthFile(): Promise<void> {

@@ -24,25 +24,14 @@ import {
   buildIdentitySnapshot,
   compareIdentitySnapshots,
 } from '../utils/auth-identity'
-import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
 import { parseProfilesFile } from '../utils/profiles-file'
 import {
   findProfileByPreservationIdentity,
   maybeReplaceProfileAuthWithLive,
 } from '../utils/profile-auth-preservation'
-import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import { resolveStorageMode } from '../utils/storage-mode'
-import {
-  resolveDefaultHomeActiveProfileId,
-  resolveSharedActiveProfile,
-} from '../utils/shared-active-profile'
-import { buildProfileStateKeys } from '../utils/profile-state-keys'
-import {
-  isNonDefaultPerHomeState,
-  shouldMigrateLegacyProfileState,
-} from '../utils/profile-state-policy'
+import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
-import { resolveProfileStateBucket } from '../utils/profile-state-buckets'
 import { withProfilesFileLock } from '../utils/profiles-file-lock'
 import {
   readProfilesFile,
@@ -56,18 +45,9 @@ import {
   writeStoredProfileTokens,
 } from '../utils/profile-token-storage'
 import {
-  resolveActiveProfileId,
-  setActiveProfileIdInState,
-} from '../utils/profile-active-state'
-import {
   captureLiveAuthForMatchingProfile,
   maybeSyncProfileAuthToCodexAuthFile,
 } from '../utils/profile-live-auth-sync'
-import {
-  readLastProfileIdFromState,
-  toggleLastProfileId,
-  writeLastProfileIdToState,
-} from '../utils/profile-last-state'
 import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
 import { buildProfileAuthData } from '../utils/profile-auth-data'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
@@ -85,15 +65,12 @@ import {
 } from './profile-transfer-service'
 import { ProfileAuthSyncService } from './profile-auth-sync-service'
 import { ProfileAuthRecoveryService } from './profile-auth-recovery-service'
+import { ProfileStateService } from './profile-state-service'
 
 const PROFILES_FILENAME = 'profiles.json'
-const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
-const LAST_PROFILE_KEY = 'codexSwitch.lastProfileId'
 const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 
 // Backward compatibility keys (pre-rename).
-const OLD_ACTIVE_PROFILE_KEY = 'codexUsage.activeProfileId'
-const OLD_LAST_PROFILE_KEY = 'codexUsage.lastProfileId'
 interface LiveAuthPreservationResult {
   status: 'noLiveAuth' | 'saved' | 'unsaved'
 }
@@ -158,22 +135,10 @@ export class ProfileManager {
       loadAuthData: (profileId) => this.loadAuthData(profileId),
       loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
       getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
-      setLastProfileId: (profileId) => this.setLastProfileId(profileId),
-      setActiveProfileIdInState: async (profileId) =>
-        setActiveProfileIdInState(
-          {
-            isRemoteFilesMode: this.isRemoteFilesMode(),
-            currentBucket: this.getStateBucket(),
-            keys: {
-              current: this.activeProfileKey(),
-              legacy: OLD_ACTIVE_PROFILE_KEY,
-            },
-            writeSharedActiveProfile: (value) =>
-              this.writeSharedActiveProfile(value),
-            deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
-          },
-          profileId,
-        ),
+      setLastProfileId: (profileId) =>
+        this.profileStateService.setLastProfileId(profileId),
+      setActiveProfileIdInState: (profileId) =>
+        this.profileStateService.setActiveProfileIdInState(profileId),
       syncActiveProfileToCodexAuthFile: () =>
         this.syncActiveProfileToCodexAuthFile(),
       captureLiveAuthForMatchingProfile: (authPath) =>
@@ -205,6 +170,48 @@ export class ProfileManager {
       showErrorMessage: this.showErrorMessage,
       translate: this.translate,
     })
+    this.profileStateService = new ProfileStateService({
+      getActiveCodexHome: () => this.getActiveCodexHome(),
+      getConfiguration: this.getConfiguration,
+      globalState: this.globalState,
+      workspaceState: this.workspaceState,
+      isRemoteFilesMode: () => this.isRemoteFilesMode(),
+      getProfile: (profileId) => this.getProfile(profileId),
+      loadAuthData: (profileId) => this.loadAuthData(profileId),
+      loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
+      inferActiveProfileIdFromAuthFile: () =>
+        this.inferActiveProfileIdFromAuthFile(),
+      recoverMissingTokens: (profileId) =>
+        this.profileAuthRecoveryService.recoverMissingTokens(profileId),
+      preserveStoredProfileAuthFromLive: (profileId) =>
+        this.profileAuthRecoveryService.preserveStoredProfileAuthFromLive(
+          profileId,
+        ),
+      syncProfileAuthToCodexAuthFile: (profileId, authData) =>
+        this.syncProfileAuthToCodexAuthFile(profileId, authData),
+      resetSyncCache: () => {
+        this.lastSyncedProfileId = undefined
+        this.lastSyncedAuthHash = undefined
+      },
+      readSharedActiveProfile: () => this.readSharedActiveProfile()?.profileId,
+      readDefaultHomeSharedActiveProfileId: () =>
+        readJsonFile<SharedActiveProfile>(
+          getSharedActiveProfilePathForHome('default'),
+        )?.profileId,
+      readDefaultHomeSharedLegacyActiveProfileId: () =>
+        readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
+          ?.profileId,
+      writeSharedActiveProfile: (profileId) =>
+        this.writeSharedActiveProfile(profileId),
+      deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+      hasActiveCodexAuthFile: () =>
+        this.fs.existsSync(this.getActiveCodexAuthPath()),
+      deleteActiveCodexAuthFile: () => {
+        if (this.fs.existsSync(this.getActiveCodexAuthPath())) {
+          this.fs.unlinkSync(this.getActiveCodexAuthPath())
+        }
+      },
+    })
   }
 
   private lastSyncedProfileId: string | undefined
@@ -230,6 +237,7 @@ export class ProfileManager {
   private readonly profileTransferService: ProfileTransferService
   private readonly profileAuthSyncService: ProfileAuthSyncService
   private readonly profileAuthRecoveryService: ProfileAuthRecoveryService
+  private readonly profileStateService: ProfileStateService
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = this.getConfiguration('codexSwitch')
@@ -860,280 +868,32 @@ export class ProfileManager {
     return buildProfileAuthData(profile, tokens, extracted)
   }
 
-  private getStateBucket(): vscode.Memento {
-    const newCfg = this.getConfiguration('codexSwitch')
-    const scopeFromNew = newCfg.get<'global' | 'workspace'>(
-      'activeProfileScope',
-    )
-    const scope =
-      scopeFromNew ||
-      this.getConfiguration('codexUsage').get<'global' | 'workspace'>(
-        'activeProfileScope',
-        'global',
-      )
-    return resolveProfileStateBucket(
-      scope,
-      this.globalState,
-      this.workspaceState,
-    )
-  }
-
-  private getLegacyStateBucket(): vscode.Memento {
-    const scope = this.getConfiguration('codexUsage').get<
-      'global' | 'workspace'
-    >('activeProfileScope', 'global')
-    return resolveProfileStateBucket(
-      scope,
-      this.globalState,
-      this.workspaceState,
-    )
-  }
-
-  private activeProfileKey(): string {
-    return buildProfileStateKeys(this.getActiveCodexHome().id).active
-  }
-
-  private lastProfileKey(): string {
-    return buildProfileStateKeys(this.getActiveCodexHome().id).last
-  }
-
-  private shouldMigrateLegacyProfileState(): boolean {
-    return shouldMigrateLegacyProfileState(this.getActiveCodexHome())
-  }
-
-  private shouldInheritDefaultProfileWhenEmpty(): boolean {
-    const cfg = this.getConfiguration('codexSwitch')
-    return cfg.get<boolean>('codexHome.inheritDefaultProfileWhenEmpty', true)
-  }
-
-  private isNonDefaultPerHomeState(): boolean {
-    return isNonDefaultPerHomeState(this.getActiveCodexHome())
-  }
-
-  private isActiveCodexAuthFileMissing(): boolean {
-    return !this.fs.existsSync(this.getActiveCodexAuthPath())
-  }
-
-  private async getDefaultHomeActiveProfileId(): Promise<string | undefined> {
-    return resolveDefaultHomeActiveProfileId(
-      readJsonFile<SharedActiveProfile>(
-        getSharedActiveProfilePathForHome('default'),
-      )?.profileId,
-      readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
-        ?.profileId,
-      this.getStateBucket().get<string>(`${ACTIVE_PROFILE_KEY}.default`),
-      this.getStateBucket().get<string>(ACTIVE_PROFILE_KEY),
-      this.getStateBucket().get<string>(OLD_ACTIVE_PROFILE_KEY),
-      this.getLegacyStateBucket().get<string>(OLD_ACTIVE_PROFILE_KEY),
-      this.isRemoteFilesMode(),
-    )
-  }
-
-  private async inheritDefaultProfileIfCurrentHomeIsEmpty(): Promise<
-    string | undefined
-  > {
-    if (!this.isNonDefaultPerHomeState()) {
-      return undefined
-    }
-    if (!this.shouldInheritDefaultProfileWhenEmpty()) {
-      return undefined
-    }
-    if (!this.isActiveCodexAuthFileMissing()) {
-      return undefined
-    }
-
-    const defaultProfileId = await this.getDefaultHomeActiveProfileId()
-    if (!defaultProfileId) {
-      return undefined
-    }
-    const existing = await this.getProfile(defaultProfileId)
-    if (!existing) {
-      return undefined
-    }
-
-    await setActiveProfileIdInState(
-      {
-        isRemoteFilesMode: this.isRemoteFilesMode(),
-        currentBucket: this.getStateBucket(),
-        keys: {
-          current: this.activeProfileKey(),
-          legacy: OLD_ACTIVE_PROFILE_KEY,
-        },
-        writeSharedActiveProfile: (profileId) =>
-          this.writeSharedActiveProfile(profileId),
-        deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
-      },
-      defaultProfileId,
-    )
-    return defaultProfileId
-  }
-
   async getActiveProfileId(): Promise<string | undefined> {
-    return resolveActiveProfileId({
-      isRemoteFilesMode: this.isRemoteFilesMode(),
-      currentBucket: this.getStateBucket(),
-      legacyBucket: this.getLegacyStateBucket(),
-      keys: {
-        current: this.activeProfileKey(),
-        currentBase: ACTIVE_PROFILE_KEY,
-        legacy: OLD_ACTIVE_PROFILE_KEY,
-      },
-      shouldMigrateLegacyProfileState: this.shouldMigrateLegacyProfileState(),
-      readSharedActiveProfile: () => this.readSharedActiveProfile()?.profileId,
-      writeSharedActiveProfile: (profileId) =>
-        this.writeSharedActiveProfile(profileId),
-      getProfile: (profileId) => this.getProfile(profileId),
-      inferActiveProfileIdFromAuthFile: () =>
-        this.inferActiveProfileIdFromAuthFile(),
-      inheritDefaultProfileIfCurrentHomeIsEmpty: () =>
-        this.inheritDefaultProfileIfCurrentHomeIsEmpty(),
-    })
+    return this.profileStateService.getActiveProfileId()
   }
 
   async prepareForNewLoginChat(): Promise<PrepareForNewLoginChatResult> {
-    const authPath = this.getActiveCodexAuthPath()
-
-    await setActiveProfileIdInState(
-      {
-        isRemoteFilesMode: this.isRemoteFilesMode(),
-        currentBucket: this.getStateBucket(),
-        keys: {
-          current: this.activeProfileKey(),
-          legacy: OLD_ACTIVE_PROFILE_KEY,
-        },
-        writeSharedActiveProfile: (profileId) =>
-          this.writeSharedActiveProfile(profileId),
-        deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
-      },
-      undefined,
-    )
-    this.lastSyncedProfileId = undefined
-    this.lastSyncedAuthHash = undefined
-
-    if (!this.fs.existsSync(authPath)) {
-      return {
-        removedAuthFile: false,
-      }
-    }
-
-    this.fs.unlinkSync(authPath)
-
-    return {
-      removedAuthFile: true,
-    }
+    return this.profileStateService.prepareForNewLoginChat()
   }
 
   async setActiveProfileId(profileId: string | undefined): Promise<boolean> {
-    const prev = await this.getActiveProfileId()
-
-    let authData: AuthData | null = null
-    if (profileId) {
-      authData = await this.loadAuthData(profileId)
-      if (!authData) {
-        authData =
-          await this.profileAuthRecoveryService.recoverMissingTokens(profileId)
-        if (!authData) {
-          return false
-        }
-      }
-    }
-
-    if (prev && profileId && prev === profileId) {
-      if (!authData) {
-        return false
-      }
-      const selectedProfile = await this.getProfile(profileId)
-      const liveAuth = await this.loadLiveCodexAuthData()
-      if (selectedProfile && liveAuth) {
-        if (
-          matchesPreservationIdentityForProfile(
-            selectedProfile,
-            liveAuth,
-            authData,
-          )
-        ) {
-          if (shouldReplaceStoredProfileAuthWithLive(authData, liveAuth)) {
-            await this.replaceProfileAuth(selectedProfile.id, liveAuth)
-          }
-          return true
-        }
-      }
-      this.syncProfileAuthToCodexAuthFile(profileId, authData)
-      return true
-    }
-
-    if (prev && profileId && prev !== profileId) {
-      await this.profileAuthRecoveryService.preserveStoredProfileAuthFromLive(
-        prev,
-      )
-      await this.setLastProfileId(prev)
-    }
-
-    await setActiveProfileIdInState(
-      {
-        isRemoteFilesMode: this.isRemoteFilesMode(),
-        currentBucket: this.getStateBucket(),
-        keys: {
-          current: this.activeProfileKey(),
-          legacy: OLD_ACTIVE_PROFILE_KEY,
-        },
-        writeSharedActiveProfile: (value) =>
-          this.writeSharedActiveProfile(value),
-        deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
-      },
-      profileId,
-    )
-
-    if (profileId && authData) {
-      // We already validated tokens above; avoid a second secret read.
-      this.syncProfileAuthToCodexAuthFile(profileId, authData)
-    }
-    return true
+    return this.profileStateService.setActiveProfileId(profileId)
   }
 
   async syncActiveProfileFromDefaultHome(): Promise<string | undefined> {
-    const defaultProfileId = await this.getDefaultHomeActiveProfileId()
-    if (!defaultProfileId) {
-      return undefined
-    }
-    const ok = await this.setActiveProfileId(defaultProfileId)
-    return ok ? defaultProfileId : undefined
+    return this.profileStateService.syncActiveProfileFromDefaultHome()
   }
 
   async getLastProfileId(): Promise<string | undefined> {
-    return readLastProfileIdFromState(
-      this.getStateBucket(),
-      this.getLegacyStateBucket(),
-      {
-        current: this.lastProfileKey(),
-        currentBase: LAST_PROFILE_KEY,
-        legacy: OLD_LAST_PROFILE_KEY,
-      },
-      this.shouldMigrateLegacyProfileState(),
-    )
+    return this.profileStateService.getLastProfileId()
   }
 
-  private async setLastProfileId(profileId: string | undefined): Promise<void> {
-    await writeLastProfileIdToState(
-      this.getStateBucket(),
-      {
-        current: this.lastProfileKey(),
-        currentBase: LAST_PROFILE_KEY,
-        legacy: OLD_LAST_PROFILE_KEY,
-      },
-      profileId,
-    )
+  async setLastProfileId(profileId: string | undefined): Promise<void> {
+    return this.profileStateService.setLastProfileId(profileId)
   }
 
   async toggleLastProfileId(): Promise<string | undefined> {
-    const active = await this.getActiveProfileId()
-    const last = await this.getLastProfileId()
-    return toggleLastProfileId(
-      active,
-      last,
-      async (profileId) => this.setActiveProfileId(profileId),
-      async (profileId) => this.setLastProfileId(profileId),
-    )
+    return this.profileStateService.toggleLastProfileId()
   }
 
   async reconcileActiveProfileWithCodexAuthFile(): Promise<void> {

@@ -121,13 +121,13 @@ interface PrepareForNewLoginChatResult {
 }
 
 interface ProfileManagerDeps {
-  fs?: typeof fs
-  getConfiguration?: typeof vscode.workspace.getConfiguration
-  remoteName?: string
-  globalState?: vscode.Memento
-  workspaceState?: vscode.Memento
-  secrets?: vscode.SecretStorage
-  globalStorageUri?: vscode.Uri
+  fs: typeof fs
+  getConfiguration: typeof vscode.workspace.getConfiguration
+  remoteName: string | undefined
+  globalState: vscode.Memento
+  workspaceState: vscode.Memento
+  secrets: vscode.SecretStorage
+  globalStorageUri: vscode.Uri
   createFileSystemWatcher?: typeof vscode.workspace.createFileSystemWatcher
   showErrorMessage?: typeof vscode.window.showErrorMessage
   showInformationMessage?: typeof vscode.window.showInformationMessage
@@ -149,18 +149,16 @@ function asObject(value: unknown): Record<string, unknown> | null {
 }
 export class ProfileManager {
   constructor(
-    private context: vscode.ExtensionContext,
     private codexHomeManager: CodexHomeManager,
-    deps: ProfileManagerDeps = {},
+    deps: ProfileManagerDeps,
   ) {
-    this.fs = deps.fs ?? fs
-    this.getConfiguration =
-      deps.getConfiguration ?? vscode.workspace.getConfiguration
-    this.remoteName = deps.remoteName ?? vscode.env.remoteName
-    this.globalState = deps.globalState ?? context.globalState
-    this.workspaceState = deps.workspaceState ?? context.workspaceState
-    this.secrets = deps.secrets ?? context.secrets
-    this.globalStorageUri = deps.globalStorageUri ?? context.globalStorageUri
+    this.fs = deps.fs
+    this.getConfiguration = deps.getConfiguration
+    this.remoteName = deps.remoteName
+    this.globalState = deps.globalState
+    this.workspaceState = deps.workspaceState
+    this.secrets = deps.secrets
+    this.globalStorageUri = deps.globalStorageUri
     this.createFileSystemWatcher =
       deps.createFileSystemWatcher ?? vscode.workspace.createFileSystemWatcher
     this.showErrorMessage =

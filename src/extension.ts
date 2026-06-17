@@ -55,7 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
       .getConfiguration('chatgpt')
       .get<boolean>('runCodexInWindowsSubsystemForLinux', false),
   })
-  profileManager = new ProfileManager(context, codexHomeManager, {
+  profileManager = new ProfileManager(codexHomeManager, {
     fs,
     getConfiguration: vscode.workspace.getConfiguration,
     remoteName: vscode.env.remoteName,

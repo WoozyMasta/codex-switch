@@ -27,7 +27,6 @@ import {
   buildIdentitySnapshot,
   compareIdentitySnapshots,
 } from '../utils/auth-identity'
-import { parseImportEntry } from '../utils/import-entry'
 import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
 import { parseProfilesFile } from '../utils/profiles-file'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
@@ -36,7 +35,6 @@ import {
   resolveDefaultHomeActiveProfileId,
   resolveSharedActiveProfile,
 } from '../utils/shared-active-profile'
-import { asOptionalString } from '../utils/strings'
 import { buildProfileStateKeys } from '../utils/profile-state-keys'
 import {
   isNonDefaultPerHomeState,
@@ -83,6 +81,11 @@ import {
   buildProfileTokensFromAuth,
   type ProfileTokens,
 } from '../utils/profile-records'
+import {
+  ProfileTransferService,
+  type ExportedSettingsV1,
+  type ImportProfilesResult,
+} from './profile-transfer-service'
 
 const PROFILES_FILENAME = 'profiles.json'
 const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
@@ -92,26 +95,6 @@ const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 // Backward compatibility keys (pre-rename).
 const OLD_ACTIVE_PROFILE_KEY = 'codexUsage.activeProfileId'
 const OLD_LAST_PROFILE_KEY = 'codexUsage.lastProfileId'
-interface ExportedProfileEntryV1 {
-  profile: ProfileSummary
-  tokens: ProfileTokens
-}
-
-interface ExportedSettingsV1 {
-  format: 'codex-switch-profile-export'
-  version: 1
-  exportedAt: string
-  activeProfileId?: string
-  lastProfileId?: string
-  profiles: ExportedProfileEntryV1[]
-}
-
-interface ImportProfilesResult {
-  created: number
-  updated: number
-  skipped: number
-}
-
 interface LiveAuthPreservationResult {
   status: 'noLiveAuth' | 'saved' | 'unsaved'
 }
@@ -138,12 +121,6 @@ interface ProfileManagerDeps {
   relativePattern: (base: vscode.Uri, pattern: string) => vscode.RelativePattern
 }
 
-function asObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null
-  }
-  return value as Record<string, unknown>
-}
 export class ProfileManager {
   constructor(
     private codexHomeManager: CodexHomeManager,
@@ -164,6 +141,18 @@ export class ProfileManager {
     this.createDisposable = deps.createDisposable
     this.uriFile = deps.uriFile
     this.relativePattern = deps.relativePattern
+    this.profileTransferService = new ProfileTransferService({
+      listProfiles: () => this.listProfiles(),
+      getActiveProfileId: () => this.getActiveProfileId(),
+      getLastProfileId: () => this.getLastProfileId(),
+      readStoredTokens: (profileId) => this.readStoredTokens(profileId),
+      findDuplicateProfile: (authData) => this.findDuplicateProfile(authData),
+      replaceProfileAuth: (profileId, authData) =>
+        this.replaceProfileAuth(profileId, authData),
+      createProfile: (name, authData) => this.createProfile(name, authData),
+      setActiveProfileId: (profileId) => this.setActiveProfileId(profileId),
+      setLastProfileId: (profileId) => this.setLastProfileId(profileId),
+    })
   }
 
   private lastSyncedProfileId: string | undefined
@@ -186,6 +175,7 @@ export class ProfileManager {
     base: vscode.Uri,
     pattern: string,
   ) => vscode.RelativePattern
+  private readonly profileTransferService: ProfileTransferService
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = this.getConfiguration('codexSwitch')
@@ -548,104 +538,13 @@ export class ProfileManager {
     data: ExportedSettingsV1
     skipped: number
   }> {
-    const profiles = await this.listProfiles()
-    const activeProfileId = await this.getActiveProfileId()
-    const lastProfileId = await this.getLastProfileId()
-
-    const exportedProfiles: ExportedProfileEntryV1[] = []
-    let skipped = 0
-
-    for (const profile of profiles) {
-      const tokens = await this.readStoredTokens(profile.id)
-      if (!tokens) {
-        skipped += 1
-        continue
-      }
-      exportedProfiles.push({ profile, tokens })
-    }
-
-    const data: ExportedSettingsV1 = {
-      format: 'codex-switch-profile-export',
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      activeProfileId,
-      lastProfileId,
-      profiles: exportedProfiles,
-    }
-
-    return { data, skipped }
+    return this.profileTransferService.exportProfilesForTransfer()
   }
 
   async importProfilesFromTransfer(
     value: unknown,
   ): Promise<ImportProfilesResult> {
-    const payload = asObject(value)
-    if (!payload) {
-      throw new Error('Invalid settings file format.')
-    }
-
-    const format = asOptionalString(payload.format)
-    if (format !== 'codex-switch-profile-export') {
-      throw new Error('Unsupported settings file format.')
-    }
-
-    if (payload.version !== 1) {
-      throw new Error('Unsupported settings export version.')
-    }
-
-    if (!Array.isArray(payload.profiles)) {
-      throw new Error('Invalid settings file: profiles must be an array.')
-    }
-
-    const sourceToTargetId = new Map<string, string>()
-    let created = 0
-    let updated = 0
-    let skipped = 0
-
-    for (const rawEntry of payload.profiles) {
-      const parsed = parseImportEntry(rawEntry)
-      if (!parsed) {
-        skipped += 1
-        continue
-      }
-
-      const duplicate = await this.findDuplicateProfile(parsed.authData)
-      if (duplicate) {
-        await this.replaceProfileAuth(duplicate.id, parsed.authData)
-        if (parsed.sourceProfileId) {
-          sourceToTargetId.set(parsed.sourceProfileId, duplicate.id)
-        }
-        updated += 1
-        continue
-      }
-
-      const createdProfile = await this.createProfile(
-        parsed.name,
-        parsed.authData,
-      )
-      if (parsed.sourceProfileId) {
-        sourceToTargetId.set(parsed.sourceProfileId, createdProfile.id)
-      }
-      created += 1
-    }
-
-    const importedActiveProfileId = asOptionalString(payload.activeProfileId)
-    if (importedActiveProfileId) {
-      const targetId = sourceToTargetId.get(importedActiveProfileId)
-      if (targetId) {
-        await this.setActiveProfileId(targetId)
-      }
-    }
-
-    const importedLastProfileId = asOptionalString(payload.lastProfileId)
-    if (importedLastProfileId) {
-      const targetId = sourceToTargetId.get(importedLastProfileId)
-      if (targetId) {
-        await this.setLastProfileId(targetId)
-      }
-    }
-
-    return { created, updated, skipped }
+    return this.profileTransferService.importProfilesFromTransfer(value)
   }
 
   private async inferActiveProfileIdFromAuthFile(): Promise<

@@ -3,6 +3,10 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { randomUUID } from 'crypto'
 import { AuthData, ProfileSummary, ResolvedCodexHome } from '../types'
+import {
+  extractAuthDataFromAuthJson,
+  loadAuthDataFromFile,
+} from './auth-manager'
 import { parseProfilesFile } from '../utils/profiles-file'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
 import {
@@ -34,7 +38,9 @@ import {
   buildProfileTokensFromAuth,
   type ProfileTokens,
 } from '../utils/profile-records'
+import { buildProfileAuthData } from '../utils/profile-auth-data'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
+import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
 import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 
 const PROFILES_FILENAME = 'profiles.json'
@@ -42,7 +48,6 @@ const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 
 interface ProfileStorageServiceDeps {
   fs: typeof fs
-  getConfiguration: typeof vscode.workspace.getConfiguration
   globalState: vscode.Memento
   workspaceState: vscode.Memento
   secrets: vscode.SecretStorage
@@ -359,6 +364,33 @@ export class ProfileStorageService {
   ): Promise<ProfileSummary | undefined> {
     const file = await readProfilesFile(this.profilesFileStorageDeps())
     return file.profiles.find((p) => this.matchesAuth(p, authData))
+  }
+
+  async inferActiveProfileIdFromAuthFile(
+    authPath: string,
+  ): Promise<string | undefined> {
+    const authData = await loadAuthDataFromFile(authPath)
+    if (!authData) {
+      return undefined
+    }
+
+    const profiles = await this.listProfiles()
+    return findMatchingProfileIdForAuth(profiles, authData)
+  }
+
+  async loadAuthData(profileId: string): Promise<AuthData | null> {
+    const profile = await this.getProfile(profileId)
+    if (!profile) {
+      return null
+    }
+
+    const tokens = await this.readStoredTokens(profileId)
+    if (!tokens) {
+      return null
+    }
+
+    const extracted = extractAuthDataFromAuthJson(tokens.authJson)
+    return buildProfileAuthData(profile, tokens, extracted)
   }
 
   private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {

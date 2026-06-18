@@ -1,10 +1,7 @@
 import type * as vscode from 'vscode'
 import * as fs from 'fs'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
-import {
-  extractAuthDataFromAuthJson,
-  loadAuthDataFromFile,
-} from './auth-manager'
+import { loadAuthDataFromFile } from './auth-manager'
 import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import {
@@ -20,8 +17,6 @@ import {
   captureLiveAuthForMatchingProfile,
   maybeSyncProfileAuthToCodexAuthFile,
 } from '../utils/profile-live-auth-sync'
-import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
-import { buildProfileAuthData } from '../utils/profile-auth-data'
 import { sha256Text } from '../utils/text-hash'
 import {
   ProfileTransferService,
@@ -81,7 +76,6 @@ export class ProfileManager {
     this.relativePattern = deps.relativePattern
     this.profileStorageService = new ProfileStorageService({
       fs: this.fs,
-      getConfiguration: this.getConfiguration,
       globalState: this.globalState,
       workspaceState: this.workspaceState,
       secrets: this.secrets,
@@ -156,7 +150,9 @@ export class ProfileManager {
       loadAuthData: (profileId) => this.loadAuthData(profileId),
       loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
       inferActiveProfileIdFromAuthFile: () =>
-        this.inferActiveProfileIdFromAuthFile(),
+        this.profileStorageService.inferActiveProfileIdFromAuthFile(
+          this.getActiveCodexAuthPath(),
+        ),
       recoverMissingTokens: (profileId) =>
         this.profileAuthRecoveryService.recoverMissingTokens(profileId),
       preserveStoredProfileAuthFromLive: (profileId) =>
@@ -299,18 +295,6 @@ export class ProfileManager {
     return this.profileTransferService.importProfilesFromTransfer(value)
   }
 
-  private async inferActiveProfileIdFromAuthFile(): Promise<
-    string | undefined
-  > {
-    const authData = await loadAuthDataFromFile(this.getActiveCodexAuthPath())
-    if (!authData) {
-      return undefined
-    }
-
-    const profiles = await this.profileStorageService.listProfiles()
-    return findMatchingProfileIdForAuth(profiles, authData)
-  }
-
   async findDuplicateProfile(
     authData: AuthData,
   ): Promise<ProfileSummary | undefined> {
@@ -372,18 +356,7 @@ export class ProfileManager {
   }
 
   async loadAuthData(profileId: string): Promise<AuthData | null> {
-    const profile = await this.getProfile(profileId)
-    if (!profile) {
-      return null
-    }
-
-    const tokens = await this.profileStorageService.readStoredTokens(profileId)
-    if (!tokens) {
-      return null
-    }
-
-    const extracted = extractAuthDataFromAuthJson(tokens.authJson)
-    return buildProfileAuthData(profile, tokens, extracted)
+    return this.profileStorageService.loadAuthData(profileId)
   }
 
   async getActiveProfileId(): Promise<string | undefined> {

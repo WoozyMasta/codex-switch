@@ -1,56 +1,28 @@
 import type * as vscode from 'vscode'
 import * as fs from 'fs'
-import * as path from 'path'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import {
   extractAuthDataFromAuthJson,
   loadAuthDataFromFile,
 } from './auth-manager'
 import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
-import {
-  SharedActiveProfile,
-  deleteFileIfExists,
-  ensureSharedStoreDirs,
-  getSharedActiveProfilePath,
-  getSharedActiveProfilePathForHome,
-  getSharedProfileSecretsPath,
-  getSharedStoreRoot,
-  readJsonFile,
-  writeJsonFile,
-} from './shared-profile-store'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import {
   buildIdentitySnapshot,
   compareIdentitySnapshots,
 } from '../utils/auth-identity'
-import { parseProfilesFile } from '../utils/profiles-file'
 import {
   findProfileByPreservationIdentity,
   maybeReplaceProfileAuthWithLive,
 } from '../utils/profile-auth-preservation'
 import { resolveStorageMode } from '../utils/storage-mode'
-import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
-import { resolveProfilesPath } from '../utils/profile-storage-paths'
-import {
-  readProfilesFile,
-  writeProfilesFile,
-} from '../utils/profile-files-storage'
-import type { ProfilesFileV1 } from '../utils/profiles-file'
-import {
-  deleteStoredProfileTokens,
-  readStoredProfileTokens,
-  writeStoredProfileTokens,
-} from '../utils/profile-token-storage'
 import {
   captureLiveAuthForMatchingProfile,
   maybeSyncProfileAuthToCodexAuthFile,
 } from '../utils/profile-live-auth-sync'
 import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
 import { buildProfileAuthData } from '../utils/profile-auth-data'
-import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
-import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 import { sha256Text } from '../utils/text-hash'
-import { type ProfileTokens } from '../utils/profile-records'
 import {
   ProfileTransferService,
   type ExportedSettingsV1,
@@ -60,9 +32,6 @@ import { ProfileAuthSyncService } from './profile-auth-sync-service'
 import { ProfileAuthRecoveryService } from './profile-auth-recovery-service'
 import { ProfileStateService } from './profile-state-service'
 import { ProfileStorageService } from './profile-storage-service'
-
-const PROFILES_FILENAME = 'profiles.json'
-const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 
 // Backward compatibility keys (pre-rename).
 interface LiveAuthPreservationResult {
@@ -200,17 +169,16 @@ export class ProfileManager {
         this.lastSyncedProfileId = undefined
         this.lastSyncedAuthHash = undefined
       },
-      readSharedActiveProfile: () => this.readSharedActiveProfile()?.profileId,
+      readSharedActiveProfile: () =>
+        this.profileStorageService.readSharedActiveProfile()?.profileId,
       readDefaultHomeSharedActiveProfileId: () =>
-        readJsonFile<SharedActiveProfile>(
-          getSharedActiveProfilePathForHome('default'),
-        )?.profileId,
+        this.profileStorageService.readDefaultHomeSharedActiveProfileId(),
       readDefaultHomeSharedLegacyActiveProfileId: () =>
-        readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
-          ?.profileId,
+        this.profileStorageService.readDefaultHomeSharedLegacyActiveProfileId(),
       writeSharedActiveProfile: (profileId) =>
-        this.writeSharedActiveProfile(profileId),
-      deleteSharedActiveProfile: () => this.deleteSharedActiveProfile(),
+        this.profileStorageService.writeSharedActiveProfile(profileId),
+      deleteSharedActiveProfile: () =>
+        this.profileStorageService.deleteSharedActiveProfile(),
       hasActiveCodexAuthFile: () =>
         this.fs.existsSync(this.getActiveCodexAuthPath()),
       deleteActiveCodexAuthFile: () => {
@@ -310,288 +278,6 @@ export class ProfileManager {
     this.lastSyncedAuthHash = sha256Text(content)
   }
 
-  private getStorageDir(): string {
-    if (this.isRemoteFilesMode()) {
-      return getSharedStoreRoot()
-    }
-    return this.globalStorageUri.fsPath
-  }
-
-  private getProfilesPath(): string {
-    return resolveProfilesPath(this.isRemoteFilesMode(), this.getStorageDir())
-  }
-
-  private profilesFileStorageDeps(): {
-    ensureStorageDir: () => void
-    getProfilesPath: () => string
-    writeJsonFile: (path: string, data: ProfilesFileV1) => void
-    showReadErrorMessage: (path: string) => void
-    showWriteErrorMessage: (path: string) => void
-  } {
-    return {
-      ensureStorageDir: () => this.ensureStorageDir(),
-      getProfilesPath: () => this.getProfilesPath(),
-      writeJsonFile: (path: string, data: ProfilesFileV1) =>
-        writeJsonFile(path, data),
-      showReadErrorMessage: (path: string) =>
-        void this.showErrorMessage(
-          this.translate(
-            'Profile storage at {0} is corrupted and was not loaded.',
-            path,
-          ),
-        ),
-      showWriteErrorMessage: (path: string) =>
-        void this.showErrorMessage(
-          this.translate(
-            'Profile storage at {0} is corrupted and cannot be modified.',
-            path,
-          ),
-        ),
-    }
-  }
-
-  private ensureStorageDir() {
-    if (this.isRemoteFilesMode()) {
-      ensureSharedStoreDirs()
-      return
-    }
-
-    const dir = this.getStorageDir()
-    if (!this.fs.existsSync(dir)) {
-      this.fs.mkdirSync(dir, { recursive: true })
-    }
-  }
-
-  private readSharedActiveProfile(): SharedActiveProfile | null {
-    if (!this.isRemoteFilesMode()) {
-      return null
-    }
-    const home = this.getActiveCodexHome()
-    return resolveSharedActiveProfile(
-      readJsonFile<SharedActiveProfile>(
-        getSharedActiveProfilePathForHome(home.id),
-      ),
-      readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath()),
-      home.isDefault,
-    )
-  }
-
-  private writeSharedActiveProfile(profileId: string): void {
-    if (!this.isRemoteFilesMode()) {
-      return
-    }
-    writeJsonFile(
-      getSharedActiveProfilePathForHome(this.getActiveCodexHome().id),
-      {
-        profileId,
-        updatedAt: new Date().toISOString(),
-      } satisfies SharedActiveProfile,
-    )
-  }
-
-  private deleteSharedActiveProfile(): void {
-    if (!this.isRemoteFilesMode()) {
-      return
-    }
-    deleteFileIfExists(
-      getSharedActiveProfilePathForHome(this.getActiveCodexHome().id),
-    )
-  }
-
-  private readRemoteProfileTokens(profileId: string): ProfileTokens | null {
-    return readJsonFile<ProfileTokens>(getSharedProfileSecretsPath(profileId))
-  }
-
-  private async readStoredTokens(
-    profileId: string,
-  ): Promise<ProfileTokens | null> {
-    return readStoredProfileTokens(
-      {
-        isRemoteFilesMode: this.isRemoteFilesMode(),
-        readRemoteProfileTokens: (value) => this.readRemoteProfileTokens(value),
-        writeRemoteProfileTokens: (value, tokens) =>
-          this.writeRemoteProfileTokens(value, tokens),
-        deleteRemoteProfileTokens: (value) =>
-          this.deleteRemoteProfileTokens(value),
-        readLocalStoredTokens: (value) => this.readLocalStoredTokens(value),
-        writeLocalStoredTokens: (value, tokens) =>
-          this.writeLocalStoredTokens(value, tokens),
-        deleteLocalStoredTokens: (value) => this.deleteLocalStoredTokens(value),
-      },
-      profileId,
-    )
-  }
-
-  private async writeStoredTokens(
-    profileId: string,
-    tokens: ProfileTokens,
-  ): Promise<void> {
-    await writeStoredProfileTokens(
-      {
-        isRemoteFilesMode: this.isRemoteFilesMode(),
-        readRemoteProfileTokens: (value) => this.readRemoteProfileTokens(value),
-        writeRemoteProfileTokens: (value, storedTokens) =>
-          this.writeRemoteProfileTokens(value, storedTokens),
-        deleteRemoteProfileTokens: (value) =>
-          this.deleteRemoteProfileTokens(value),
-        readLocalStoredTokens: (value) => this.readLocalStoredTokens(value),
-        writeLocalStoredTokens: (value, storedTokens) =>
-          this.writeLocalStoredTokens(value, storedTokens),
-        deleteLocalStoredTokens: (value) => this.deleteLocalStoredTokens(value),
-      },
-      profileId,
-      tokens,
-    )
-  }
-
-  private async deleteStoredTokens(profileId: string): Promise<void> {
-    await deleteStoredProfileTokens(
-      {
-        isRemoteFilesMode: this.isRemoteFilesMode(),
-        readRemoteProfileTokens: (value) => this.readRemoteProfileTokens(value),
-        writeRemoteProfileTokens: (value, storedTokens) =>
-          this.writeRemoteProfileTokens(value, storedTokens),
-        deleteRemoteProfileTokens: (value) =>
-          this.deleteRemoteProfileTokens(value),
-        readLocalStoredTokens: (value) => this.readLocalStoredTokens(value),
-        writeLocalStoredTokens: (value, storedTokens) =>
-          this.writeLocalStoredTokens(value, storedTokens),
-        deleteLocalStoredTokens: (value) => this.deleteLocalStoredTokens(value),
-      },
-      profileId,
-    )
-  }
-
-  private writeRemoteProfileTokens(
-    profileId: string,
-    tokens: ProfileTokens,
-  ): void {
-    ensureSharedStoreDirs()
-    writeJsonFile(getSharedProfileSecretsPath(profileId), tokens)
-  }
-
-  private deleteRemoteProfileTokens(profileId: string): void {
-    deleteFileIfExists(getSharedProfileSecretsPath(profileId))
-  }
-
-  private async readLocalStoredTokens(
-    profileId: string,
-  ): Promise<ProfileTokens | null> {
-    const keys = buildProfileSecretKeys(profileId)
-    const raw =
-      (await this.secrets.get(keys.current)) ||
-      (await this.secrets.get(keys.legacy))
-    if (!raw) {
-      return null
-    }
-
-    try {
-      return JSON.parse(raw) as ProfileTokens
-    } catch {
-      return null
-    }
-  }
-
-  private async writeLocalStoredTokens(
-    profileId: string,
-    tokens: ProfileTokens,
-  ): Promise<void> {
-    const keys = buildProfileSecretKeys(profileId)
-    await this.secrets.store(keys.current, JSON.stringify(tokens))
-  }
-
-  private async deleteLocalStoredTokens(profileId: string): Promise<void> {
-    const keys = buildProfileSecretKeys(profileId)
-    await this.secrets.delete(keys.current)
-    await this.secrets.delete(keys.legacy)
-  }
-
-  private getGlobalStorageRoot(): string {
-    // .../User/globalStorage/<publisher.name> -> .../User/globalStorage
-    return path.dirname(this.globalStorageUri.fsPath)
-  }
-
-  private async tryMigrateLegacyProfilesOnce(): Promise<void> {
-    if (this.globalState.get<boolean>(MIGRATED_LEGACY_KEY)) {
-      return
-    }
-
-    const current = await readProfilesFile(this.profilesFileStorageDeps())
-    if (current.profiles.length > 0) {
-      await this.globalState.update(MIGRATED_LEGACY_KEY, true)
-      return
-    }
-
-    const root = this.getGlobalStorageRoot()
-    if (!this.fs.existsSync(root)) {
-      await this.globalState.update(MIGRATED_LEGACY_KEY, true)
-      return
-    }
-
-    const currentDirName = path.basename(this.getStorageDir())
-    const candidates: string[] = []
-
-    try {
-      const entries = this.fs.readdirSync(root, { withFileTypes: true })
-      for (const e of entries) {
-        if (!e.isDirectory()) {
-          continue
-        }
-        const name = e.name
-        if (name === currentDirName) {
-          continue
-        }
-        if (!name.endsWith('.codex-switch') && !name.endsWith('.codex-stats')) {
-          continue
-        }
-        candidates.push(name)
-      }
-    } catch {
-      await this.globalState.update(MIGRATED_LEGACY_KEY, true)
-      return
-    }
-
-    // Prefer older ids we used during development.
-    candidates.splice(
-      0,
-      candidates.length,
-      ...sortLegacyProfileMigrationCandidates(candidates),
-    )
-
-    for (const dirName of candidates) {
-      const legacyProfilesPath = path.join(root, dirName, PROFILES_FILENAME)
-      if (!this.fs.existsSync(legacyProfilesPath)) {
-        continue
-      }
-
-      try {
-        const raw = this.fs.readFileSync(legacyProfilesPath, 'utf8')
-        const legacy = parseProfilesFile(raw)
-        if (!legacy || legacy.profiles.length === 0) {
-          continue
-        }
-
-        // Only migrate the profile list. Tokens are stored in SecretStorage and cannot be
-        // read across extension ids.
-        writeProfilesFile(this.profilesFileStorageDeps(), {
-          version: 1,
-          profiles: legacy.profiles,
-        })
-
-        void this.showInformationMessage(
-          this.translate(
-            'Found profiles from a previous install. Please re-import auth.json for each profile to restore tokens.',
-          ),
-        )
-        break
-      } catch {
-        // keep trying other candidates
-      }
-    }
-
-    await this.globalState.update(MIGRATED_LEGACY_KEY, true)
-  }
-
   async listProfiles(): Promise<ProfileSummary[]> {
     return this.profileStorageService.listProfiles()
   }
@@ -621,8 +307,8 @@ export class ProfileManager {
       return undefined
     }
 
-    const file = await readProfilesFile(this.profilesFileStorageDeps())
-    return findMatchingProfileIdForAuth(file.profiles, authData)
+    const profiles = await this.profileStorageService.listProfiles()
+    return findMatchingProfileIdForAuth(profiles, authData)
   }
 
   async findDuplicateProfile(
@@ -691,7 +377,7 @@ export class ProfileManager {
       return null
     }
 
-    const tokens = await this.readStoredTokens(profileId)
+    const tokens = await this.profileStorageService.readStoredTokens(profileId)
     if (!tokens) {
       return null
     }

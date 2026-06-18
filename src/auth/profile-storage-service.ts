@@ -125,6 +125,17 @@ export class ProfileStorageService {
     )
   }
 
+  readDefaultHomeSharedActiveProfileId(): string | undefined {
+    return readJsonFile<SharedActiveProfile>(
+      getSharedActiveProfilePathForHome('default'),
+    )?.profileId
+  }
+
+  readDefaultHomeSharedLegacyActiveProfileId(): string | undefined {
+    return readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
+      ?.profileId
+  }
+
   writeSharedActiveProfile(profileId: string): void {
     if (!this.deps.isRemoteFilesMode()) {
       return

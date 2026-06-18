@@ -1,7 +1,6 @@
 import type * as vscode from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
-import { randomUUID } from 'crypto'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import {
   extractAuthDataFromAuthJson,
@@ -32,10 +31,8 @@ import {
 import { resolveStorageMode } from '../utils/storage-mode'
 import { resolveSharedActiveProfile } from '../utils/shared-active-profile'
 import { resolveProfilesPath } from '../utils/profile-storage-paths'
-import { withProfilesFileLock } from '../utils/profiles-file-lock'
 import {
   readProfilesFile,
-  requireWritableProfilesFile,
   writeProfilesFile,
 } from '../utils/profile-files-storage'
 import type { ProfilesFileV1 } from '../utils/profiles-file'
@@ -53,11 +50,7 @@ import { buildProfileAuthData } from '../utils/profile-auth-data'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
 import { sha256Text } from '../utils/text-hash'
-import {
-  buildProfileSummaryFromAuth,
-  buildProfileTokensFromAuth,
-  type ProfileTokens,
-} from '../utils/profile-records'
+import { type ProfileTokens } from '../utils/profile-records'
 import {
   ProfileTransferService,
   type ExportedSettingsV1,
@@ -66,6 +59,7 @@ import {
 import { ProfileAuthSyncService } from './profile-auth-sync-service'
 import { ProfileAuthRecoveryService } from './profile-auth-recovery-service'
 import { ProfileStateService } from './profile-state-service'
+import { ProfileStorageService } from './profile-storage-service'
 
 const PROFILES_FILENAME = 'profiles.json'
 const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
@@ -116,11 +110,25 @@ export class ProfileManager {
     this.createDisposable = deps.createDisposable
     this.uriFile = deps.uriFile
     this.relativePattern = deps.relativePattern
+    this.profileStorageService = new ProfileStorageService({
+      fs: this.fs,
+      getConfiguration: this.getConfiguration,
+      globalState: this.globalState,
+      workspaceState: this.workspaceState,
+      secrets: this.secrets,
+      globalStorageUri: this.globalStorageUri,
+      isRemoteFilesMode: () => this.isRemoteFilesMode(),
+      getActiveCodexHome: () => this.getActiveCodexHome(),
+      showErrorMessage: this.showErrorMessage,
+      showInformationMessage: this.showInformationMessage,
+      translate: this.translate,
+    })
     this.profileTransferService = new ProfileTransferService({
-      listProfiles: () => this.listProfiles(),
+      listProfiles: () => this.profileStorageService.listProfiles(),
       getActiveProfileId: () => this.getActiveProfileId(),
       getLastProfileId: () => this.getLastProfileId(),
-      readStoredTokens: (profileId) => this.readStoredTokens(profileId),
+      readStoredTokens: (profileId) =>
+        this.profileStorageService.readStoredTokens(profileId),
       findDuplicateProfile: (authData) => this.findDuplicateProfile(authData),
       replaceProfileAuth: (profileId, authData) =>
         this.replaceProfileAuth(profileId, authData),
@@ -142,7 +150,7 @@ export class ProfileManager {
         this.syncActiveProfileToCodexAuthFile(),
       captureLiveAuthForMatchingProfile: (authPath) =>
         this.captureLiveAuthForMatchingProfile(authPath),
-      listProfiles: () => this.listProfiles(),
+      listProfiles: () => this.profileStorageService.listProfiles(),
       replaceProfileAuth: (profileId, authData) =>
         this.replaceProfileAuth(profileId, authData),
       createFileSystemWatcher: this.createFileSystemWatcher,
@@ -153,7 +161,7 @@ export class ProfileManager {
     this.profileAuthRecoveryService = new ProfileAuthRecoveryService({
       getActiveProfileId: () => this.getActiveProfileId(),
       getProfile: (profileId) => this.getProfile(profileId),
-      listProfiles: () => this.listProfiles(),
+      listProfiles: () => this.profileStorageService.listProfiles(),
       loadAuthData: (profileId) => this.loadAuthData(profileId),
       loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
       getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
@@ -161,9 +169,9 @@ export class ProfileManager {
         this.replaceProfileAuth(profileId, authData),
       deleteProfile: (profileId) => this.deleteProfile(profileId),
       readRemoteProfileTokens: (profileId) =>
-        this.readRemoteProfileTokens(profileId),
+        this.profileStorageService.readRemoteProfileTokens(profileId),
       writeStoredTokens: (profileId, tokens) =>
-        this.writeStoredTokens(profileId, tokens),
+        this.profileStorageService.writeStoredTokens(profileId, tokens),
       isRemoteFilesMode: () => this.isRemoteFilesMode(),
       showWarningMessage: deps.showWarningMessage,
       showErrorMessage: this.showErrorMessage,
@@ -232,6 +240,7 @@ export class ProfileManager {
     base: vscode.Uri,
     pattern: string,
   ) => vscode.RelativePattern
+  private readonly profileStorageService: ProfileStorageService
   private readonly profileTransferService: ProfileTransferService
   private readonly profileAuthSyncService: ProfileAuthSyncService
   private readonly profileAuthRecoveryService: ProfileAuthRecoveryService
@@ -584,14 +593,11 @@ export class ProfileManager {
   }
 
   async listProfiles(): Promise<ProfileSummary[]> {
-    await this.tryMigrateLegacyProfilesOnce()
-    const file = await readProfilesFile(this.profilesFileStorageDeps())
-    return [...file.profiles].sort((a, b) => a.name.localeCompare(b.name))
+    return this.profileStorageService.listProfiles()
   }
 
   async getProfile(profileId: string): Promise<ProfileSummary | undefined> {
-    const profiles = await this.listProfiles()
-    return profiles.find((p) => p.id === profileId)
+    return this.profileStorageService.getProfile(profileId)
   }
 
   async exportProfilesForTransfer(): Promise<{
@@ -622,148 +628,29 @@ export class ProfileManager {
   async findDuplicateProfile(
     authData: AuthData,
   ): Promise<ProfileSummary | undefined> {
-    const file = await readProfilesFile(this.profilesFileStorageDeps())
-    return file.profiles.find((p) => this.matchesAuth(p, authData))
+    return this.profileStorageService.findDuplicateProfile(authData)
   }
 
   async replaceProfileAuth(
     profileId: string,
     authData: AuthData,
   ): Promise<boolean> {
-    const previousTokens = await this.readStoredTokens(profileId)
-    const tokens = buildProfileTokensFromAuth(authData)
-
-    return withProfilesFileLock(this.getProfilesPath(), async () => {
-      const file = await requireWritableProfilesFile(
-        this.profilesFileStorageDeps(),
-      )
-      if (!file) {
-        return false
-      }
-      const idx = file.profiles.findIndex((p) => p.id === profileId)
-      if (idx === -1) {
-        return false
-      }
-
-      await this.writeStoredTokens(profileId, tokens)
-
-      file.profiles[idx] = {
-        ...file.profiles[idx],
-        email: authData.email,
-        planType: authData.planType,
-        accountId: authData.accountId,
-        defaultOrganizationId: authData.defaultOrganizationId,
-        defaultOrganizationTitle: authData.defaultOrganizationTitle,
-        chatgptUserId: authData.chatgptUserId,
-        userId: authData.userId,
-        subject: authData.subject,
-        updatedAt: new Date().toISOString(),
-      }
-
-      try {
-        writeProfilesFile(this.profilesFileStorageDeps(), file)
-        return true
-      } catch (error) {
-        try {
-          if (previousTokens) {
-            await this.writeStoredTokens(profileId, previousTokens)
-          } else {
-            await this.deleteStoredTokens(profileId)
-          }
-        } catch {
-          // Best-effort rollback.
-        }
-        throw error
-      }
-    })
+    return this.profileStorageService.replaceProfileAuth(profileId, authData)
   }
 
   async createProfile(
     name: string,
     authData: AuthData,
   ): Promise<ProfileSummary> {
-    const now = new Date().toISOString()
-    const id = randomUUID()
-
-    const profile = buildProfileSummaryFromAuth(id, name, authData, now)
-    const tokens = buildProfileTokensFromAuth(authData)
-
-    await withProfilesFileLock(this.getProfilesPath(), async () => {
-      const file = await requireWritableProfilesFile(
-        this.profilesFileStorageDeps(),
-      )
-      if (!file) {
-        throw new Error('Profile storage is corrupted and cannot be modified.')
-      }
-
-      await this.writeStoredTokens(id, tokens)
-
-      file.profiles.push(profile)
-      try {
-        writeProfilesFile(this.profilesFileStorageDeps(), file)
-      } catch (error) {
-        try {
-          await this.deleteStoredTokens(id)
-        } catch {
-          // Best-effort rollback.
-        }
-        throw error
-      }
-    })
-
-    return profile
+    return this.profileStorageService.createProfile(name, authData)
   }
 
   async renameProfile(profileId: string, newName: string): Promise<boolean> {
-    return withProfilesFileLock(this.getProfilesPath(), async () => {
-      const file = await requireWritableProfilesFile(
-        this.profilesFileStorageDeps(),
-      )
-      if (!file) {
-        return false
-      }
-      const idx = file.profiles.findIndex((p) => p.id === profileId)
-      if (idx === -1) {
-        return false
-      }
-      file.profiles[idx] = {
-        ...file.profiles[idx],
-        name: newName,
-        updatedAt: new Date().toISOString(),
-      }
-      writeProfilesFile(this.profilesFileStorageDeps(), file)
-      return true
-    })
+    return this.profileStorageService.renameProfile(profileId, newName)
   }
 
   async deleteProfile(profileId: string): Promise<boolean> {
-    return withProfilesFileLock(this.getProfilesPath(), async () => {
-      const file = await requireWritableProfilesFile(
-        this.profilesFileStorageDeps(),
-      )
-      if (!file) {
-        return false
-      }
-      const before = file.profiles.length
-      file.profiles = file.profiles.filter((p) => p.id !== profileId)
-      if (file.profiles.length === before) {
-        return false
-      }
-      writeProfilesFile(this.profilesFileStorageDeps(), file)
-
-      await this.deleteStoredTokens(profileId)
-
-      // Clean up active/last if they point to deleted profile.
-      const active = await this.getActiveProfileId()
-      const last = await this.getLastProfileId()
-      if (active === profileId) {
-        await this.setActiveProfileId(undefined)
-      }
-      if (last === profileId) {
-        await this.setLastProfileId(undefined)
-      }
-      return true
-    })
+    return this.profileStorageService.deleteProfile(profileId)
   }
 
   private async captureLiveAuthForMatchingProfile(

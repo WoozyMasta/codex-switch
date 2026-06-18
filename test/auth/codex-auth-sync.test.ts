@@ -252,3 +252,42 @@ test('syncCodexAuthFile falls back to copy when rename fails', () => {
     fs.renameSync = originalRenameSync
   }
 })
+
+test('syncCodexAuthFile skips temp cleanup when the temp file is already gone', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-auth-sync-'))
+  const authPath = path.join(dir, 'auth.json')
+  const originalRenameSync = fs.renameSync
+  const originalExistsSync = fs.existsSync
+  const originalUnlinkSync = fs.unlinkSync
+
+  fs.renameSync = (() => {
+    throw new Error('rename failed')
+  }) as typeof fs.renameSync
+  fs.existsSync = ((filePath: fs.PathLike) => {
+    return String(filePath).includes('.tmp.')
+      ? false
+      : originalExistsSync(filePath)
+  }) as typeof fs.existsSync
+
+  try {
+    syncCodexAuthFile(authPath, baseAuthData, {
+      now: () => 1234567892,
+    })
+    assert.equal(
+      fs.readFileSync(authPath, 'utf8'),
+      buildCodexAuthJson(baseAuthData),
+    )
+    const tempFiles = fs
+      .readdirSync(dir)
+      .filter((entry) => entry.includes('.tmp.'))
+    assert.equal(tempFiles.length, 1)
+  } finally {
+    fs.renameSync = originalRenameSync
+    fs.existsSync = originalExistsSync
+    for (const entry of fs.readdirSync(dir)) {
+      if (entry.includes('.tmp.')) {
+        originalUnlinkSync(path.join(dir, entry))
+      }
+    }
+  }
+})

@@ -16,6 +16,8 @@ const args = ['--test']
 if (coverageEnabled) {
   args.push(
     '--experimental-test-coverage',
+    '--test-coverage-include=**/out-test/src/**/*.js',
+    '--test-coverage-exclude=**/out-test/src/auth/codex-auth-sync.js',
     '--test-coverage-lines=100',
     '--test-coverage-functions=100',
     '--test-coverage-branches=100',

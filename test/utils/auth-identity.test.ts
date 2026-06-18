@@ -99,6 +99,76 @@ test('compareIdentitySnapshots distinguishes exact, different, and ambiguous mat
 
   assert.equal(
     compareIdentitySnapshots(
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        email: 'alice@example.com',
+      }),
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        email: 'ALICE@example.com',
+      }),
+    ),
+    'exact',
+  )
+
+  assert.equal(
+    compareIdentitySnapshots(
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        accountId: 'acc-1',
+      }),
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        accountId: ' acc-1 ',
+      }),
+    ),
+    'exact',
+  )
+
+  assert.equal(
+    compareIdentitySnapshots(
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        email: 'alice@example.com',
+      }),
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-2',
+        email: 'alice@example.com',
+      }),
+    ),
+    'different',
+  )
+
+  assert.equal(
+    compareIdentitySnapshots(
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        email: 'alice@example.com',
+      }),
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        accountId: 'acc-1',
+      }),
+    ),
+    'ambiguous',
+  )
+
+  assert.equal(
+    compareIdentitySnapshots(
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        email: 'unknown',
+      }),
+      buildIdentitySnapshot({
+        defaultOrganizationId: 'org-1',
+        email: 'alice@example.com',
+      }),
+    ),
+    'ambiguous',
+  )
+
+  assert.equal(
+    compareIdentitySnapshots(
       {
         organizationId: 'org-1',
         accountId: 'acc-1',

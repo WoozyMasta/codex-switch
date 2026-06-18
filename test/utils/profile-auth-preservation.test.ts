@@ -153,6 +153,48 @@ test('maybeReplaceProfileAuthWithLive rejects mismatched identity and stale live
   assert.deepEqual(rejected, [])
 })
 
+test('maybeReplaceProfileAuthWithLive rejects different organization even when live auth is newer', async () => {
+  const replaced: Array<string> = []
+
+  assert.equal(
+    await maybeReplaceProfileAuthWithLive(
+      {
+        loadAuthData: async () =>
+          makeAuth({
+            defaultOrganizationId: 'org-2',
+            authJson: {
+              tokens: {
+                id_token: 'id',
+                access_token: 'access',
+                refresh_token: 'refresh',
+              },
+              last_refresh: '2026-06-12T09:00:00Z',
+            },
+          }),
+        replaceProfileAuth: async (profileId) => {
+          replaced.push(profileId)
+          return true
+        },
+      },
+      baseProfile,
+      makeAuth({
+        tokenId: 'new-id',
+        authJson: {
+          tokens: {
+            id_token: 'new-id',
+            access_token: 'access',
+            refresh_token: 'refresh',
+          },
+          last_refresh: '2026-06-12T11:00:00Z',
+        },
+      }),
+    ),
+    false,
+  )
+
+  assert.deepEqual(replaced, [])
+})
+
 test('maybeReplaceProfileAuthWithLive forwards replacement failure', async () => {
   assert.equal(
     await maybeReplaceProfileAuthWithLive(

@@ -2,10 +2,8 @@ import type * as vscode from 'vscode'
 import * as fs from 'fs'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
-import {
-  buildIdentitySnapshot,
-  compareIdentitySnapshots,
-} from '../utils/auth-identity'
+import { loadAuthDataFromFile } from './auth-manager'
+import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
 import { resolveStorageMode } from '../utils/storage-mode'
 import {
   ProfileTransferService,
@@ -17,6 +15,7 @@ import { ProfileAuthSyncService } from './profile-auth-sync-service'
 import { ProfileAuthRecoveryService } from './profile-auth-recovery-service'
 import { ProfileStateService } from './profile-state-service'
 import { ProfileStorageService } from './profile-storage-service'
+import { sha256Text } from '../utils/text-hash'
 
 // Backward compatibility keys (pre-rename).
 interface LiveAuthPreservationResult {
@@ -79,18 +78,15 @@ export class ProfileManager {
     this.profileAuthFileService = new ProfileAuthFileService({
       fs: this.fs,
       getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
+      loadLiveCodexAuthData: () =>
+        loadAuthDataFromFile(this.getActiveCodexAuthPath()),
+      buildCodexAuthJson,
+      syncCodexAuthFile,
+      sha256Text,
       listProfiles: () => this.profileStorageService.listProfiles(),
       loadAuthData: (profileId) => this.loadAuthData(profileId),
       replaceProfileAuth: (profileId, authData) =>
         this.replaceProfileAuth(profileId, authData),
-      getLastSyncedProfileId: () => this.lastSyncedProfileId,
-      getLastSyncedAuthHash: () => this.lastSyncedAuthHash,
-      setLastSyncedProfileId: (profileId) => {
-        this.lastSyncedProfileId = profileId
-      },
-      setLastSyncedAuthHash: (hash) => {
-        this.lastSyncedAuthHash = hash
-      },
     })
     this.profileTransferService = new ProfileTransferService({
       listProfiles: () => this.profileStorageService.listProfiles(),
@@ -171,10 +167,7 @@ export class ProfileManager {
           profileId,
           authData,
         ),
-      resetSyncCache: () => {
-        this.lastSyncedProfileId = undefined
-        this.lastSyncedAuthHash = undefined
-      },
+      resetSyncCache: () => this.profileAuthFileService.resetSyncCache(),
       readSharedActiveProfile: () =>
         this.profileStorageService.readSharedActiveProfile()?.profileId,
       readDefaultHomeSharedActiveProfileId: () =>
@@ -186,17 +179,12 @@ export class ProfileManager {
       deleteSharedActiveProfile: () =>
         this.profileStorageService.deleteSharedActiveProfile(),
       hasActiveCodexAuthFile: () =>
-        this.fs.existsSync(this.getActiveCodexAuthPath()),
-      deleteActiveCodexAuthFile: () => {
-        if (this.fs.existsSync(this.getActiveCodexAuthPath())) {
-          this.fs.unlinkSync(this.getActiveCodexAuthPath())
-        }
-      },
+        this.profileAuthFileService.hasActiveCodexAuthFile(),
+      deleteActiveCodexAuthFile: () =>
+        this.profileAuthFileService.deleteActiveCodexAuthFile(),
     })
   }
 
-  private lastSyncedProfileId: string | undefined
-  private lastSyncedAuthHash: string | undefined
   private readonly fs: typeof fs
   private readonly getConfiguration: typeof vscode.workspace.getConfiguration
   private readonly remoteName: string | undefined
@@ -236,15 +224,6 @@ export class ProfileManager {
 
   private isRemoteFilesMode(): boolean {
     return this.getResolvedStorageMode() === 'remoteFiles'
-  }
-
-  private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
-    return (
-      compareIdentitySnapshots(
-        buildIdentitySnapshot(profile),
-        buildIdentitySnapshot(authData),
-      ) === 'exact'
-    )
   }
 
   private getActiveCodexHome() {

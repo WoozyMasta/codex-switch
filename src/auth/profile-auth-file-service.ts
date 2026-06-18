@@ -1,8 +1,5 @@
-import * as fs from 'fs'
+import fs from 'fs'
 import type { AuthData, ProfileSummary } from '../types'
-import { loadAuthDataFromFile } from './auth-manager'
-import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
-import { sha256Text } from '../utils/text-hash'
 import { maybeSyncProfileAuthToCodexAuthFile } from '../utils/profile-live-auth-sync'
 import { captureLiveAuthForMatchingProfile } from '../utils/profile-live-auth-sync'
 import {
@@ -14,23 +11,37 @@ import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
 interface ProfileAuthFileServiceDeps {
   fs: typeof fs
   getActiveCodexAuthPath: () => string
+  loadLiveCodexAuthData: () => Promise<AuthData | null>
+  buildCodexAuthJson: (authData: AuthData) => string
+  syncCodexAuthFile: (authPath: string, authData: AuthData) => void
+  sha256Text: (text: string) => string
   listProfiles: () => Promise<ProfileSummary[]>
   loadAuthData: (profileId: string) => Promise<AuthData | null>
   replaceProfileAuth: (
     profileId: string,
     authData: AuthData,
   ) => Promise<boolean>
-  getLastSyncedProfileId: () => string | undefined
-  getLastSyncedAuthHash: () => string | undefined
-  setLastSyncedProfileId: (profileId: string | undefined) => void
-  setLastSyncedAuthHash: (hash: string | undefined) => void
 }
 
 export class ProfileAuthFileService {
+  private lastSyncedProfileId: string | undefined
+  private lastSyncedAuthHash: string | undefined
+
   constructor(private readonly deps: ProfileAuthFileServiceDeps) {}
 
   async loadLiveCodexAuthData(): Promise<AuthData | null> {
-    return loadAuthDataFromFile(this.deps.getActiveCodexAuthPath())
+    return this.deps.loadLiveCodexAuthData()
+  }
+
+  hasActiveCodexAuthFile(): boolean {
+    return this.deps.fs.existsSync(this.deps.getActiveCodexAuthPath())
+  }
+
+  deleteActiveCodexAuthFile(): void {
+    const authPath = this.deps.getActiveCodexAuthPath()
+    if (this.deps.fs.existsSync(authPath)) {
+      this.deps.fs.unlinkSync(authPath)
+    }
   }
 
   private readAuthFileHash(authPath: string): string | undefined {
@@ -39,17 +50,17 @@ export class ProfileAuthFileService {
         return undefined
       }
       const content = this.deps.fs.readFileSync(authPath, 'utf8')
-      return sha256Text(content)
+      return this.deps.sha256Text(content)
     } catch {
       return undefined
     }
   }
 
   syncProfileAuthToCodexAuthFile(profileId: string, authData: AuthData): void {
-    const content = buildCodexAuthJson(authData)
-    syncCodexAuthFile(this.deps.getActiveCodexAuthPath(), authData)
-    this.deps.setLastSyncedProfileId(profileId)
-    this.deps.setLastSyncedAuthHash(sha256Text(content))
+    const content = this.deps.buildCodexAuthJson(authData)
+    this.deps.syncCodexAuthFile(this.deps.getActiveCodexAuthPath(), authData)
+    this.lastSyncedProfileId = profileId
+    this.lastSyncedAuthHash = this.deps.sha256Text(content)
   }
 
   async syncActiveProfileToCodexAuthFile(
@@ -57,7 +68,7 @@ export class ProfileAuthFileService {
   ): Promise<void> {
     await maybeSyncProfileAuthToCodexAuthFile(
       {
-        lastSyncedProfileId: this.deps.getLastSyncedProfileId(),
+        lastSyncedProfileId: this.lastSyncedProfileId,
         loadAuthData: (profileId) => this.deps.loadAuthData(profileId),
         syncProfileAuthToCodexAuthFile: (profileId, authData) =>
           this.syncProfileAuthToCodexAuthFile(profileId, authData),
@@ -69,7 +80,7 @@ export class ProfileAuthFileService {
   async captureLiveAuthForMatchingProfile(authPath: string): Promise<void> {
     await captureLiveAuthForMatchingProfile(
       {
-        lastSyncedAuthHash: this.deps.getLastSyncedAuthHash(),
+        lastSyncedAuthHash: this.lastSyncedAuthHash,
         readAuthFileHash: (value) => this.readAuthFileHash(value),
         loadLiveCodexAuthData: () => this.loadLiveCodexAuthData(),
         findProfileByPreservationIdentity: (liveAuth, preferredProfileId) =>
@@ -94,6 +105,11 @@ export class ProfileAuthFileService {
       },
       authPath,
     )
+  }
+
+  resetSyncCache(): void {
+    this.lastSyncedProfileId = undefined
+    this.lastSyncedAuthHash = undefined
   }
 
   async inferActiveProfileIdFromAuthFile(): Promise<string | undefined> {

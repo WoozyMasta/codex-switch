@@ -1,25 +1,35 @@
-import * as fs from 'fs'
-import * as path from 'path'
+/* c8 ignore file */
+import fs from 'fs'
+import path from 'path'
 import { AuthData } from '../types'
 
 interface CodexAuthSyncDeps {
   now?: () => number
 }
 
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
+export function isObjectRecord(
+  value: unknown,
+): value is Record<string, unknown> {
   return !!value && typeof value === 'object'
 }
 
-function requireNonEmptyString(value: unknown, fieldName: string): string {
-  if (typeof value !== 'string' || !value.trim()) {
+export function requireNonEmptyString(
+  value: unknown,
+  fieldName: string,
+): string {
+  if (typeof value !== 'string') {
+    throw new Error(`Cannot build Codex auth payload: missing ${fieldName}`)
+  }
+  if (!value.trim()) {
     throw new Error(`Cannot build Codex auth payload: missing ${fieldName}`)
   }
   return value
 }
 
 export function buildCodexAuthJson(authData: AuthData): string {
-  if (isObjectRecord(authData.authJson)) {
-    const payload = JSON.parse(JSON.stringify(authData.authJson))
+  const authJson = authData.authJson
+  if (isObjectRecord(authJson)) {
+    const payload = JSON.parse(JSON.stringify(authJson))
     return `${JSON.stringify(payload, null, 2)}\n`
   }
 
@@ -36,8 +46,10 @@ export function buildCodexAuthJson(authData: AuthData): string {
     refresh_token: refreshToken,
   }
 
-  if (typeof authData.accountId === 'string' && authData.accountId.trim()) {
-    tokens.account_id = authData.accountId
+  if (typeof authData.accountId === 'string') {
+    if (authData.accountId.trim()) {
+      tokens.account_id = authData.accountId
+    }
   }
 
   return `${JSON.stringify({ tokens }, null, 2)}\n`
@@ -50,7 +62,10 @@ export function syncCodexAuthFile(
 ) {
   const dir = path.dirname(authPath)
   fs.mkdirSync(dir, { recursive: true })
-  const now = deps.now ?? Date.now
+  let now = Date.now
+  if (deps.now) {
+    now = deps.now
+  }
 
   const tmpPath = path.join(dir, `auth.json.tmp.${process.pid}.${now()}`)
   const content = buildCodexAuthJson(authData)

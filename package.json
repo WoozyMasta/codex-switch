@@ -25,7 +25,7 @@
     "vscode:publish": "vsce publish",
     "openvsx:publish": "npx ovsx publish",
     "compile": "tsc -p ./",
-    "test:build": "tsc -p ./tsconfig.test.json",
+    "test:build": "node ./scripts/clean-test-output.mjs && tsc -p ./tsconfig.test.json",
     "test:unit": "npm run test:build && node ./scripts/run-node-tests.mjs",
     "test:coverage": "npm run test:build && node ./scripts/run-node-tests.mjs --coverage",
     "test": "npm run test:unit",

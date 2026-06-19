@@ -4,9 +4,9 @@ import { getProfilePlanDisplay } from './profile-display'
 import { formatProfileResetTime } from '../utils/profile-reset-time'
 import { escapeMarkdown } from '../utils/markdown'
 import {
-  buildCommandUri,
-  escapeLinkTitle,
+  buildProfileTooltipRow,
   escapeTableCell,
+  escapeLinkTitle,
   formatRateLimitCell,
   padTableCell,
 } from '../utils/profile-tooltip-format'
@@ -39,7 +39,6 @@ export function createProfileTooltip(
     tooltip.appendMarkdown('|---|---|---|---:|---|---:|---|\n')
 
     for (const p of profiles) {
-      const name = escapeTableCell(p.name)
       const plan = escapeTableCell(getProfilePlanDisplay(p.planType))
       const fiveHour = escapeTableCell(
         formatRateLimitCell(p.rateLimits?.fiveHour),
@@ -51,18 +50,22 @@ export function createProfileTooltip(
       const weeklyReset = escapeTableCell(
         formatProfileResetTime(p.rateLimits?.weekly?.resetsAt) || '',
       )
-      const switchUri = buildCommandUri('codex-switch.profile.activate', [p.id])
       const emailDisplay =
         p.email && p.email !== 'Unknown' ? p.email : vscode.l10n.t('Unknown')
-      const linkTitle = escapeLinkTitle(emailDisplay)
       const isActive = Boolean(activeId && p.id === activeId)
-      const linkedName = isActive
-        ? `[**${name}**](${switchUri} "${linkTitle}")`
-        : `[${name}](${switchUri} "${linkTitle}")`
-      const status = isActive ? '$(check)' : ''
 
       tooltip.appendMarkdown(
-        `| ${padTableCell(status)} | ${padTableCell(linkedName)} | ${padTableCell(plan)} | ${padTableCell(fiveHour)} | ${padTableCell(fiveHourReset)} | ${padTableCell(weekly)} | ${padTableCell(weeklyReset)} |\n`,
+        buildProfileTooltipRow({
+          profileId: p.id,
+          name: p.name,
+          plan,
+          fiveHour,
+          fiveHourReset,
+          weekly,
+          weeklyReset,
+          email: emailDisplay,
+          isActive,
+        }),
       )
     }
     tooltip.appendMarkdown('\n')

@@ -19,6 +19,7 @@ import {
 } from '../utils/profile-quick-pick'
 import { buildManageProfilesQuickPickItems } from '../utils/profile-manage-quick-pick'
 import { buildDefaultProfileName } from '../utils/profile-names'
+import { formatProfileEmailDescription } from '../utils/profile-email'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 import { writeJsonFile } from '../auth/shared-profile-store'
@@ -754,7 +755,7 @@ export function registerCommands(
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
           label: p.name,
-          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
+          description: formatProfileEmailDescription(p.email),
           profileId: p.id,
         })),
         { placeHolder: vscode.l10n.t('Rename profile') },
@@ -800,7 +801,7 @@ export function registerCommands(
       const pick = await vscode.window.showQuickPick(
         profiles.map((p) => ({
           label: p.name,
-          description: p.email && p.email !== 'Unknown' ? p.email : undefined,
+          description: formatProfileEmailDescription(p.email),
           profileId: p.id,
         })),
         { placeHolder: vscode.l10n.t('Delete profile') },

@@ -1,4 +1,5 @@
 import type { ProfileSummary } from '../types'
+import { formatProfileEmailDescription } from './profile-email'
 
 export interface ProfileQuickPickItem {
   label: string
@@ -17,7 +18,7 @@ export function buildProfileSwitchQuickPickItems(
     label: profile.name,
     description: formatDescription(profile),
     detail: [
-      profile.email && profile.email !== 'Unknown' ? profile.email : undefined,
+      formatProfileEmailDescription(profile.email),
       profile.id === activeProfileId ? activeLabel : undefined,
     ]
       .filter((value): value is string => Boolean(value))

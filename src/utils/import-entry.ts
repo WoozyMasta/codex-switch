@@ -1,5 +1,6 @@
 import type { AuthData } from '../types'
 import { validateImportedAuthJson } from './auth-payload'
+import { buildDefaultProfileName } from './profile-names'
 import { asOptionalString } from './strings'
 
 interface ParsedImportEntry {
@@ -36,10 +37,11 @@ export function parseImportEntry(value: unknown): ParsedImportEntry | null {
 
   const email = asOptionalString(profile.email) || 'Unknown'
   const planType = asOptionalString(profile.planType) || 'Unknown'
-  const name =
-    asOptionalString(profile.name) ||
-    (email !== 'Unknown' ? email.split('@')[0] : undefined) ||
-    'profile'
+  const name = buildDefaultProfileName(
+    asOptionalString(profile.name),
+    email,
+    'profile',
+  )
 
   const authJson = asObject(tokens.authJson) || undefined
   const accountId =

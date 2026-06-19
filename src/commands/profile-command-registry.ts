@@ -18,6 +18,7 @@ import {
   type ProfileQuickPickItem,
 } from '../utils/profile-quick-pick'
 import { buildManageProfilesQuickPickItems } from '../utils/profile-manage-quick-pick'
+import { buildDefaultProfileName } from '../utils/profile-names'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 import { writeJsonFile } from '../auth/shared-profile-store'
@@ -127,10 +128,11 @@ export function registerCommands(
         return true
       }
 
-      const defaultName =
-        authData.email && authData.email !== 'Unknown'
-          ? authData.email.split('@')[0]
-          : 'profile'
+      const defaultName = buildDefaultProfileName(
+        undefined,
+        authData.email,
+        'profile',
+      )
 
       const name = await vscode.window.showInputBox({
         prompt: vscode.l10n.t(

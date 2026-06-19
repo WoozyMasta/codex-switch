@@ -13,6 +13,10 @@ import {
   resolveStatusBarClickBehavior,
   type StatusBarClickBehavior,
 } from '../utils/profile-command-options'
+import {
+  buildProfileSwitchQuickPickItems,
+  type ProfileQuickPickItem,
+} from '../utils/profile-quick-pick'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 import { writeJsonFile } from '../auth/shared-profile-store'
@@ -292,24 +296,14 @@ export function registerCommands(
 
       const activeId = await profileManager.getActiveProfileId()
 
-      type ProfilePick = vscode.QuickPickItem & { profileId: string }
-      const toProfilePicks = (profiles: typeof rawProfiles): ProfilePick[] =>
-        profiles.map((p) => ({
-          label: p.name,
-          description: buildProfileMetaDisplay(p.planType, p.rateLimits),
-          detail: [
-            p.email && p.email !== 'Unknown' ? p.email : undefined,
-            p.id === activeId ? vscode.l10n.t('Active') : undefined,
-          ]
-            .filter((value): value is string => Boolean(value))
-            .join(' • '),
-          profileId: p.id,
-        }))
-
-      const quickPick = vscode.window.createQuickPick<ProfilePick>()
+      const quickPick = vscode.window.createQuickPick<ProfileQuickPickItem>()
       quickPick.placeholder = vscode.l10n.t('Switch profile')
-      quickPick.items = toProfilePicks(
+      quickPick.items = buildProfileSwitchQuickPickItems(
         profileRateLimitService.applyCachedRateLimits(rawProfiles),
+        activeId,
+        vscode.l10n.t('Active'),
+        (profile) =>
+          buildProfileMetaDisplay(profile.planType, profile.rateLimits),
       )
       quickPick.busy = true
 
@@ -333,7 +327,13 @@ export function registerCommands(
         .decorateProfiles(profileManager, rawProfiles)
         .then((profiles) => {
           if (!disposed) {
-            quickPick.items = toProfilePicks(profiles)
+            quickPick.items = buildProfileSwitchQuickPickItems(
+              profiles,
+              activeId,
+              vscode.l10n.t('Active'),
+              (profile) =>
+                buildProfileMetaDisplay(profile.planType, profile.rateLimits),
+            )
           }
         })
         .catch(() => undefined)

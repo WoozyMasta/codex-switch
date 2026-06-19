@@ -54,16 +54,24 @@ function makeAuthData(id: string): AuthData {
   }
 }
 
-function makeSecrets(initial: Record<string, string> = {}) {
+function makeSecrets(
+  initial: Record<string, string> = {},
+  behavior: {
+    store?: (key: string, value: string) => void | Promise<void>
+    delete?: (key: string) => void | Promise<void>
+  } = {},
+) {
   const values = new Map(Object.entries(initial))
   return {
     values,
     secrets: {
       get: async (key: string) => values.get(key),
       store: async (key: string, value: string) => {
+        await behavior.store?.(key, value)
         values.set(key, value)
       },
       delete: async (key: string) => {
+        await behavior.delete?.(key)
         values.delete(key)
       },
     },
@@ -205,4 +213,73 @@ test('ProfileStorageService restores previous secrets when profile replacement f
   } finally {
     profileFilesStorage.writeProfilesFile = originalWriteProfilesFile
   }
+})
+
+test('ProfileStorageService propagates SecretStorage store failure on createProfile', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const { service, secrets } = makeService(
+    dir,
+    makeSecrets(
+      {},
+      {
+        store: async () => {
+          throw new Error('secret store failed')
+        },
+      },
+    ),
+  )
+
+  await assert.rejects(
+    () => service.createProfile('Alice', makeAuthData('alice')),
+    /secret store failed/,
+  )
+
+  assert.equal(secrets.values.size, 0)
+  assert.equal(fs.readdirSync(dir).length, 0)
+})
+
+test('ProfileStorageService propagates SecretStorage store failure on replaceProfileAuth', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const profile = makeProfile('123e4567-e89b-12d3-a456-426614174000', 'Alpha')
+  const originalAuth = makeAuthData(profile.id)
+  const updatedAuth = makeAuthData('123e4567-e89b-12d3-a456-426614174001')
+  const secrets = makeSecrets(
+    {
+      [buildProfileSecretKeys(profile.id).current]:
+        JSON.stringify(originalAuth),
+    },
+    {
+      store: async () => {
+        throw new Error('secret store failed')
+      },
+    },
+  )
+  const { service } = makeService(dir, secrets)
+
+  profileFilesStorage.writeProfilesFile(
+    {
+      ensureStorageDir: () => {
+        fs.mkdirSync(dir, { recursive: true })
+      },
+      getProfilesPath: () => path.join(dir, 'profiles.json'),
+      writeJsonFile: (file: string, data) => {
+        fs.writeFileSync(file, JSON.stringify(data), 'utf8')
+      },
+    },
+    { version: 1, profiles: [profile] },
+  )
+
+  await assert.rejects(
+    () => service.replaceProfileAuth(profile.id, updatedAuth),
+    /secret store failed/,
+  )
+
+  assert.deepEqual(await service.readStoredTokens(profile.id), originalAuth)
+  assert.deepEqual(
+    JSON.parse(fs.readFileSync(path.join(dir, 'profiles.json'), 'utf8')),
+    {
+      version: 1,
+      profiles: [profile],
+    },
+  )
 })

@@ -5,6 +5,7 @@ import {
   ResolvedCodexHome,
 } from '../types'
 import { getProfilePlanDisplay } from './profile-display'
+import { formatProfileResetTime } from '../utils/profile-reset-time'
 import { escapeMarkdown } from '../utils/markdown'
 
 function buildCommandUri(command: string, args: unknown[]): string {
@@ -27,40 +28,6 @@ function formatRateLimitCell(
   }
 
   return `${Math.round(window.remainingPercent)}%`
-}
-
-function formatResetTime(resetsAt: number | null | undefined): string | null {
-  if (typeof resetsAt !== 'number' || !Number.isFinite(resetsAt)) {
-    return null
-  }
-
-  const resetDate = new Date(resetsAt * 1000)
-  if (Number.isNaN(resetDate.getTime())) {
-    return null
-  }
-
-  const now = new Date()
-  const time = new Intl.DateTimeFormat(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(resetDate)
-
-  if (isSameLocalDate(resetDate, now)) {
-    return time
-  }
-
-  const day = new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-  }).format(resetDate)
-  return `${day} ${time}`
-}
-
-function isSameLocalDate(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
 }
 
 function padTableCell(content: string): string {
@@ -101,11 +68,11 @@ export function createProfileTooltip(
         formatRateLimitCell(p.rateLimits?.fiveHour),
       )
       const fiveHourReset = escapeTableCell(
-        formatResetTime(p.rateLimits?.fiveHour?.resetsAt) || '',
+        formatProfileResetTime(p.rateLimits?.fiveHour?.resetsAt) || '',
       )
       const weekly = escapeTableCell(formatRateLimitCell(p.rateLimits?.weekly))
       const weeklyReset = escapeTableCell(
-        formatResetTime(p.rateLimits?.weekly?.resetsAt) || '',
+        formatProfileResetTime(p.rateLimits?.weekly?.resetsAt) || '',
       )
       const switchUri = buildCommandUri('codex-switch.profile.activate', [p.id])
       const emailDisplay =

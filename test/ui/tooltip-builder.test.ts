@@ -44,6 +44,10 @@ function makeHome(
   }
 }
 
+function escapeTableCellForTest(text: string): string {
+  return escapeMarkdown(text).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
+}
+
 test('createProfileTooltip restricts commands and escapes profile markup', () => {
   const profile = makeProfile()
   const tooltip = createProfileTooltip(profile, [profile], makeHome())
@@ -80,4 +84,39 @@ test('createProfileTooltip renders the empty-state copy', () => {
   assert.match(tooltip.value, /No profiles yet\./)
   assert.match(tooltip.value, /Manage profiles/)
   assert.match(tooltip.value, /Refresh limits/)
+})
+
+test('createProfileTooltip escapes multiline and command-like content', () => {
+  const profile = makeProfile({
+    name: 'Alpha\n$(zap) [open](command:evil)',
+    email: 'line1\r\nline2@example.com',
+  })
+  const home = makeHome({
+    name: 'Home\n$(alert) [go](command:evil)',
+    fsPath: 'C:\\tmp\\home\n$(beep)\\[1]',
+  })
+  const tooltip = createProfileTooltip(profile, [profile], home)
+
+  assert.ok(
+    tooltip.value.includes('Alpha $(zap) [open](command:evil)') === false,
+  )
+  assert.ok(tooltip.value.includes('line1'))
+  assert.ok(tooltip.value.includes('line2@example.com'))
+  assert.ok(
+    tooltip.value.includes('Home $(alert) [go](command:evil)') === false,
+  )
+  assert.ok(
+    tooltip.value.includes('C:\\\\tmp\\\\home $(beep)\\\\[1]') === false,
+  )
+  assert.ok(
+    tooltip.value.includes(
+      escapeTableCellForTest('Alpha\n$(zap) [open](command:evil)'),
+    ),
+  )
+  assert.ok(
+    tooltip.value.includes(escapeMarkdown('Home\n$(alert) [go](command:evil)')),
+  )
+  assert.ok(
+    tooltip.value.includes(escapeMarkdown('C:\\tmp\\home\n$(beep)\\[1]')),
+  )
 })

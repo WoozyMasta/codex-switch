@@ -20,6 +20,7 @@ if (coverageEnabled) {
     '--test-coverage-exclude=**/out-test/src/auth/codex-auth-sync.js',
     '--test-coverage-exclude=**/out-test/src/auth/auth-manager.js',
     '--test-coverage-exclude=**/out-test/src/auth/profile-rate-limit-service.js',
+    '--test-coverage-exclude=**/out-test/src/auth/profile-storage-service.js',
     '--test-coverage-exclude=**/out-test/src/auth/profile-state-service.js',
     '--test-coverage-exclude=**/out-test/src/codex-home/codex-home-manager.js',
     '--test-coverage-exclude=**/out-test/src/utils/log.js',

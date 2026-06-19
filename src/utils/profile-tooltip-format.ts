@@ -56,3 +56,17 @@ export function buildProfileTooltipRow(
 
   return `| ${padTableCell(status)} | ${padTableCell(linkedName)} | ${padTableCell(input.plan)} | ${padTableCell(input.fiveHour)} | ${padTableCell(input.fiveHourReset)} | ${padTableCell(input.weekly)} | ${padTableCell(input.weeklyReset)} |\n`
 }
+
+export function buildProfileTooltipHomeSection(
+  homeName: string,
+  homePath: string,
+): string {
+  return `---\n\n${escapeMarkdown('Active home')}: **${escapeMarkdown(homeName)}**\n\n${escapeMarkdown('Path')}: ${escapeMarkdown(homePath)}\n\n`
+}
+
+export function buildProfileTooltipActionsFooter(
+  manageProfilesLabel: string,
+  refreshLimitsLabel: string,
+): string {
+  return `---\n\n[${manageProfilesLabel}](command:codex-switch.profile.manage "${escapeLinkTitle(manageProfilesLabel)}") · [${refreshLimitsLabel}](command:codex-switch.profile.refresh "${escapeLinkTitle(refreshLimitsLabel)}")\n\n`
+}

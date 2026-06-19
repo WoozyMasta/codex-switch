@@ -2,11 +2,11 @@ import * as vscode from 'vscode'
 import { ProfileSummary, ResolvedCodexHome } from '../types'
 import { getProfilePlanDisplay } from './profile-display'
 import { formatProfileResetTime } from '../utils/profile-reset-time'
-import { escapeMarkdown } from '../utils/markdown'
 import {
+  buildProfileTooltipActionsFooter,
+  buildProfileTooltipHomeSection,
   buildProfileTooltipRow,
   escapeTableCell,
-  escapeLinkTitle,
   formatRateLimitCell,
   padTableCell,
 } from '../utils/profile-tooltip-format'
@@ -72,20 +72,16 @@ export function createProfileTooltip(
   }
 
   if (home) {
-    tooltip.appendMarkdown('---\n\n')
     tooltip.appendMarkdown(
-      `${escapeMarkdown(vscode.l10n.t('Active home'))}: **${escapeMarkdown(home.name)}**\n\n`,
-    )
-    tooltip.appendMarkdown(
-      `${escapeMarkdown(vscode.l10n.t('Path'))}: ${escapeMarkdown(home.fsPath)}\n\n`,
+      buildProfileTooltipHomeSection(home.name, home.fsPath),
     )
   }
 
-  tooltip.appendMarkdown('---\n\n')
-  const manageProfilesLabel = vscode.l10n.t('Manage profiles')
-  const refreshLimitsLabel = vscode.l10n.t('Refresh limits')
   tooltip.appendMarkdown(
-    `[${manageProfilesLabel}](command:codex-switch.profile.manage "${escapeLinkTitle(manageProfilesLabel)}") · [${refreshLimitsLabel}](command:codex-switch.profile.refresh "${escapeLinkTitle(refreshLimitsLabel)}")\n\n`,
+    buildProfileTooltipActionsFooter(
+      vscode.l10n.t('Manage profiles'),
+      vscode.l10n.t('Refresh limits'),
+    ),
   )
   return tooltip
 }

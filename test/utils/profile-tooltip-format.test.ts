@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  buildProfileTooltipActionsFooter,
+  buildProfileTooltipHomeSection,
   buildProfileTooltipRow,
   buildCommandUri,
   escapeLinkTitle,
@@ -65,5 +67,19 @@ test('profile tooltip formatting helpers build profile rows', () => {
       isActive: false,
     }),
     `| &nbsp;&nbsp; | &nbsp;[Beta](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "Unknown")&nbsp; | &nbsp;PLUS&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; |\n`,
+  )
+})
+
+test('profile tooltip formatting helpers build home and footer sections', () => {
+  assert.equal(
+    buildProfileTooltipHomeSection(
+      'Home\n$(alert) [go](command:evil)',
+      'C:\\tmp\\home\n$(beep)\\[1]',
+    ),
+    `---\n\nActive home: **Home\n$\\(alert\\) \\[go\\]\\(command:evil\\)**\n\nPath: C:\\\\tmp\\\\home\n$\\(beep\\)\\\\\\[1\\]\n\n`,
+  )
+  assert.equal(
+    buildProfileTooltipActionsFooter('Manage profiles', 'Refresh limits'),
+    `---\n\n[Manage profiles](command:codex-switch.profile.manage "Manage profiles") · [Refresh limits](command:codex-switch.profile.refresh "Refresh limits")\n\n`,
   )
 })

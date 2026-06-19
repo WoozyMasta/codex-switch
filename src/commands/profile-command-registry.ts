@@ -8,6 +8,11 @@ import { loadAuthDataFromFile } from '../auth/auth-manager'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import { buildProfileMetaDisplay } from '../ui/profile-display'
 import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
+import {
+  resolveDefaultSettingsExportPath,
+  resolveStatusBarClickBehavior,
+  type StatusBarClickBehavior,
+} from '../utils/profile-command-options'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 import { writeJsonFile } from '../auth/shared-profile-store'
@@ -25,8 +30,6 @@ export function registerCommands(
     forceRateLimitRefresh?: boolean
   }) => Promise<void>,
 ) {
-  type StatusBarClickBehavior = 'cycle' | 'toggleLast' | 'selector'
-
   const maybeRestartAfterProfileSwitch = async () => {
     const reloadAfterSwitch = vscode.workspace
       .getConfiguration('codexSwitch')
@@ -49,20 +52,14 @@ export function registerCommands(
     const raw = vscode.workspace
       .getConfiguration('codexSwitch')
       .get<StatusBarClickBehavior>('statusBarClickBehavior', 'cycle')
-
-    if (raw === 'toggleLast') {
-      return 'toggleLast'
-    }
-    if (raw === 'selector') {
-      return 'selector'
-    }
-    return 'cycle'
+    return resolveStatusBarClickBehavior(raw)
   }
 
   const getDefaultSettingsExportUri = (): vscode.Uri => {
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-    const baseDir = workspacePath || os.homedir()
-    return vscode.Uri.file(path.join(baseDir, 'codex-switch-profiles.json'))
+    return vscode.Uri.file(
+      resolveDefaultSettingsExportPath(workspacePath, os.homedir()),
+    )
   }
 
   const showProfileMutationError = (

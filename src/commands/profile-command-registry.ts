@@ -24,9 +24,13 @@ import {
   ensureCodexCliForRateLimits,
   ensureLiveAuthIsSavedBeforeReplacing,
 } from './profile-command-prompts'
+import {
+  addFromFile,
+  exportProfiles,
+  importProfiles,
+} from './profile-file-command-handlers'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
-import { writeJsonFile } from '../auth/shared-profile-store'
 
 /**
  * Register all extension commands
@@ -106,6 +110,24 @@ export function registerCommands(
     showOpenDialog: vscode.window.showOpenDialog,
     translate: vscode.l10n.t,
     restartAfterImport: maybeRestartAfterProfileSwitch,
+    onAuthChanged,
+  }
+
+  const fileCommandDeps = {
+    promptDeps,
+    getDefaultSettingsExportUri: () => getDefaultSettingsExportUri(),
+    exportProfilesForTransfer: () => profileManager.exportProfilesForTransfer(),
+    importProfilesFromTransfer: (value: unknown) =>
+      profileManager.importProfilesFromTransfer(value),
+    showOpenDialog: vscode.window.showOpenDialog,
+    showSaveDialog: vscode.window.showSaveDialog,
+    showWarningMessage: vscode.window.showWarningMessage,
+    showErrorMessage: vscode.window.showErrorMessage,
+    showInformationMessage: vscode.window.showInformationMessage,
+    translate: vscode.l10n.t,
+    pathExists: fs.existsSync,
+    readFileText: (filePath: string) => fs.readFileSync(filePath, 'utf8'),
+    maybeRestartAfterProfileSwitch,
     onAuthChanged,
   }
 
@@ -473,140 +495,17 @@ export function registerCommands(
 
   const addFromFileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.addFromFile',
-    async () => {
-      const uri = await vscode.window.showOpenDialog({
-        canSelectMany: false,
-        openLabel: vscode.l10n.t('Import auth.json'),
-        filters: { JSON: ['json'] },
-      })
-      if (!uri || uri.length === 0) {
-        return
-      }
-
-      const authData = await promptDeps.loadAuthDataFromFile(uri[0].fsPath)
-      if (!authData) {
-        vscode.window.showErrorMessage(
-          vscode.l10n.t('Selected file is not a valid auth.json.'),
-        )
-        return
-      }
-
-      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
-        promptDeps,
-        vscode.l10n.t('import an auth file'),
-      )
-      if (!canReplaceLiveAuth) {
-        return
-      }
-
-      await addCurrentAuthJsonAsProfile(promptDeps, true)
-    },
+    async () => addFromFile(fileCommandDeps),
   )
 
   const exportSettingsCommand = vscode.commands.registerCommand(
     'codex-switch.profile.exportSettings',
-    async () => {
-      const saveUri = await vscode.window.showSaveDialog({
-        saveLabel: vscode.l10n.t('Export profiles'),
-        defaultUri: getDefaultSettingsExportUri(),
-        filters: { JSON: ['json'] },
-      })
-      if (!saveUri) {
-        return
-      }
-
-      const exportLabel = vscode.l10n.t('Export')
-      const warning = await vscode.window.showWarningMessage(
-        vscode.l10n.t(
-          'This will export profile tokens and auth data as unencrypted JSON.',
-        ),
-        { modal: true },
-        exportLabel,
-      )
-      if (warning !== exportLabel) {
-        return
-      }
-
-      if (fs.existsSync(saveUri.fsPath)) {
-        const overwrite = await vscode.window.showWarningMessage(
-          vscode.l10n.t(
-            'File {0} already exists. Overwrite it?',
-            saveUri.fsPath,
-          ),
-          { modal: true },
-          exportLabel,
-        )
-        if (overwrite !== exportLabel) {
-          return
-        }
-      }
-
-      const { data, skipped } = await profileManager.exportProfilesForTransfer()
-      writeJsonFile(saveUri.fsPath, data)
-
-      vscode.window.showInformationMessage(
-        vscode.l10n.t(
-          'Exported {0} profile(s) to {1}. Skipped {2} profile(s) without tokens.',
-          data.profiles.length,
-          saveUri.fsPath,
-          skipped,
-        ),
-      )
-    },
+    async () => exportProfiles(fileCommandDeps),
   )
 
   const importSettingsCommand = vscode.commands.registerCommand(
     'codex-switch.profile.importSettings',
-    async () => {
-      const uri = await vscode.window.showOpenDialog({
-        canSelectMany: false,
-        openLabel: vscode.l10n.t('Import profiles'),
-        filters: { JSON: ['json'] },
-      })
-      if (!uri || uri.length === 0) {
-        return
-      }
-
-      let payload: unknown
-      try {
-        payload = JSON.parse(fs.readFileSync(uri[0].fsPath, 'utf8')) as unknown
-      } catch {
-        vscode.window.showErrorMessage(
-          vscode.l10n.t('Selected file is not a valid JSON profiles export.'),
-        )
-        return
-      }
-
-      try {
-        const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
-          promptDeps,
-          vscode.l10n.t('import profiles'),
-        )
-        if (!canReplaceLiveAuth) {
-          return
-        }
-
-        const result = await profileManager.importProfilesFromTransfer(payload)
-        await onAuthChanged()
-        await maybeRestartAfterProfileSwitch()
-        vscode.window.showInformationMessage(
-          vscode.l10n.t(
-            'Import completed: created {0}, updated {1}, skipped {2}.',
-            result.created,
-            result.updated,
-            result.skipped,
-          ),
-        )
-      } catch (error) {
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : vscode.l10n.t('Unknown import error.')
-        vscode.window.showErrorMessage(
-          vscode.l10n.t('Failed to import profiles: {0}', message),
-        )
-      }
-    },
+    async () => importProfiles(fileCommandDeps),
   )
 
   const renameProfileCommand = vscode.commands.registerCommand(

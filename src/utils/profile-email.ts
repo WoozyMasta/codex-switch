@@ -6,3 +6,10 @@ export function formatProfileEmailDescription(
   }
   return email
 }
+
+export function formatProfileEmailLabel(
+  email: string | undefined,
+  unknownLabel: string,
+): string {
+  return formatProfileEmailDescription(email) ?? unknownLabel
+}

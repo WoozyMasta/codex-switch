@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 import { ProfileSummary, ResolvedCodexHome } from '../types'
 import { getProfilePlanDisplay } from './profile-display'
 import { formatProfileResetTime } from '../utils/profile-reset-time'
+import { formatProfileEmailLabel } from '../utils/profile-email'
 import {
   buildProfileTooltipActionsFooter,
   buildProfileTooltipHomeSection,
@@ -50,8 +51,10 @@ export function createProfileTooltip(
       const weeklyReset = escapeTableCell(
         formatProfileResetTime(p.rateLimits?.weekly?.resetsAt) || '',
       )
-      const emailDisplay =
-        p.email && p.email !== 'Unknown' ? p.email : vscode.l10n.t('Unknown')
+      const emailDisplay = formatProfileEmailLabel(
+        p.email,
+        vscode.l10n.t('Unknown'),
+      )
       const isActive = Boolean(activeId && p.id === activeId)
 
       tooltip.appendMarkdown(

@@ -4,8 +4,18 @@ import { formatProfileEmailDescription } from './profile-email'
 export interface ProfileQuickPickItem {
   label: string
   description?: string
-  detail: string
+  detail?: string
   profileId: string
+}
+
+export function buildProfileListQuickPickItems(
+  profiles: ProfileSummary[],
+): ProfileQuickPickItem[] {
+  return profiles.map((profile) => ({
+    label: profile.name,
+    description: formatProfileEmailDescription(profile.email),
+    profileId: profile.id,
+  }))
 }
 
 export function buildProfileSwitchQuickPickItems(

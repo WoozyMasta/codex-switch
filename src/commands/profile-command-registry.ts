@@ -14,12 +14,12 @@ import {
   type StatusBarClickBehavior,
 } from '../utils/profile-command-options'
 import {
+  buildProfileListQuickPickItems,
   buildProfileSwitchQuickPickItems,
   type ProfileQuickPickItem,
 } from '../utils/profile-quick-pick'
 import { buildManageProfilesQuickPickItems } from '../utils/profile-manage-quick-pick'
 import { buildDefaultProfileName } from '../utils/profile-names'
-import { formatProfileEmailDescription } from '../utils/profile-email'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 import { writeJsonFile } from '../auth/shared-profile-store'
@@ -753,11 +753,7 @@ export function registerCommands(
       }
 
       const pick = await vscode.window.showQuickPick(
-        profiles.map((p) => ({
-          label: p.name,
-          description: formatProfileEmailDescription(p.email),
-          profileId: p.id,
-        })),
+        buildProfileListQuickPickItems(profiles),
         { placeHolder: vscode.l10n.t('Rename profile') },
       )
       if (!pick) {
@@ -799,11 +795,7 @@ export function registerCommands(
       const activeProfileId = await profileManager.getActiveProfileId()
 
       const pick = await vscode.window.showQuickPick(
-        profiles.map((p) => ({
-          label: p.name,
-          description: formatProfileEmailDescription(p.email),
-          profileId: p.id,
-        })),
+        buildProfileListQuickPickItems(profiles),
         { placeHolder: vscode.l10n.t('Delete profile') },
       )
       if (!pick) {

@@ -14,14 +14,11 @@ import {
   type StatusBarClickBehavior,
 } from '../utils/profile-command-options'
 import {
-  buildProfileListQuickPickItems,
   buildProfileSwitchQuickPickItems,
   type ProfileQuickPickItem,
 } from '../utils/profile-quick-pick'
-import { buildManageProfilesQuickPickItems } from '../utils/profile-manage-quick-pick'
 import {
   addCurrentAuthJsonAsProfile,
-  ensureCodexCliForRateLimits,
   ensureLiveAuthIsSavedBeforeReplacing,
 } from './profile-command-prompts'
 import {
@@ -30,6 +27,15 @@ import {
   importProfiles,
 } from './profile-file-command-handlers'
 import { loginViaCli } from './profile-login-command-handlers'
+import {
+  deleteProfileCommand as runDeleteProfileCommand,
+  manageProfilesCommand as runManageProfilesCommand,
+  prepareForNewLoginChatCommand as runPrepareForNewLoginChatCommand,
+  refreshRateLimitsCommand as runRefreshRateLimitsCommand,
+  renameProfileCommand as runRenameProfileCommand,
+  syncFromDefaultHomeCommand as runSyncFromDefaultHomeCommand,
+  type ProfileManagementCommandDeps,
+} from './profile-management-command-handlers'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 
@@ -146,6 +152,35 @@ export function registerCommands(
     fsWatch: fs.watch,
     dirname: path.dirname,
     scheduleCleanup: setTimeout,
+  }
+
+  const managementCommandDeps: ProfileManagementCommandDeps = {
+    promptDeps,
+    profileManager,
+    maybeRestartAfterProfileSwitch,
+    reloadAfterAuthReset,
+    onAuthChanged,
+    showQuickPick: vscode.window.showQuickPick,
+    showInputBox: vscode.window.showInputBox,
+    showWarningMessage: vscode.window.showWarningMessage,
+    showInformationMessage: vscode.window.showInformationMessage,
+    showErrorMessage: vscode.window.showErrorMessage,
+    executeCommand: vscode.commands.executeCommand,
+    translate: vscode.l10n.t,
+    buildManageProfilesLabels: () => ({
+      prepareForNewLogin: vscode.l10n.t('Prepare for New Login (Chat)'),
+      loginViaCodexCli: vscode.l10n.t('Login via Codex CLI...'),
+      switchProfile: vscode.l10n.t('Switch profile'),
+      addFromCurrentAuthJson: vscode.l10n.t('Add from current auth.json'),
+      importFromFile: vscode.l10n.t('Import from file...'),
+      exportProfiles: vscode.l10n.t('Export profiles...'),
+      importProfiles: vscode.l10n.t('Import profiles...'),
+      useDefaultProfileHere: vscode.l10n.t(
+        'Use default CODEX_HOME profile here',
+      ),
+      renameProfile: vscode.l10n.t('Rename profile'),
+      deleteProfile: vscode.l10n.t('Delete profile'),
+    }),
   }
 
   // Login command
@@ -265,13 +300,7 @@ export function registerCommands(
 
   const refreshRateLimitsCommand = vscode.commands.registerCommand(
     'codex-switch.profile.refresh',
-    async () => {
-      if (!(await ensureCodexCliForRateLimits(promptDeps))) {
-        return
-      }
-
-      await onAuthChanged({ forceRateLimitRefresh: true })
-    },
+    async () => runRefreshRateLimitsCommand(managementCommandDeps),
   )
 
   const activateProfileCommand = vscode.commands.registerCommand(
@@ -362,34 +391,7 @@ export function registerCommands(
 
   const prepareForNewLoginChatCommand = vscode.commands.registerCommand(
     'codex-switch.profile.prepareForNewLoginChat',
-    async () => {
-      const ok = await ensureLiveAuthIsSavedBeforeReplacing(
-        promptDeps,
-        vscode.l10n.t('prepare for a new login'),
-      )
-      if (!ok) {
-        return
-      }
-
-      const result = await profileManager.prepareForNewLoginChat()
-      await onAuthChanged()
-
-      if (result.removedAuthFile) {
-        vscode.window.showInformationMessage(
-          vscode.l10n.t(
-            'Prepared for a new Codex login. The current auth.json was removed locally and the window will reload so Chat can show the login flow.',
-          ),
-        )
-      } else {
-        vscode.window.showInformationMessage(
-          vscode.l10n.t(
-            'Prepared for a new Codex login. No current auth.json was found and the window will reload so Chat can show the login flow.',
-          ),
-        )
-      }
-
-      await reloadAfterAuthReset()
-    },
+    async () => runPrepareForNewLoginChatCommand(managementCommandDeps),
   )
 
   const loginViaCliCommand = vscode.commands.registerCommand(
@@ -414,149 +416,22 @@ export function registerCommands(
 
   const renameProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.rename',
-    async () => {
-      const profiles = await profileManager.listProfiles()
-      if (profiles.length === 0) {
-        return
-      }
-
-      const pick = await vscode.window.showQuickPick(
-        buildProfileListQuickPickItems(profiles),
-        { placeHolder: vscode.l10n.t('Rename profile') },
-      )
-      if (!pick) {
-        return
-      }
-
-      const newName = await vscode.window.showInputBox({
-        prompt: vscode.l10n.t('New profile name'),
-        value: pick.label,
-      })
-      if (!newName) {
-        return
-      }
-
-      try {
-        if (!(await profileManager.renameProfile(pick.profileId, newName))) {
-          throw new Error(vscode.l10n.t('Profile was not updated.'))
-        }
-        await onAuthChanged()
-      } catch (error) {
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : vscode.l10n.t('Unknown rename error.')
-        vscode.window.showErrorMessage(
-          vscode.l10n.t('Failed to rename profile: {0}', message),
-        )
-      }
-    },
+    async () => runRenameProfileCommand(managementCommandDeps),
   )
 
   const deleteProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.delete',
-    async () => {
-      const profiles = await profileManager.listProfiles()
-      if (profiles.length === 0) {
-        return
-      }
-      const activeProfileId = await profileManager.getActiveProfileId()
-
-      const pick = await vscode.window.showQuickPick(
-        buildProfileListQuickPickItems(profiles),
-        { placeHolder: vscode.l10n.t('Delete profile') },
-      )
-      if (!pick) {
-        return
-      }
-
-      const deleteLabel = vscode.l10n.t('Delete')
-      const ok = await vscode.window.showWarningMessage(
-        vscode.l10n.t('Delete profile "{0}"?', pick.label),
-        { modal: true },
-        deleteLabel,
-      )
-      if (ok !== deleteLabel) {
-        return
-      }
-
-      try {
-        if (!(await profileManager.deleteProfile(pick.profileId))) {
-          throw new Error(vscode.l10n.t('Profile was not deleted.'))
-        }
-        await onAuthChanged()
-        if (activeProfileId === pick.profileId) {
-          vscode.window.showInformationMessage(
-            vscode.l10n.t(
-              'Deleted the active profile. The current auth.json remains as an unsaved login.',
-            ),
-          )
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error && error.message
-            ? error.message
-            : vscode.l10n.t('Unknown delete error.')
-        vscode.window.showErrorMessage(
-          vscode.l10n.t('Failed to delete profile: {0}', message),
-        )
-      }
-    },
+    async () => runDeleteProfileCommand(managementCommandDeps),
   )
 
   const syncFromDefaultHomeCommand = vscode.commands.registerCommand(
     'codex-switch.profile.syncFromDefaultHome',
-    async () => {
-      const profileId = await profileManager.syncActiveProfileFromDefaultHome()
-      if (!profileId) {
-        vscode.window.showInformationMessage(
-          vscode.l10n.t('Default CODEX_HOME has no active profile to sync.'),
-        )
-        return
-      }
-
-      const profile = await profileManager.getProfile(profileId)
-      await onAuthChanged()
-      await maybeRestartAfterProfileSwitch()
-      vscode.window.showInformationMessage(
-        vscode.l10n.t(
-          'Synced active profile from default CODEX_HOME: {0}.',
-          profile?.name || profileId,
-        ),
-      )
-    },
+    async () => runSyncFromDefaultHomeCommand(managementCommandDeps),
   )
 
   const manageProfilesCommand = vscode.commands.registerCommand(
     'codex-switch.profile.manage',
-    async () => {
-      const authPath = profileManager.getActiveCodexAuthPath()
-      const home = profileManager.getActiveCodexHomeSummary()
-      const profiles = await profileManager.listProfiles()
-      const hasProfiles = profiles.length > 0
-
-      const action = await vscode.window.showQuickPick(
-        buildManageProfilesQuickPickItems(authPath, home, hasProfiles, {
-          prepareForNewLogin: vscode.l10n.t('Prepare for New Login (Chat)'),
-          loginViaCodexCli: vscode.l10n.t('Login via Codex CLI...'),
-          switchProfile: vscode.l10n.t('Switch profile'),
-          addFromCurrentAuthJson: vscode.l10n.t('Add from current auth.json'),
-          importFromFile: vscode.l10n.t('Import from file...'),
-          exportProfiles: vscode.l10n.t('Export profiles...'),
-          importProfiles: vscode.l10n.t('Import profiles...'),
-          useDefaultProfileHere: vscode.l10n.t(
-            'Use default CODEX_HOME profile here',
-          ),
-          renameProfile: vscode.l10n.t('Rename profile'),
-          deleteProfile: vscode.l10n.t('Delete profile'),
-        }),
-        { placeHolder: vscode.l10n.t('Manage profiles') },
-      )
-      if (!action) {
-        return
-      }
-      await vscode.commands.executeCommand(action.command)
-    },
+    async () => runManageProfilesCommand(managementCommandDeps),
   )
 
   // Register all commands

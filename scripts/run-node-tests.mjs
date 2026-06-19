@@ -1,10 +1,14 @@
+import { writeFileSync, mkdirSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createVscodeStubSource } from './vscode-stub.mjs'
 
 const outDir = path.resolve('out-test')
 const testRoot = path.join(outDir, 'test')
 const coverageEnabled = process.argv.includes('--coverage')
+
+ensureVscodeStub(outDir)
 
 const testFiles = await collectTestFiles(testRoot)
 if (testFiles.length === 0) {
@@ -12,7 +16,7 @@ if (testFiles.length === 0) {
   process.exit(1)
 }
 
-const args = ['--test']
+const args = ['--test', '--test-isolation=none']
 if (coverageEnabled) {
   args.push(
     '--experimental-test-coverage',
@@ -39,6 +43,16 @@ const result = spawnSync(process.execPath, args, {
 })
 
 process.exit(result.status ?? 1)
+
+function ensureVscodeStub(rootDir) {
+  const moduleDir = path.join(rootDir, 'node_modules', 'vscode')
+  mkdirSync(moduleDir, { recursive: true })
+  writeFileSync(
+    path.join(moduleDir, 'package.json'),
+    '{"name":"vscode","main":"index.js"}\n',
+  )
+  writeFileSync(path.join(moduleDir, 'index.js'), createVscodeStubSource())
+}
 
 async function collectTestFiles(rootDir) {
   try {

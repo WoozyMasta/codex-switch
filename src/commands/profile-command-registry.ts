@@ -6,27 +6,25 @@ import { ProfileManager } from '../auth/profile-manager'
 import { ProfileRateLimitService } from '../auth/profile-rate-limit-service'
 import { loadAuthDataFromFile } from '../auth/auth-manager'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
-import { buildProfileMetaDisplay } from '../ui/profile-display'
 import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
 import {
   resolveDefaultSettingsExportPath,
   resolveStatusBarClickBehavior,
-  type StatusBarClickBehavior,
 } from '../utils/profile-command-options'
-import {
-  buildProfileSwitchQuickPickItems,
-  type ProfileQuickPickItem,
-} from '../utils/profile-quick-pick'
-import {
-  addCurrentAuthJsonAsProfile,
-  ensureLiveAuthIsSavedBeforeReplacing,
-} from './profile-command-prompts'
+import { addCurrentAuthJsonAsProfile } from './profile-command-prompts'
 import {
   addFromFile,
   exportProfiles,
   importProfiles,
 } from './profile-file-command-handlers'
 import { loginViaCli } from './profile-login-command-handlers'
+import {
+  activateProfileCommand as runActivateProfileCommand,
+  loginCommand as runLoginCommand,
+  switchProfileCommand as runSwitchProfileCommand,
+  toggleLastProfileCommand as runToggleLastProfileCommand,
+  type ProfileNavigationCommandDeps,
+} from './profile-navigation-command-handlers'
 import {
   deleteProfileCommand as runDeleteProfileCommand,
   manageProfilesCommand as runManageProfilesCommand,
@@ -69,13 +67,6 @@ export function registerCommands(
 
   const getLoginCommandText = (): string =>
     codexHomeManager.buildLoginCommand(runtimeHome)
-
-  const getStatusBarClickBehavior = (): StatusBarClickBehavior => {
-    const raw = vscode.workspace
-      .getConfiguration('codexSwitch')
-      .get<StatusBarClickBehavior>('statusBarClickBehavior', 'cycle')
-    return resolveStatusBarClickBehavior(raw)
-  }
 
   const getDefaultSettingsExportUri = (): vscode.Uri => {
     const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
@@ -154,6 +145,32 @@ export function registerCommands(
     scheduleCleanup: setTimeout,
   }
 
+  const navigationCommandDeps: ProfileNavigationCommandDeps = {
+    promptDeps,
+    profileManager,
+    profileRateLimitService,
+    maybeRestartAfterProfileSwitch,
+    onAuthChanged,
+    createQuickPick: vscode.window.createQuickPick,
+    showInformationMessage: vscode.window.showInformationMessage,
+    executeCommand: vscode.commands.executeCommand,
+    translate: vscode.l10n.t,
+    getLoginCommandText,
+    createCodexTerminal:
+      codexHomeManager.createCodexTerminal.bind(codexHomeManager),
+    runtimeHome,
+    writeClipboardText: (value: string) =>
+      Promise.resolve(vscode.env.clipboard.writeText(value)),
+    getStatusBarClickBehavior: () => {
+      const raw = vscode.workspace
+        .getConfiguration('codexSwitch')
+        .get<
+          'cycle' | 'toggleLast' | 'selector'
+        >('statusBarClickBehavior', 'cycle')
+      return resolveStatusBarClickBehavior(raw)
+    },
+  }
+
   const managementCommandDeps: ProfileManagementCommandDeps = {
     promptDeps,
     profileManager,
@@ -186,116 +203,12 @@ export function registerCommands(
   // Login command
   const loginCommand = vscode.commands.registerCommand(
     'codex-switch.login',
-    async () => {
-      const loginCommandText = getLoginCommandText()
-      const manageLabel = vscode.l10n.t('Manage profiles')
-      const openTerminalLabel = vscode.l10n.t('Open terminal')
-      const copyCommandLabel = vscode.l10n.t('Copy command')
-
-      const selection = await vscode.window.showInformationMessage(
-        vscode.l10n.t(
-          'Authentication required. Add a profile or run "{0}".',
-          loginCommandText,
-        ),
-        manageLabel,
-        openTerminalLabel,
-        copyCommandLabel,
-      )
-
-      if (selection === manageLabel) {
-        await vscode.commands.executeCommand('codex-switch.profile.manage')
-      } else if (selection === openTerminalLabel) {
-        const terminal = codexHomeManager.createCodexTerminal(
-          undefined,
-          runtimeHome,
-        )
-        terminal.show()
-        terminal.sendText(loginCommandText)
-      } else if (selection === copyCommandLabel) {
-        vscode.env.clipboard.writeText(loginCommandText)
-        vscode.window.showInformationMessage(
-          vscode.l10n.t('Command "{0}" copied to clipboard.', loginCommandText),
-        )
-      }
-    },
+    async () => runLoginCommand(navigationCommandDeps),
   )
 
   const switchProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.switch',
-    async () => {
-      const rawProfiles = await profileManager.listProfiles()
-      if (rawProfiles.length === 0) {
-        await vscode.commands.executeCommand('codex-switch.profile.manage')
-        return
-      }
-
-      const activeId = await profileManager.getActiveProfileId()
-
-      const quickPick = vscode.window.createQuickPick<ProfileQuickPickItem>()
-      quickPick.placeholder = vscode.l10n.t('Switch profile')
-      quickPick.items = buildProfileSwitchQuickPickItems(
-        profileRateLimitService.applyCachedRateLimits(rawProfiles),
-        activeId,
-        vscode.l10n.t('Active'),
-        (profile) =>
-          buildProfileMetaDisplay(profile.planType, profile.rateLimits),
-      )
-      quickPick.busy = true
-
-      let disposed = false
-      let pickedProfileId: string | undefined
-      const pickPromise = new Promise<string | undefined>((resolve) => {
-        quickPick.onDidAccept(() => {
-          pickedProfileId = quickPick.selectedItems[0]?.profileId
-          quickPick.hide()
-        })
-        quickPick.onDidHide(() => {
-          disposed = true
-          quickPick.dispose()
-          resolve(pickedProfileId)
-        })
-      })
-
-      quickPick.show()
-
-      void profileRateLimitService
-        .decorateProfiles(profileManager, rawProfiles)
-        .then((profiles) => {
-          if (!disposed) {
-            quickPick.items = buildProfileSwitchQuickPickItems(
-              profiles,
-              activeId,
-              vscode.l10n.t('Active'),
-              (profile) =>
-                buildProfileMetaDisplay(profile.planType, profile.rateLimits),
-            )
-          }
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          if (!disposed) {
-            quickPick.busy = false
-          }
-        })
-
-      const profileId = await pickPromise
-      if (!profileId) {
-        return
-      }
-      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
-        promptDeps,
-        vscode.l10n.t('switch profiles'),
-      )
-      if (!canReplaceLiveAuth) {
-        return
-      }
-      const ok = await profileManager.setActiveProfileId(profileId)
-      if (!ok) {
-        return
-      }
-      await onAuthChanged()
-      await maybeRestartAfterProfileSwitch()
-    },
+    async () => runSwitchProfileCommand(navigationCommandDeps),
   )
 
   const refreshRateLimitsCommand = vscode.commands.registerCommand(
@@ -305,83 +218,13 @@ export function registerCommands(
 
   const activateProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.activate',
-    async (profileId?: string) => {
-      if (!profileId) {
-        await vscode.commands.executeCommand('codex-switch.profile.switch')
-        return
-      }
-
-      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
-        promptDeps,
-        vscode.l10n.t('switch profiles'),
-      )
-      if (!canReplaceLiveAuth) {
-        return
-      }
-
-      const ok = await profileManager.setActiveProfileId(profileId)
-      if (!ok) {
-        return
-      }
-
-      await onAuthChanged()
-      await maybeRestartAfterProfileSwitch()
-    },
+    async (profileId?: string) =>
+      runActivateProfileCommand(navigationCommandDeps, profileId),
   )
 
   const toggleLastProfileCommand = vscode.commands.registerCommand(
     'codex-switch.profile.toggleLast',
-    async () => {
-      const behavior = getStatusBarClickBehavior()
-      if (behavior === 'selector') {
-        await vscode.commands.executeCommand('codex-switch.profile.switch')
-        return
-      }
-
-      if (behavior === 'toggleLast') {
-        const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
-          promptDeps,
-          vscode.l10n.t('switch profiles'),
-        )
-        if (!canReplaceLiveAuth) {
-          return
-        }
-
-        const newId = await profileManager.toggleLastProfileId()
-        if (!newId) {
-          await vscode.commands.executeCommand('codex-switch.profile.switch')
-          return
-        }
-        await onAuthChanged()
-        await maybeRestartAfterProfileSwitch()
-        return
-      }
-
-      const profiles = await profileManager.listProfiles()
-      if (profiles.length === 0) {
-        await vscode.commands.executeCommand('codex-switch.profile.manage')
-        return
-      }
-
-      const activeId = await profileManager.getActiveProfileId()
-      const currentIndex = profiles.findIndex((p) => p.id === activeId)
-      const nextIndex =
-        currentIndex === -1 ? 0 : (currentIndex + 1) % profiles.length
-      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
-        promptDeps,
-        vscode.l10n.t('switch profiles'),
-      )
-      if (!canReplaceLiveAuth) {
-        return
-      }
-      const ok = await profileManager.setActiveProfileId(profiles[nextIndex].id)
-      if (!ok) {
-        return
-      }
-
-      await onAuthChanged()
-      await maybeRestartAfterProfileSwitch()
-    },
+    async () => runToggleLastProfileCommand(navigationCommandDeps),
   )
 
   const addFromCodexAuthFileCommand = vscode.commands.registerCommand(

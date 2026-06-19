@@ -29,6 +29,7 @@ import {
   exportProfiles,
   importProfiles,
 } from './profile-file-command-handlers'
+import { loginViaCli } from './profile-login-command-handlers'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 
@@ -129,6 +130,22 @@ export function registerCommands(
     readFileText: (filePath: string) => fs.readFileSync(filePath, 'utf8'),
     maybeRestartAfterProfileSwitch,
     onAuthChanged,
+  }
+
+  const loginViaCliDeps = {
+    promptDeps,
+    getActiveCodexAuthPath: () => profileManager.getActiveCodexAuthPath(),
+    getLoginCommandText,
+    createCodexTerminal:
+      codexHomeManager.createCodexTerminal.bind(codexHomeManager),
+    runtimeHome,
+    executeCommand: vscode.commands.executeCommand,
+    showInformationMessage: vscode.window.showInformationMessage,
+    translate: vscode.l10n.t,
+    fsExistsSync: fs.existsSync,
+    fsWatch: fs.watch,
+    dirname: path.dirname,
+    scheduleCleanup: setTimeout,
   }
 
   // Login command
@@ -377,120 +394,7 @@ export function registerCommands(
 
   const loginViaCliCommand = vscode.commands.registerCommand(
     'codex-switch.profile.login',
-    async () => {
-      const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
-        promptDeps,
-        vscode.l10n.t('start a new login'),
-      )
-      if (!canReplaceLiveAuth) {
-        return
-      }
-
-      const authPath = profileManager.getActiveCodexAuthPath()
-      const loginCommandText = getLoginCommandText()
-
-      const terminal = codexHomeManager.createCodexTerminal(
-        undefined,
-        runtimeHome,
-      )
-      terminal.show()
-      terminal.sendText(loginCommandText)
-
-      const start = Date.now()
-      const maxWaitMs = 10 * 60 * 1000
-
-      let watcher: fs.FSWatcher | undefined
-      let done = false
-
-      const cleanup = () => {
-        if (done) {
-          return
-        }
-        done = true
-        if (watcher) {
-          try {
-            watcher.close()
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      const promptImport = async () => {
-        if (done) {
-          return
-        }
-        cleanup()
-        const importLabel = vscode.l10n.t('Import')
-        const pick = await vscode.window.showInformationMessage(
-          vscode.l10n.t(
-            'Codex auth file detected at {0}. Import it as a profile?',
-            authPath,
-          ),
-          importLabel,
-        )
-        if (pick === importLabel) {
-          await vscode.commands.executeCommand(
-            'codex-switch.profile.addFromCodexAuthFile',
-          )
-        }
-      }
-
-      // Try to watch for auth.json being created/updated.
-      try {
-        const dir = path.dirname(authPath)
-        if (fs.existsSync(dir)) {
-          watcher = fs.watch(
-            dir,
-            { persistent: false },
-            async (_event, filename) => {
-              if (done) {
-                return
-              }
-              if (!filename) {
-                return
-              }
-              if (String(filename).toLowerCase() !== 'auth.json') {
-                return
-              }
-              if (Date.now() - start > maxWaitMs) {
-                cleanup()
-                return
-              }
-              if (fs.existsSync(authPath)) {
-                await promptImport()
-              }
-            },
-          )
-        }
-      } catch {
-        // Best effort; fall back to manual import.
-      }
-
-      const importNowLabel = vscode.l10n.t('Import now')
-      const manageLabel = vscode.l10n.t('Manage profiles')
-      const msg = await vscode.window.showInformationMessage(
-        vscode.l10n.t(
-          'After completing the login flow, import the current environment auth.json from {0} as a profile.',
-          authPath,
-        ),
-        importNowLabel,
-        manageLabel,
-      )
-
-      if (msg === importNowLabel) {
-        cleanup()
-        await vscode.commands.executeCommand(
-          'codex-switch.profile.addFromCodexAuthFile',
-        )
-      } else if (msg === manageLabel) {
-        cleanup()
-        await vscode.commands.executeCommand('codex-switch.profile.manage')
-      } else {
-        // Let watcher run until it triggers or times out.
-        setTimeout(() => cleanup(), maxWaitMs)
-      }
-    },
+    async () => loginViaCli(loginViaCliDeps),
   )
 
   const addFromFileCommand = vscode.commands.registerCommand(

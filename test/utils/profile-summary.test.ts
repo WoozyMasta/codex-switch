@@ -264,6 +264,18 @@ test('parseProfileSummary rejects malformed ids and timestamps', () => {
 
   assert.equal(
     parseProfileSummary({
+      id: '../../profiles.json',
+      name: 'Alice',
+      email: 'alice@example.com',
+      planType: 'pro',
+      createdAt: '2026-06-12T10:00:00Z',
+      updatedAt: '2026-06-12T11:00:00Z',
+    }),
+    null,
+  )
+
+  assert.equal(
+    parseProfileSummary({
       id: '123e4567-e89b-12d3-a456-426614174000',
       name: 'Alice',
       email: 'alice@example.com',

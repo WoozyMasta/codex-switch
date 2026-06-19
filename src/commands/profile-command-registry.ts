@@ -17,6 +17,7 @@ import {
   buildProfileSwitchQuickPickItems,
   type ProfileQuickPickItem,
 } from '../utils/profile-quick-pick'
+import { buildManageProfilesQuickPickItems } from '../utils/profile-manage-quick-pick'
 import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 import { writeJsonFile } from '../auth/shared-profile-store'
@@ -872,65 +873,20 @@ export function registerCommands(
       const hasProfiles = profiles.length > 0
 
       const action = await vscode.window.showQuickPick(
-        [
-          {
-            label: vscode.l10n.t('Prepare for New Login (Chat)'),
-            description: vscode.l10n.t(
-              'Save current profile if possible, remove local auth.json, and reload Chat login',
-            ),
-            command: 'codex-switch.profile.prepareForNewLoginChat',
-          },
-          {
-            label: vscode.l10n.t('Login via Codex CLI...'),
-            command: 'codex-switch.profile.login',
-          },
-          ...(hasProfiles
-            ? [
-                {
-                  label: vscode.l10n.t('Switch profile'),
-                  command: 'codex-switch.profile.switch',
-                },
-              ]
-            : []),
-          {
-            label: vscode.l10n.t('Add from current auth.json'),
-            description: authPath,
-            command: 'codex-switch.profile.addFromCodexAuthFile',
-          },
-          {
-            label: vscode.l10n.t('Import from file...'),
-            command: 'codex-switch.profile.addFromFile',
-          },
-          {
-            label: vscode.l10n.t('Export profiles...'),
-            command: 'codex-switch.profile.exportSettings',
-          },
-          {
-            label: vscode.l10n.t('Import profiles...'),
-            command: 'codex-switch.profile.importSettings',
-          },
-          ...(home.usesPerHomeState && !home.isDefault
-            ? [
-                {
-                  label: vscode.l10n.t('Use default CODEX_HOME profile here'),
-                  description: home.fsPath,
-                  command: 'codex-switch.profile.syncFromDefaultHome',
-                },
-              ]
-            : []),
-          ...(hasProfiles
-            ? [
-                {
-                  label: vscode.l10n.t('Rename profile'),
-                  command: 'codex-switch.profile.rename',
-                },
-                {
-                  label: vscode.l10n.t('Delete profile'),
-                  command: 'codex-switch.profile.delete',
-                },
-              ]
-            : []),
-        ],
+        buildManageProfilesQuickPickItems(authPath, home, hasProfiles, {
+          prepareForNewLogin: vscode.l10n.t('Prepare for New Login (Chat)'),
+          loginViaCodexCli: vscode.l10n.t('Login via Codex CLI...'),
+          switchProfile: vscode.l10n.t('Switch profile'),
+          addFromCurrentAuthJson: vscode.l10n.t('Add from current auth.json'),
+          importFromFile: vscode.l10n.t('Import from file...'),
+          exportProfiles: vscode.l10n.t('Export profiles...'),
+          importProfiles: vscode.l10n.t('Import profiles...'),
+          useDefaultProfileHere: vscode.l10n.t(
+            'Use default CODEX_HOME profile here',
+          ),
+          renameProfile: vscode.l10n.t('Rename profile'),
+          deleteProfile: vscode.l10n.t('Delete profile'),
+        }),
         { placeHolder: vscode.l10n.t('Manage profiles') },
       )
       if (!action) {

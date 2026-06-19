@@ -1,5 +1,4 @@
 import type * as vscode from 'vscode'
-import * as fs from 'fs'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import { loadAuthDataFromFile } from './auth-manager'
@@ -15,6 +14,12 @@ import { ProfileAuthSyncService } from './profile-auth-sync-service'
 import { ProfileAuthRecoveryService } from './profile-auth-recovery-service'
 import { ProfileStateService } from './profile-state-service'
 import { ProfileStorageService } from './profile-storage-service'
+import type {
+  ConfigurationGetter,
+  SecretStorageStore,
+  StateStore,
+  SyncFileSystem,
+} from './runtime-adapters'
 import { sha256Text } from '../utils/text-hash'
 
 // Backward compatibility keys (pre-rename).
@@ -27,12 +32,12 @@ interface PrepareForNewLoginChatResult {
 }
 
 interface ProfileManagerDeps {
-  fs: typeof fs
-  getConfiguration: typeof vscode.workspace.getConfiguration
+  fs: SyncFileSystem
+  getConfiguration: ConfigurationGetter
   remoteName: string | undefined
-  globalState: vscode.Memento
-  workspaceState: vscode.Memento
-  secrets: vscode.SecretStorage
+  globalState: StateStore
+  workspaceState: StateStore
+  secrets: SecretStorageStore
   globalStorageUri: vscode.Uri
   createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
   showErrorMessage: typeof vscode.window.showErrorMessage
@@ -185,12 +190,12 @@ export class ProfileManager {
     })
   }
 
-  private readonly fs: typeof fs
-  private readonly getConfiguration: typeof vscode.workspace.getConfiguration
+  private readonly fs: SyncFileSystem
+  private readonly getConfiguration: ConfigurationGetter
   private readonly remoteName: string | undefined
-  private readonly globalState: vscode.Memento
-  private readonly workspaceState: vscode.Memento
-  private readonly secrets: vscode.SecretStorage
+  private readonly globalState: StateStore
+  private readonly workspaceState: StateStore
+  private readonly secrets: SecretStorageStore
   private readonly globalStorageUri: vscode.Uri
   private readonly createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
   private readonly showErrorMessage: typeof vscode.window.showErrorMessage

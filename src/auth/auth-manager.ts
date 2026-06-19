@@ -6,14 +6,15 @@ import {
   getCodexAuthPathForHome,
   resolveDefaultCodexHomePath,
 } from '../utils/codex-paths'
+import type { Clock, ProcessEnv } from './runtime-adapters'
 
 const WSL_AUTH_PATH_CACHE_TTL_MS = 60 * 1000
 const WSL_AUTH_PATH_ERROR_LOG_COOLDOWN_MS = 60 * 1000
 
 interface AuthManagerClockDeps {
-  now?: () => number
+  now?: Clock
   useWslAuthPath?: boolean
-  env?: typeof process.env
+  env?: ProcessEnv
   execFileSync?: typeof execFileSync
 }
 
@@ -167,7 +168,7 @@ export function shouldUseWslAuthPath(enabled?: boolean): boolean {
 }
 
 function getCachedWslDefaultCodexAuthPath(
-  now: () => number = Date.now,
+  now: Clock = Date.now,
   execFileSyncFn: typeof execFileSync = execFileSync,
 ): string | null {
   const current = now()
@@ -185,7 +186,7 @@ function getCachedWslDefaultCodexAuthPath(
 }
 
 function resolveWslDefaultCodexAuthPath(
-  now: () => number = Date.now,
+  now: Clock = Date.now,
   execFileSyncFn: typeof execFileSync = execFileSync,
 ): string | null {
   try {

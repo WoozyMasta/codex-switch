@@ -1,4 +1,3 @@
-import type * as vscode from 'vscode'
 import type { AuthData, ProfileSummary } from '../types'
 import { shouldReplaceStoredProfileAuthWithLive } from '../utils/auth-refresh-policy'
 import { resolveDefaultHomeActiveProfileId } from '../utils/shared-active-profile'
@@ -19,6 +18,7 @@ import {
 } from '../utils/profile-last-state'
 import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
 import type { ResolvedCodexHome } from '../types'
+import type { ConfigurationGetter, StateStore } from './runtime-adapters'
 
 const ACTIVE_PROFILE_KEY = 'codexSwitch.activeProfileId'
 const LAST_PROFILE_KEY = 'codexSwitch.lastProfileId'
@@ -27,9 +27,9 @@ const OLD_LAST_PROFILE_KEY = 'codexUsage.lastProfileId'
 
 interface ProfileStateServiceDeps {
   getActiveCodexHome: () => ResolvedCodexHome
-  getConfiguration: typeof vscode.workspace.getConfiguration
-  globalState: vscode.Memento
-  workspaceState: vscode.Memento
+  getConfiguration: ConfigurationGetter
+  globalState: StateStore
+  workspaceState: StateStore
   isRemoteFilesMode: () => boolean
   getProfile: (profileId: string) => Promise<ProfileSummary | undefined>
   loadAuthData: (profileId: string) => Promise<AuthData | null>
@@ -54,7 +54,7 @@ interface ProfileStateServiceDeps {
 export class ProfileStateService {
   constructor(private readonly deps: ProfileStateServiceDeps) {}
 
-  private getStateBucket(): vscode.Memento {
+  private getStateBucket(): StateStore {
     const newCfg = this.deps.getConfiguration('codexSwitch')
     const scopeFromNew = newCfg.get<'global' | 'workspace'>(
       'activeProfileScope',
@@ -71,7 +71,7 @@ export class ProfileStateService {
     )
   }
 
-  private getLegacyStateBucket(): vscode.Memento {
+  private getLegacyStateBucket(): StateStore {
     const scope = this.deps
       .getConfiguration('codexUsage')
       .get<'global' | 'workspace'>('activeProfileScope', 'global')

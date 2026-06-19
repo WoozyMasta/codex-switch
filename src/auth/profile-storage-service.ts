@@ -1,5 +1,4 @@
 import type * as vscode from 'vscode'
-import * as fs from 'fs'
 import * as path from 'path'
 import { randomUUID } from 'crypto'
 import { AuthData, ProfileSummary, ResolvedCodexHome } from '../types'
@@ -33,6 +32,11 @@ import {
   readStoredProfileTokens,
   writeStoredProfileTokens,
 } from '../utils/profile-token-storage'
+import type {
+  SecretStorageStore,
+  StateStore,
+  SyncFileSystem,
+} from './runtime-adapters'
 import {
   buildProfileSummaryFromAuth,
   buildProfileTokensFromAuth,
@@ -47,10 +51,10 @@ const PROFILES_FILENAME = 'profiles.json'
 const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 
 interface ProfileStorageServiceDeps {
-  fs: typeof fs
-  globalState: vscode.Memento
-  workspaceState: vscode.Memento
-  secrets: vscode.SecretStorage
+  fs: SyncFileSystem
+  globalState: StateStore
+  workspaceState: StateStore
+  secrets: SecretStorageStore
   globalStorageUri: vscode.Uri
   isRemoteFilesMode: () => boolean
   getActiveCodexHome: () => ResolvedCodexHome

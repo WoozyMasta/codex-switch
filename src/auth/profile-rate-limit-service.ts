@@ -8,6 +8,12 @@ import type { ProfileManager } from './profile-manager'
 import type { AuthData, ProfileRateLimits, ProfileSummary } from '../types'
 import type { CodexCliCommand } from '../utils/codex-cli-resolver'
 import { normalizeRateLimitResponse } from '../utils/rate-limit-normalizer'
+import type {
+  AsyncFileSystem,
+  Clock,
+  ProcessEnv,
+  SpawnAppServer,
+} from './runtime-adapters'
 
 const RATE_LIMIT_CACHE_TTL_MS = 60 * 1000
 const APP_SERVER_REQUEST_TIMEOUT_MS = 5_000
@@ -44,19 +50,14 @@ interface DecorateProfilesOptions {
   forceRefreshProfileIds?: readonly string[]
 }
 
-type SpawnAppServer = (
-  codexCommand: CodexCliCommand,
-  env: Record<string, string | undefined>,
-) => ChildProcessWithoutNullStreams
-
 interface ProfileRateLimitServiceDeps {
-  env?: typeof process.env
-  now?: () => number
+  env?: ProcessEnv
+  now?: Clock
   tmpdir?: () => string
   resolveCodexCliCommand?: () => CodexCliCommand | null
   debugLog?: (...args: unknown[]) => void
   spawnAppServer?: SpawnAppServer
-  tempHomeFs?: typeof fs
+  tempHomeFs?: AsyncFileSystem
 }
 
 interface AppServerWaiter {
@@ -108,7 +109,7 @@ class CodexAppServerClient {
     clientVersion: string,
     codexCliCommand: CodexCliCommand,
     debugLog: (...args: unknown[]) => void,
-    env: typeof process.env = process.env,
+    env: ProcessEnv = process.env,
     spawnAppServer: SpawnAppServer = spawnCodexAppServer,
   ) {
     this.clientVersion = clientVersion
@@ -429,13 +430,13 @@ class CodexAppServerClient {
 
 export class ProfileRateLimitService {
   private readonly clientVersion: string
-  private readonly env: typeof process.env
-  private readonly now: () => number
+  private readonly env: ProcessEnv
+  private readonly now: Clock
   private readonly tmpdir: () => string
   private readonly resolveCodexCliCommand: () => CodexCliCommand | null
   private readonly debugLog: (...args: unknown[]) => void
   private readonly spawnAppServer: SpawnAppServer
-  private readonly tempHomeFs: typeof fs
+  private readonly tempHomeFs: AsyncFileSystem
   private readonly cache = new Map<string, CacheEntry>()
   private readonly inflight = new Map<
     string,
@@ -743,12 +744,12 @@ async function queryRateLimitsViaTemporaryCodexHome(
   clientVersion: string,
   codexCliCommand: CodexCliCommand,
   signal?: AbortSignal,
-  now: () => number = Date.now,
+  now: Clock = Date.now,
   tmpdir: () => string = os.tmpdir,
   debugLog: (...args: unknown[]) => void = () => undefined,
-  env: typeof process.env = process.env,
+  env: ProcessEnv = process.env,
   spawnAppServer: SpawnAppServer = spawnCodexAppServer,
-  tempHomeFs: typeof fs = fs,
+  tempHomeFs: AsyncFileSystem = fs,
 ): Promise<ProfileRateLimits | null> {
   if (signal?.aborted) {
     return null
@@ -801,7 +802,7 @@ async function removeTemporaryCodexHome(
   tempHomePath: string,
   authFilePath: string,
   debugLog: (...args: unknown[]) => void = () => undefined,
-  tempHomeFs: typeof fs = fs,
+  tempHomeFs: AsyncFileSystem = fs,
 ): Promise<void> {
   try {
     await tempHomeFs.unlink(authFilePath)

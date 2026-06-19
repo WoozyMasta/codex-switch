@@ -1,4 +1,3 @@
-import fs from 'fs'
 import type { AuthData, ProfileSummary } from '../types'
 import { maybeSyncProfileAuthToCodexAuthFile } from '../utils/profile-live-auth-sync'
 import { captureLiveAuthForMatchingProfile } from '../utils/profile-live-auth-sync'
@@ -7,9 +6,10 @@ import {
   maybeReplaceProfileAuthWithLive,
 } from '../utils/profile-auth-preservation'
 import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
+import type { SyncFileSystem } from './runtime-adapters'
 
 interface ProfileAuthFileServiceDeps {
-  fs: typeof fs
+  fs: SyncFileSystem
   getActiveCodexAuthPath: () => string
   loadLiveCodexAuthData: () => Promise<AuthData | null>
   buildCodexAuthJson: (authData: AuthData) => string

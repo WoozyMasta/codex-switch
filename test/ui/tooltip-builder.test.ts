@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ProfileSummary, ResolvedCodexHome } from '../../src/types'
 import { createProfileTooltip } from '../../src/ui/tooltip-builder'
+import { escapeTableCell } from '../../src/utils/profile-tooltip-format'
 import { escapeMarkdown } from '../../src/utils/markdown'
 
 function makeProfile(overrides: Partial<ProfileSummary> = {}): ProfileSummary {
@@ -42,10 +43,6 @@ function makeHome(
     usesPerHomeState: false,
     ...overrides,
   }
-}
-
-function escapeTableCellForTest(text: string): string {
-  return escapeMarkdown(text).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
 }
 
 test('createProfileTooltip restricts commands and escapes profile markup', () => {
@@ -110,7 +107,7 @@ test('createProfileTooltip escapes multiline and command-like content', () => {
   )
   assert.ok(
     tooltip.value.includes(
-      escapeTableCellForTest('Alpha\n$(zap) [open](command:evil)'),
+      escapeTableCell('Alpha\n$(zap) [open](command:evil)'),
     ),
   )
   assert.ok(

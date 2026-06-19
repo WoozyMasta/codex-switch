@@ -1,38 +1,15 @@
 import * as vscode from 'vscode'
-import {
-  ProfileRateLimitWindow,
-  ProfileSummary,
-  ResolvedCodexHome,
-} from '../types'
+import { ProfileSummary, ResolvedCodexHome } from '../types'
 import { getProfilePlanDisplay } from './profile-display'
 import { formatProfileResetTime } from '../utils/profile-reset-time'
 import { escapeMarkdown } from '../utils/markdown'
-
-function buildCommandUri(command: string, args: unknown[]): string {
-  return `command:${command}?${encodeURIComponent(JSON.stringify(args))}`
-}
-
-function escapeLinkTitle(text: string): string {
-  return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-}
-
-function escapeTableCell(text: string): string {
-  return escapeMarkdown(text).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
-}
-
-function formatRateLimitCell(
-  window: ProfileRateLimitWindow | null | undefined,
-): string {
-  if (!window) {
-    return '-'
-  }
-
-  return `${Math.round(window.remainingPercent)}%`
-}
-
-function padTableCell(content: string): string {
-  return `&nbsp;${content}&nbsp;`
-}
+import {
+  buildCommandUri,
+  escapeLinkTitle,
+  escapeTableCell,
+  formatRateLimitCell,
+  padTableCell,
+} from '../utils/profile-tooltip-format'
 
 export function createProfileTooltip(
   activeProfile: ProfileSummary | null,

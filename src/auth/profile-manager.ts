@@ -1,26 +1,15 @@
 import type * as vscode from 'vscode'
 import { AuthData, ProfileSummary, StorageMode } from '../types'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
-import { loadAuthDataFromFile } from './auth-manager'
-import { buildCodexAuthJson, syncCodexAuthFile } from './codex-auth-sync'
 import { resolveStorageMode } from '../utils/storage-mode'
 import {
-  ProfileTransferService,
   type ExportedSettingsV1,
   type ImportProfilesResult,
 } from './profile-transfer-service'
-import { ProfileAuthFileService } from './profile-auth-file-service'
-import { ProfileAuthSyncService } from './profile-auth-sync-service'
-import { ProfileAuthRecoveryService } from './profile-auth-recovery-service'
-import { ProfileStateService } from './profile-state-service'
-import { ProfileStorageService } from './profile-storage-service'
-import type {
-  ConfigurationGetter,
-  SecretStorageStore,
-  StateStore,
-  SyncFileSystem,
-} from './runtime-adapters'
-import { sha256Text } from '../utils/text-hash'
+import {
+  ProfileManagerRuntime,
+  type ProfileManagerDeps,
+} from './profile-manager-runtime'
 
 // Backward compatibility keys (pre-rename).
 interface LiveAuthPreservationResult {
@@ -31,188 +20,92 @@ interface PrepareForNewLoginChatResult {
   removedAuthFile: boolean
 }
 
-interface ProfileManagerDeps {
-  fs: SyncFileSystem
-  getConfiguration: ConfigurationGetter
-  remoteName: string | undefined
-  globalState: StateStore
-  workspaceState: StateStore
-  secrets: SecretStorageStore
-  globalStorageUri: vscode.Uri
-  createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
-  showErrorMessage: typeof vscode.window.showErrorMessage
-  showInformationMessage: typeof vscode.window.showInformationMessage
-  showWarningMessage: typeof vscode.window.showWarningMessage
-  translate: typeof vscode.l10n.t
-  createDisposable: (dispose: () => void) => vscode.Disposable
-  uriFile: (path: string) => vscode.Uri
-  relativePattern: (base: vscode.Uri, pattern: string) => vscode.RelativePattern
-}
-
 export class ProfileManager {
-  constructor(
-    private codexHomeManager: CodexHomeManager,
-    deps: ProfileManagerDeps,
-  ) {
-    this.fs = deps.fs
-    this.getConfiguration = deps.getConfiguration
-    this.remoteName = deps.remoteName
-    this.globalState = deps.globalState
-    this.workspaceState = deps.workspaceState
-    this.secrets = deps.secrets
-    this.globalStorageUri = deps.globalStorageUri
-    this.createFileSystemWatcher = deps.createFileSystemWatcher
-    this.showErrorMessage = deps.showErrorMessage
-    this.showInformationMessage = deps.showInformationMessage
-    this.translate = deps.translate
-    this.createDisposable = deps.createDisposable
-    this.uriFile = deps.uriFile
-    this.relativePattern = deps.relativePattern
-    this.profileStorageService = new ProfileStorageService({
-      fs: this.fs,
-      globalState: this.globalState,
-      workspaceState: this.workspaceState,
-      secrets: this.secrets,
-      globalStorageUri: this.globalStorageUri,
-      isRemoteFilesMode: () => this.isRemoteFilesMode(),
-      getActiveCodexHome: () => this.getActiveCodexHome(),
-      showErrorMessage: this.showErrorMessage,
-      showInformationMessage: this.showInformationMessage,
-      translate: this.translate,
-    })
-    this.profileAuthFileService = new ProfileAuthFileService({
-      fs: this.fs,
-      getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
-      loadLiveCodexAuthData: () =>
-        loadAuthDataFromFile(this.getActiveCodexAuthPath()),
-      buildCodexAuthJson,
-      syncCodexAuthFile,
-      sha256Text,
-      listProfiles: () => this.profileStorageService.listProfiles(),
-      loadAuthData: (profileId) => this.loadAuthData(profileId),
-      replaceProfileAuth: (profileId, authData) =>
-        this.replaceProfileAuth(profileId, authData),
-    })
-    this.profileTransferService = new ProfileTransferService({
-      listProfiles: () => this.profileStorageService.listProfiles(),
-      getActiveProfileId: () => this.getActiveProfileId(),
-      getLastProfileId: () => this.getLastProfileId(),
-      readStoredTokens: (profileId) =>
-        this.profileStorageService.readStoredTokens(profileId),
-      findDuplicateProfile: (authData) => this.findDuplicateProfile(authData),
-      replaceProfileAuth: (profileId, authData) =>
-        this.replaceProfileAuth(profileId, authData),
-      createProfile: (name, authData) => this.createProfile(name, authData),
-      setActiveProfileId: (profileId) => this.setActiveProfileId(profileId),
-      setLastProfileId: (profileId) => this.setLastProfileId(profileId),
-    })
-    this.profileAuthSyncService = new ProfileAuthSyncService({
-      getActiveProfileId: () => this.getActiveProfileId(),
-      getProfile: (profileId) => this.getProfile(profileId),
-      loadAuthData: (profileId) => this.loadAuthData(profileId),
-      loadLiveCodexAuthData: () =>
-        this.profileAuthFileService.loadLiveCodexAuthData(),
-      getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
-      setLastProfileId: (profileId) =>
-        this.profileStateService.setLastProfileId(profileId),
-      setActiveProfileIdInState: (profileId) =>
-        this.profileStateService.setActiveProfileIdInState(profileId),
-      syncActiveProfileToCodexAuthFile: () =>
-        this.syncActiveProfileToCodexAuthFile(),
-      captureLiveAuthForMatchingProfile: (authPath) =>
-        this.profileAuthFileService.captureLiveAuthForMatchingProfile(authPath),
-      listProfiles: () => this.profileStorageService.listProfiles(),
-      replaceProfileAuth: (profileId, authData) =>
-        this.replaceProfileAuth(profileId, authData),
-      createFileSystemWatcher: this.createFileSystemWatcher,
-      uriFile: this.uriFile,
-      relativePattern: this.relativePattern,
-      isRemoteFilesMode: () => this.isRemoteFilesMode(),
-    })
-    this.profileAuthRecoveryService = new ProfileAuthRecoveryService({
-      getActiveProfileId: () => this.getActiveProfileId(),
-      getProfile: (profileId) => this.getProfile(profileId),
-      listProfiles: () => this.profileStorageService.listProfiles(),
-      loadAuthData: (profileId) => this.loadAuthData(profileId),
-      loadLiveCodexAuthData: () =>
-        this.profileAuthFileService.loadLiveCodexAuthData(),
-      getActiveCodexAuthPath: () => this.getActiveCodexAuthPath(),
-      replaceProfileAuth: (profileId, authData) =>
-        this.replaceProfileAuth(profileId, authData),
-      deleteProfile: (profileId) => this.deleteProfile(profileId),
-      readRemoteProfileTokens: (profileId) =>
-        this.profileStorageService.readRemoteProfileTokens(profileId),
-      writeStoredTokens: (profileId, tokens) =>
-        this.profileStorageService.writeStoredTokens(profileId, tokens),
-      isRemoteFilesMode: () => this.isRemoteFilesMode(),
-      showWarningMessage: deps.showWarningMessage,
-      showErrorMessage: this.showErrorMessage,
-      translate: this.translate,
-    })
-    this.profileStateService = new ProfileStateService({
-      getActiveCodexHome: () => this.getActiveCodexHome(),
-      getConfiguration: this.getConfiguration,
-      globalState: this.globalState,
-      workspaceState: this.workspaceState,
-      isRemoteFilesMode: () => this.isRemoteFilesMode(),
-      getProfile: (profileId) => this.getProfile(profileId),
-      loadAuthData: (profileId) => this.loadAuthData(profileId),
-      loadLiveCodexAuthData: () =>
-        this.profileAuthFileService.loadLiveCodexAuthData(),
-      inferActiveProfileIdFromAuthFile: () =>
-        this.profileAuthFileService.inferActiveProfileIdFromAuthFile(),
-      recoverMissingTokens: (profileId) =>
-        this.profileAuthRecoveryService.recoverMissingTokens(profileId),
-      preserveStoredProfileAuthFromLive: (profileId) =>
-        this.profileAuthRecoveryService.preserveStoredProfileAuthFromLive(
-          profileId,
-        ),
-      syncProfileAuthToCodexAuthFile: (profileId, authData) =>
-        this.profileAuthFileService.syncProfileAuthToCodexAuthFile(
-          profileId,
-          authData,
-        ),
-      resetSyncCache: () => this.profileAuthFileService.resetSyncCache(),
-      readSharedActiveProfile: () =>
-        this.profileStorageService.readSharedActiveProfile()?.profileId,
-      readDefaultHomeSharedActiveProfileId: () =>
-        this.profileStorageService.readDefaultHomeSharedActiveProfileId(),
-      readDefaultHomeSharedLegacyActiveProfileId: () =>
-        this.profileStorageService.readDefaultHomeSharedLegacyActiveProfileId(),
-      writeSharedActiveProfile: (profileId) =>
-        this.profileStorageService.writeSharedActiveProfile(profileId),
-      deleteSharedActiveProfile: () =>
-        this.profileStorageService.deleteSharedActiveProfile(),
-      hasActiveCodexAuthFile: () =>
-        this.profileAuthFileService.hasActiveCodexAuthFile(),
-      deleteActiveCodexAuthFile: () =>
-        this.profileAuthFileService.deleteActiveCodexAuthFile(),
-    })
+  constructor(codexHomeManager: CodexHomeManager, deps: ProfileManagerDeps) {
+    this.runtime = new ProfileManagerRuntime(codexHomeManager, deps)
   }
 
-  private readonly fs: SyncFileSystem
-  private readonly getConfiguration: ConfigurationGetter
-  private readonly remoteName: string | undefined
-  private readonly globalState: StateStore
-  private readonly workspaceState: StateStore
-  private readonly secrets: SecretStorageStore
-  private readonly globalStorageUri: vscode.Uri
-  private readonly createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
-  private readonly showErrorMessage: typeof vscode.window.showErrorMessage
-  private readonly showInformationMessage: typeof vscode.window.showInformationMessage
-  private readonly translate: typeof vscode.l10n.t
-  private readonly createDisposable: (dispose: () => void) => vscode.Disposable
-  private readonly uriFile: (path: string) => vscode.Uri
-  private readonly relativePattern: (
-    base: vscode.Uri,
-    pattern: string,
-  ) => vscode.RelativePattern
-  private readonly profileStorageService: ProfileStorageService
-  private readonly profileAuthFileService: ProfileAuthFileService
-  private readonly profileTransferService: ProfileTransferService
-  private readonly profileAuthSyncService: ProfileAuthSyncService
-  private readonly profileAuthRecoveryService: ProfileAuthRecoveryService
-  private readonly profileStateService: ProfileStateService
+  private readonly runtime: ProfileManagerRuntime
+
+  private get fs() {
+    return this.runtime.fs
+  }
+
+  private get getConfiguration() {
+    return this.runtime.getConfiguration
+  }
+
+  private get remoteName() {
+    return this.runtime.remoteName
+  }
+
+  private get globalState() {
+    return this.runtime.globalState
+  }
+
+  private get workspaceState() {
+    return this.runtime.workspaceState
+  }
+
+  private get secrets() {
+    return this.runtime.secrets
+  }
+
+  private get globalStorageUri() {
+    return this.runtime.globalStorageUri
+  }
+
+  private get createFileSystemWatcher() {
+    return this.runtime.createFileSystemWatcher
+  }
+
+  private get showErrorMessage() {
+    return this.runtime.showErrorMessage
+  }
+
+  private get showInformationMessage() {
+    return this.runtime.showInformationMessage
+  }
+
+  private get translate() {
+    return this.runtime.translate
+  }
+
+  private get createDisposable() {
+    return this.runtime.createDisposable
+  }
+
+  private get uriFile() {
+    return this.runtime.uriFile
+  }
+
+  private get relativePattern() {
+    return this.runtime.relativePattern
+  }
+
+  private get profileStorageService() {
+    return this.runtime.profileStorageService
+  }
+
+  private get profileAuthFileService() {
+    return this.runtime.profileAuthFileService
+  }
+
+  private get profileTransferService() {
+    return this.runtime.profileTransferService
+  }
+
+  private get profileAuthSyncService() {
+    return this.runtime.profileAuthSyncService
+  }
+
+  private get profileAuthRecoveryService() {
+    return this.runtime.profileAuthRecoveryService
+  }
+
+  private get profileStateService() {
+    return this.runtime.profileStateService
+  }
 
   private getConfiguredStorageMode(): StorageMode {
     const cfg = this.getConfiguration('codexSwitch')
@@ -232,15 +125,15 @@ export class ProfileManager {
   }
 
   private getActiveCodexHome() {
-    return this.codexHomeManager.getActiveHome()
+    return this.runtime.getActiveCodexHomeSummary()
   }
 
   getActiveCodexAuthPath(): string {
-    return this.getActiveCodexHome().authPath
+    return this.runtime.getActiveCodexAuthPath()
   }
 
   getActiveCodexHomeSummary() {
-    return this.getActiveCodexHome()
+    return this.runtime.getActiveCodexHomeSummary()
   }
 
   async listProfiles(): Promise<ProfileSummary[]> {

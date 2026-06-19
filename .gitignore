@@ -246,3 +246,4 @@ codex-switch-profiles.json
 out-test/
 test/**/*.js
 test/**/*.js.map
+v8cov/

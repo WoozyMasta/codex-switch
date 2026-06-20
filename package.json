@@ -21,8 +21,9 @@
     "package.nls*.json"
   ],
   "scripts": {
-    "vscode:prepublish": "npm run build",
-    "build": "tsc -p ./",
+    "vscode:prepublish": "npm run build:package",
+    "build": "node ./scripts/clean-build-output.mjs && tsc -p ./",
+    "build:package": "node ./scripts/clean-build-output.mjs && tsc -p ./ --sourceMap false",
     "build:test": "node ./scripts/clean-test-output.mjs && tsc -p ./tsconfig.test.json",
     "lint:ts": "eslint \"src/**/*.ts\" --max-warnings=0",
     "lint:md": "markdownlint-cli2 \"**/*.md\" \"!node_modules/**\" \"!.vscode-test/**\"",

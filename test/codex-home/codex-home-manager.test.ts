@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
+import * as path from 'node:path'
 import test from 'node:test'
 import { CodexHomeManager } from '../../src/codex-home/codex-home-manager'
+
+const customHome = path.resolve('C:\\Temp\\codex-home')
+const expectedName = path.basename(customHome)
 
 test('CodexHomeManager resolves default and custom homes deterministically', () => {
   const defaultHome = new CodexHomeManager()
@@ -10,18 +14,18 @@ test('CodexHomeManager resolves default and custom homes deterministically', () 
   assert.equal(defaultHome.getActiveHome().id, 'default')
   assert.equal(defaultHome.buildLoginCommand(), 'codex login')
 
-  const customHome = new CodexHomeManager({
+  const customHomeManager = new CodexHomeManager({
     initialCodexHome: 'C:\\Temp\\codex-home',
     codexHomeEnabled: true,
   })
 
-  assert.equal(customHome.isEnabled(), true)
-  assert.equal(customHome.getActiveHome().isDefault, false)
-  assert.equal(customHome.getActiveHome().usesPerHomeState, true)
-  assert.equal(customHome.getActiveHome().name, 'codex-home')
-  assert.equal(customHome.getActiveHome().fsPath, 'C:\\Temp\\codex-home')
-  assert.ok(customHome.getActiveHome().id.startsWith('env-'))
-  assert.equal(customHome.buildLoginCommand(), 'codex login')
+  assert.equal(customHomeManager.isEnabled(), true)
+  assert.equal(customHomeManager.getActiveHome().isDefault, false)
+  assert.equal(customHomeManager.getActiveHome().usesPerHomeState, true)
+  assert.equal(customHomeManager.getActiveHome().name, expectedName)
+  assert.equal(customHomeManager.getActiveHome().fsPath, customHome)
+  assert.ok(customHomeManager.getActiveHome().id.startsWith('env-'))
+  assert.equal(customHomeManager.buildLoginCommand(), 'codex login')
 })
 
 test('CodexHomeManager uses WSL login command only for the default home', () => {

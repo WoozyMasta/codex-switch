@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import * as path from 'node:path'
 import test from 'node:test'
 import { getDefaultCodexAuthPathForHome } from '../../src/auth/auth-manager'
 import {
@@ -6,23 +7,29 @@ import {
   resolveDefaultCodexHomePath,
 } from '../../src/utils/codex-paths'
 
+const customHome = path.resolve('C:\\Temp\\codex-home')
+const meHome = path.resolve('C:\\Users\\me')
+const expectedCustomHome = path.resolve(customHome)
+const expectedDefaultHome = path.resolve(path.join(meHome, '.codex'))
+const expectedAuthPath = path.join(expectedCustomHome, 'auth.json')
+
 test('resolveDefaultCodexHomePath and getCodexAuthPathForHome resolve deterministic paths', () => {
   assert.equal(
     resolveDefaultCodexHomePath('C:\\Temp\\codex-home', 'C:\\Users\\me'),
-    'C:\\Temp\\codex-home',
+    expectedCustomHome,
   )
   assert.equal(
     resolveDefaultCodexHomePath(undefined, 'C:\\Users\\me'),
-    'C:\\Users\\me\\.codex',
+    expectedDefaultHome,
   )
   assert.equal(
     getCodexAuthPathForHome('C:\\Temp\\codex-home'),
-    'C:\\Temp\\codex-home\\auth.json',
+    expectedAuthPath,
   )
 })
 
 test('getDefaultCodexAuthPathForHome uses WSL auth path only when enabled on Windows', () => {
-  const localPath = getCodexAuthPathForHome('C:\\Temp\\codex-home')
+  const localPath = expectedAuthPath
   const wslPath = 'C:\\Users\\me\\AppData\\Local\\Temp\\wsl-auth.json'
   const deps = {
     now: () => 123,

@@ -12,3 +12,5 @@
 !out/**/*.js
 !resources
 !resources/**
+**/*.map
+.vscode/**

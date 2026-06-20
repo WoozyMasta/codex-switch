@@ -155,4 +155,54 @@ suite('Codex Switch extension smoke', () => {
       rmSync(tempRoot, { recursive: true, force: true })
     }
   })
+
+  test('restarts or reloads when storage settings change', async () => {
+    const commandModule = vscode.commands as unknown as {
+      executeCommand: (commandId: string) => Promise<unknown>
+    }
+    const originalExecuteCommand = commandModule.executeCommand
+    const executedCommands: string[] = []
+    const configuration = vscode.workspace.getConfiguration('codexSwitch')
+    const originalStorageMode = configuration.get<string>('storageMode')
+    const nextStorageMode =
+      originalStorageMode === 'remoteFiles' ? 'auto' : 'remoteFiles'
+
+    try {
+      commandModule.executeCommand = async (commandId: string) => {
+        executedCommands.push(commandId)
+        return undefined
+      }
+
+      await configuration.update(
+        'storageMode',
+        nextStorageMode,
+        vscode.ConfigurationTarget.Global,
+      )
+
+      await waitFor(
+        () =>
+          executedCommands.includes('workbench.action.restartExtensionHost') ||
+          executedCommands.includes('workbench.action.reloadWindow'),
+      )
+
+      assert.equal(executedCommands.length > 0, true)
+    } finally {
+      commandModule.executeCommand = originalExecuteCommand
+    }
+  })
 })
+
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+
+  assert.fail(`timed out after ${timeoutMs}ms`)
+}

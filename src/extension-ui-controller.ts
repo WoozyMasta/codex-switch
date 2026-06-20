@@ -50,12 +50,14 @@ export function createExtensionUiController(
     profiles: ProfileSummary[],
   ): Promise<Map<string, MaintenanceProfileState | null>> => {
     const entries = await Promise.all(
-      profiles.map(async (profile): Promise<[string, MaintenanceProfileState | null]> => {
-        const state = await profileMaintenanceService
-          .readProfileState(profile.id)
-          .catch(() => null)
-        return [profile.id, state]
-      }),
+      profiles.map(
+        async (profile): Promise<[string, MaintenanceProfileState | null]> => {
+          const state = await profileMaintenanceService
+            .readProfileState(profile.id)
+            .catch(() => null)
+          return [profile.id, state]
+        },
+      ),
     )
     return new Map(entries)
   }
@@ -77,7 +79,6 @@ export function createExtensionUiController(
       const cells = formatProfileRefreshCells(status, {
         now,
         autoRefreshEnabled,
-        translate: (message, ...args) => vscode.l10n.t(message, ...args),
       })
       if (!cells.updated) {
         return ''

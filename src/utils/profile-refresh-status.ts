@@ -88,19 +88,24 @@ export function formatProfileRefreshLabel(
 }
 
 export interface ProfileRefreshCells {
-  /** Time since last successful refresh, or '…' while refreshing, or '' if unknown. */
+  /** Relative duration since last successful refresh (e.g. "3m"), '…' while refreshing, or '' if unknown. */
   updated: string
-  /** Time until next refresh/retry, or '' if auto-refresh is disabled or not scheduled. */
+  /** Absolute HH:MM of next scheduled refresh/retry, or '' if auto-refresh is disabled or not scheduled. */
   next: string
 }
 
+function formatHHMM(timestampMs: number): string {
+  const d = new Date(timestampMs)
+  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
+}
+
 /**
- * Returns compact cell values for two separate "Updated" and "Next" tooltip columns.
- * Rows show only the duration; headers are single words.
+ * Returns absolute HH:MM timestamps for the Refresh tooltip cell.
+ * Using absolute time avoids stale relative values when the popup stays open.
  */
 export function formatProfileRefreshCells(
   status: ProfileRefreshStatus,
-  options: FormatProfileRefreshLabelOptions,
+  options: Pick<FormatProfileRefreshLabelOptions, 'now' | 'autoRefreshEnabled'>,
 ): ProfileRefreshCells {
   const { now, autoRefreshEnabled } = options
 
@@ -115,9 +120,9 @@ export function formatProfileRefreshCells(
 
   let next = ''
   if (status.nextRetryAt !== undefined && status.nextRetryAt > now) {
-    next = formatRelativeDuration(status.nextRetryAt - now)
+    next = formatHHMM(status.nextRetryAt)
   } else if (autoRefreshEnabled && status.nextDueAt !== undefined) {
-    next = formatRelativeDuration(Math.max(0, status.nextDueAt - now))
+    next = formatHHMM(status.nextDueAt)
   }
 
   return { updated, next }

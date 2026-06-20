@@ -113,65 +113,62 @@ test('formatProfileRefreshLabel omits timing when no successful result exists', 
   )
 })
 
+const HH_MM = /^\d{2}:\d{2}$/
+
 test('formatProfileRefreshCells returns ellipsis while refreshing', () => {
-  assert.deepEqual(
-    formatProfileRefreshCells(
-      { isRefreshing: true, lastSuccessAt: 1000 },
-      { now: 5000, autoRefreshEnabled: true, translate },
-    ),
-    { updated: '…', next: '' },
+  const result = formatProfileRefreshCells(
+    { isRefreshing: true, lastSuccessAt: 1000 },
+    { now: 5000, autoRefreshEnabled: true },
   )
+  assert.equal(result.updated, '…')
+  assert.equal(result.next, '')
 })
 
-test('formatProfileRefreshCells returns compact durations when auto-refresh is enabled', () => {
-  const now = 1_000_000
-  assert.deepEqual(
-    formatProfileRefreshCells(
-      {
-        isRefreshing: false,
-        lastSuccessAt: now - 4 * 60_000,
-        nextDueAt: now + 11 * 60_000,
-      },
-      { now, autoRefreshEnabled: true, translate },
-    ),
-    { updated: '4m', next: '11m' },
+test('formatProfileRefreshCells returns relative updated and absolute HH:MM next when enabled', () => {
+  const now = Date.now()
+  const result = formatProfileRefreshCells(
+    {
+      isRefreshing: false,
+      lastSuccessAt: now - 4 * 60_000,
+      nextDueAt: now + 11 * 60_000,
+    },
+    { now, autoRefreshEnabled: true },
   )
+  assert.equal(result.updated, '4m')
+  assert.match(result.next, HH_MM)
 })
 
 test('formatProfileRefreshCells omits next when auto-refresh is disabled', () => {
-  const now = 1_000_000
-  assert.deepEqual(
-    formatProfileRefreshCells(
-      { isRefreshing: false, lastSuccessAt: now - 60_000 },
-      { now, autoRefreshEnabled: false, translate },
-    ),
-    { updated: '1m', next: '' },
+  const now = Date.now()
+  const result = formatProfileRefreshCells(
+    { isRefreshing: false, lastSuccessAt: now - 60_000 },
+    { now, autoRefreshEnabled: false },
   )
+  assert.equal(result.updated, '1m')
+  assert.equal(result.next, '')
 })
 
 test('formatProfileRefreshCells uses retry time in next when pending', () => {
-  const now = 1_000_000
-  assert.deepEqual(
-    formatProfileRefreshCells(
-      {
-        isRefreshing: false,
-        lastSuccessAt: now - 19 * 60_000,
-        nextDueAt: now + 60_000,
-        nextRetryAt: now + 2 * 60_000,
-      },
-      { now, autoRefreshEnabled: true, translate },
-    ),
-    { updated: '19m', next: '2m' },
+  const now = Date.now()
+  const result = formatProfileRefreshCells(
+    {
+      isRefreshing: false,
+      lastSuccessAt: now - 19 * 60_000,
+      nextDueAt: now + 60_000,
+      nextRetryAt: now + 2 * 60_000,
+    },
+    { now, autoRefreshEnabled: true },
   )
+  assert.equal(result.updated, '19m')
+  assert.match(result.next, HH_MM)
 })
 
 test('formatProfileRefreshCells returns empty strings when no data', () => {
-  const now = 1_000_000
-  assert.deepEqual(
-    formatProfileRefreshCells(
-      { isRefreshing: false },
-      { now, autoRefreshEnabled: true, translate },
-    ),
-    { updated: '', next: '' },
+  const now = Date.now()
+  const result = formatProfileRefreshCells(
+    { isRefreshing: false },
+    { now, autoRefreshEnabled: true },
   )
+  assert.equal(result.updated, '')
+  assert.equal(result.next, '')
 })

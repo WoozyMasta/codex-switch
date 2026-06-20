@@ -1,8 +1,12 @@
 import { AuthData } from '../types'
 
+/** The minimal set of required tokens extracted from an auth.json. */
 export interface CanonicalTokenBundle {
+  /** OpenID Connect identity token. */
   idToken: string
+  /** OAuth2 access token. */
   accessToken: string
+  /** OAuth2 refresh token. */
   refreshToken: string
 }
 
@@ -21,6 +25,7 @@ function asNonEmptyString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
+/** Extracts the canonical token bundle from AuthData, or undefined if any required token is missing. */
 export function getCanonicalTokenBundle(
   authData: AuthData,
 ): CanonicalTokenBundle | undefined {
@@ -49,6 +54,7 @@ export function getCanonicalTokenBundle(
   }
 }
 
+/** Validates that an imported auth.json matches expected tokens, returning the root object or null if invalid. */
 export function validateImportedAuthJson(
   authJson: unknown,
   tokens: CanonicalTokenBundle & { accountId?: string },

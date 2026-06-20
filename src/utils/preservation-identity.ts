@@ -5,6 +5,7 @@ import {
 } from './auth-identity'
 import { asOptionalString } from './strings'
 
+/** Selects the first non-empty trimmed string from a list of values. */
 function pickNonEmptyString(...values: unknown[]): string | undefined {
   for (const value of values) {
     const v = asOptionalString(value)
@@ -15,6 +16,7 @@ function pickNonEmptyString(...values: unknown[]): string | undefined {
   return undefined
 }
 
+/** Builds identity snapshot from profile and stored auth, preferring stored values over profile. */
 export function buildStoredPreservationIdentity(
   profile: ProfileSummary,
   storedAuth: AuthData | null,
@@ -33,6 +35,7 @@ export function buildStoredPreservationIdentity(
   })
 }
 
+/** Checks if live auth matches the preservation identity of a profile with optional stored auth. */
 export function matchesPreservationIdentityForProfile(
   profile: ProfileSummary,
   liveAuth: AuthData,

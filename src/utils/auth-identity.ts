@@ -1,20 +1,35 @@
+/** Describes how closely two identity snapshots match (if at all). */
 export type IdentityMatch = 'exact' | 'different' | 'ambiguous'
 
+/** Normalized and comparable identity fields from an authentication snapshot. */
 export interface IdentitySnapshot {
+  /** Organization ID. */
   organizationId?: string
+  /** ChatGPT-specific user ID. */
   chatgptUserId?: string
+  /** General user ID. */
   userId?: string
+  /** OpenID Connect subject. */
   subject?: string
+  /** Account ID. */
   accountId?: string
+  /** Email address (normalized to lowercase, empty if 'unknown'). */
   email?: string
 }
 
+/** Identity fields from an authentication source (typically from AuthData). */
 export interface IdentitySource {
+  /** Default organization ID. */
   defaultOrganizationId?: string
+  /** ChatGPT-specific user ID. */
   chatgptUserId?: string
+  /** General user ID. */
   userId?: string
+  /** OpenID Connect subject. */
   subject?: string
+  /** Account ID. */
   accountId?: string
+  /** Email address. */
   email?: string
 }
 
@@ -74,6 +89,7 @@ function compareIdentityGroup(
   return 'unknown'
 }
 
+/** Converts an IdentitySource into a normalized IdentitySnapshot for comparison. */
 export function buildIdentitySnapshot(
   source: IdentitySource,
 ): IdentitySnapshot {
@@ -87,6 +103,7 @@ export function buildIdentitySnapshot(
   }
 }
 
+/** Compares two identity snapshots and returns whether they match exactly, partially, ambiguously, or differ. */
 export function compareIdentitySnapshots(
   left: IdentitySnapshot,
   right: IdentitySnapshot,

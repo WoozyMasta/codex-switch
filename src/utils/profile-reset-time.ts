@@ -1,3 +1,4 @@
+/** Checks if two dates represent the same local calendar date. */
 function isSameLocalDate(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -6,6 +7,7 @@ function isSameLocalDate(a: Date, b: Date): boolean {
   )
 }
 
+/** Formats a Unix timestamp as a readable reset time, showing time only if today or adding weekday if future. */
 export function formatProfileResetTime(
   resetsAt: number | null | undefined,
   now = new Date(),

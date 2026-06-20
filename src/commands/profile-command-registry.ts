@@ -39,7 +39,14 @@ import { restartExtensionHostOrReloadWindow } from '../utils/vscode-restart'
 import { ResolvedCodexHome } from '../types'
 
 /**
- * Register all extension commands
+ * Registers all extension commands with VS Code.
+ * Wires up command handlers for profile switching, management, login, and file operations.
+ * @param context - The extension context for command registration and state.
+ * @param profileManager - Manager for profile operations.
+ * @param codexHomeManager - Manager for Codex home directory configuration.
+ * @param runtimeHome - The currently active Codex home.
+ * @param profileRateLimitService - Service for managing rate limit data.
+ * @param onAuthChanged - Callback invoked when authentication changes.
  */
 export function registerCommands(
   context: vscode.ExtensionContext,

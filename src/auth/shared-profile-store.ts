@@ -5,14 +5,22 @@ import path = require('path')
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { randomUUID } from 'crypto'
 
+/** Root directory name in user home for shared profile storage across VS Code windows. */
 export const SHARED_STORE_DIRNAME = '.codex-switch'
+/** Subdirectory containing individual profile secret files. */
 export const SHARED_PROFILES_DIRNAME = 'profiles'
+/** Subdirectory containing per-Codex-home active profile selections. */
 export const SHARED_ACTIVE_PROFILES_DIRNAME = 'active-profiles'
+/** Filename for the consolidated profiles metadata index. */
 export const SHARED_PROFILES_FILENAME = 'profiles.json'
+/** Filename for the global active profile (deprecated in favor of per-home files). */
 export const SHARED_ACTIVE_PROFILE_FILENAME = 'active-profile.json'
 
+/** Tracks which profile is active for a specific Codex home. */
 export interface SharedActiveProfile {
+  /** ID of the currently selected profile. */
   profileId: string
+  /** ISO 8601 timestamp when this selection was last changed. */
   updatedAt: string
 }
 
@@ -20,34 +28,42 @@ interface SharedProfileStoreClockDeps {
   now?: () => number
 }
 
+/** Returns the root directory path for all shared codex-switch data in the user's home. */
 export function getSharedStoreRoot(): string {
   return path.join(os.homedir(), SHARED_STORE_DIRNAME)
 }
 
+/** Returns the directory path containing individual profile secret JSON files. */
 export function getSharedProfilesDir(): string {
   return path.join(getSharedStoreRoot(), SHARED_PROFILES_DIRNAME)
 }
 
+/** Returns the directory path containing per-home active profile selections. */
 export function getSharedActiveProfilesDir(): string {
   return path.join(getSharedStoreRoot(), SHARED_ACTIVE_PROFILES_DIRNAME)
 }
 
+/** Returns the path to the profiles metadata index file. */
 export function getSharedProfilesPath(): string {
   return path.join(getSharedStoreRoot(), SHARED_PROFILES_FILENAME)
 }
 
+/** Returns the path to the global active profile file (deprecated). */
 export function getSharedActiveProfilePath(): string {
   return path.join(getSharedStoreRoot(), SHARED_ACTIVE_PROFILE_FILENAME)
 }
 
+/** Returns the per-home active profile selection file path for a given Codex home ID. */
 export function getSharedActiveProfilePathForHome(homeId: string): string {
   return path.join(getSharedActiveProfilesDir(), `${homeId}.json`)
 }
 
+/** Returns the file path where secrets for a profile are stored. */
 export function getSharedProfileSecretsPath(profileId: string): string {
   return path.join(getSharedProfilesDir(), `${profileId}.json`)
 }
 
+/** Creates the shared store directory structure with secure permissions (0o700 on Unix). */
 export function ensureSharedStoreDirs(): void {
   const storeRoot = getSharedStoreRoot()
   const profilesDir = getSharedProfilesDir()
@@ -79,6 +95,7 @@ export function ensureSharedStoreDirs(): void {
   }
 }
 
+/** Safely reads and parses a JSON file, returning null if it does not exist or is malformed. */
 export function readJsonFile<T>(filePath: string): T | null {
   try {
     if (!fs.existsSync(filePath)) {
@@ -90,6 +107,7 @@ export function readJsonFile<T>(filePath: string): T | null {
   }
 }
 
+/** Atomically writes data to a JSON file using a temp-and-rename pattern for crash-safety and secure permissions. */
 export function writeJsonFile(
   filePath: string,
   data: unknown,
@@ -148,6 +166,7 @@ export function writeJsonFile(
   }
 }
 
+/** Safely deletes a file if it exists, silently ignoring any errors. */
 export function deleteFileIfExists(filePath: string): void {
   try {
     if (fs.existsSync(filePath)) {

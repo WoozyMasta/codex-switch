@@ -1,3 +1,4 @@
+/** Tests for profile-state-keys. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildProfileStateKeys } from '../../src/utils/profile-state-keys'

@@ -1,3 +1,4 @@
+/** Tests for legacy-profile-migration. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sortLegacyProfileMigrationCandidates } from '../../src/utils/legacy-profile-migration'

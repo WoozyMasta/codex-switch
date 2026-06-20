@@ -1,3 +1,4 @@
+/** Tests for profile-secret-keys. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildProfileSecretKeys } from '../../src/utils/profile-secret-keys'

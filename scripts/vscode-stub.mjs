@@ -1,3 +1,4 @@
+/** Generates a mock vscode module for Node.js test environments. */
 export function createVscodeStubSource() {
   return `const noop = () => undefined
 const disposable = { dispose: noop }

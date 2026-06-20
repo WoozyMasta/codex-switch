@@ -1,3 +1,4 @@
+/** Tests for profile-storage-paths. */
 import assert from 'node:assert/strict'
 import * as os from 'node:os'
 import * as path from 'path'

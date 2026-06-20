@@ -1,3 +1,4 @@
+/** Tests for profile-state-buckets. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { resolveProfileStateBucket } from '../../src/utils/profile-state-buckets'

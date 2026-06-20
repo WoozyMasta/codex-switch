@@ -1,3 +1,4 @@
+/** Tests for codex-auth-sync. */
 import assert from 'node:assert/strict'
 import fs from 'fs'
 import os from 'os'

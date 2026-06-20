@@ -16,6 +16,7 @@ function asObject(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+/** Parses and validates a single entry from an import file, returning normalized AuthData and name or null if invalid. */
 export function parseImportEntry(value: unknown): ParsedImportEntry | null {
   const entry = asObject(value)
   if (!entry) {

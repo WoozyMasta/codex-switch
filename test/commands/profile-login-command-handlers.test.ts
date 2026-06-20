@@ -1,3 +1,4 @@
+/** Tests for profile-login-command-handlers. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { loginViaCli } from '../../src/commands/profile-login-command-handlers'

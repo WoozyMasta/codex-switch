@@ -1,3 +1,4 @@
+/** Tests for profile-records. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { AuthData } from '../../src/types'

@@ -1,3 +1,4 @@
+/** Builds a display name for a profile, falling back through name → email local part → fallback. */
 export function buildDefaultProfileName(
   name: string | undefined,
   email: string | undefined,

@@ -25,33 +25,65 @@ const LAST_PROFILE_KEY = 'codexSwitch.lastProfileId'
 const OLD_ACTIVE_PROFILE_KEY = 'codexUsage.activeProfileId'
 const OLD_LAST_PROFILE_KEY = 'codexUsage.lastProfileId'
 
+/**
+ * Dependencies for ProfileStateService.
+ */
 interface ProfileStateServiceDeps {
+  /** Function to get the active Codex home configuration. */
   getActiveCodexHome: () => ResolvedCodexHome
+  /** Configuration getter for accessing VS Code settings. */
   getConfiguration: ConfigurationGetter
+  /** Global VS Code state storage. */
   globalState: StateStore
+  /** Workspace-level VS Code state storage. */
   workspaceState: StateStore
+  /** Function indicating whether remote files mode is enabled. */
   isRemoteFilesMode: () => boolean
+  /** Function to retrieve a profile by ID. */
   getProfile: (profileId: string) => Promise<ProfileSummary | undefined>
+  /** Function to load authentication data for a profile. */
   loadAuthData: (profileId: string) => Promise<AuthData | null>
+  /** Function to load the current live Codex authentication data. */
   loadLiveCodexAuthData: () => Promise<AuthData | null>
+  /** Function to infer active profile ID from auth file. */
   inferActiveProfileIdFromAuthFile: () => Promise<string | undefined>
+  /** Function to recover missing tokens for a profile. */
   recoverMissingTokens: (profileId: string) => Promise<AuthData | null>
+  /** Function to preserve stored profile auth from live auth file. */
   preserveStoredProfileAuthFromLive: (profileId: string) => Promise<void>
+  /** Function to sync profile auth to Codex auth file. */
   syncProfileAuthToCodexAuthFile: (
     profileId: string,
     authData: AuthData,
   ) => void
+  /** Function to reset internal sync cache. */
   resetSyncCache: () => void
+  /** Function to read the shared active profile ID. */
   readSharedActiveProfile: () => string | undefined
+  /** Function to read the default home shared active profile ID. */
   readDefaultHomeSharedActiveProfileId: () => string | undefined
+  /** Function to read the default home legacy shared active profile ID. */
   readDefaultHomeSharedLegacyActiveProfileId: () => string | undefined
+  /** Function to write a shared active profile marker. */
   writeSharedActiveProfile: (profileId: string) => void
+  /** Function to delete the shared active profile marker. */
   deleteSharedActiveProfile: () => void
+  /** Function to check if an active Codex auth file exists. */
   hasActiveCodexAuthFile: () => boolean
+  /** Function to delete the active Codex auth file. */
   deleteActiveCodexAuthFile: () => void
 }
 
+/**
+ * Manages the state of the active and last-used profiles.
+ * Handles profile switching, history tracking, and state persistence
+ * across global and workspace scopes.
+ */
 export class ProfileStateService {
+  /**
+   * Creates a new ProfileStateService instance.
+   * @param deps - Dependencies for profile state management.
+   */
   constructor(private readonly deps: ProfileStateServiceDeps) {}
 
   private getStateBucket(): StateStore {
@@ -145,6 +177,11 @@ export class ProfileStateService {
     return defaultProfileId
   }
 
+  /**
+   * Gets the ID of the currently active profile.
+   * Resolves state from both current and legacy storage keys.
+   * @returns A promise that resolves to the active profile ID, or undefined if none is active.
+   */
   async getActiveProfileId(): Promise<string | undefined> {
     return resolveActiveProfileId({
       isRemoteFilesMode: this.deps.isRemoteFilesMode(),
@@ -167,6 +204,11 @@ export class ProfileStateService {
     })
   }
 
+  /**
+   * Prepares the state for a new login in Codex chat.
+   * Clears the active profile and optionally removes the auth file.
+   * @returns A promise that resolves to the preparation result.
+   */
   async prepareForNewLoginChat(): Promise<{ removedAuthFile: boolean }> {
     await this.setActiveProfileIdInState(undefined)
     this.deps.resetSyncCache()
@@ -180,6 +222,12 @@ export class ProfileStateService {
     return { removedAuthFile: true }
   }
 
+  /**
+   * Writes the active profile ID to state storage.
+   * Updates both local and remote shared state as needed.
+   * @param profileId - The profile ID to set as active, or undefined to clear.
+   * @returns A promise that resolves when the operation completes.
+   */
   async setActiveProfileIdInState(
     profileId: string | undefined,
   ): Promise<void> {
@@ -199,6 +247,12 @@ export class ProfileStateService {
     )
   }
 
+  /**
+   * Sets the currently active profile by ID.
+   * Loads auth data, preserves previous auth, and syncs to the Codex auth file.
+   * @param profileId - The profile ID to activate, or undefined to deactivate all profiles.
+   * @returns A promise that resolves to true if successful, false if auth data could not be loaded.
+   */
   async setActiveProfileId(profileId: string | undefined): Promise<boolean> {
     const prev = await this.getActiveProfileId()
 
@@ -250,6 +304,11 @@ export class ProfileStateService {
     return true
   }
 
+  /**
+   * Synchronizes the active profile from the default home's shared state.
+   * Only applicable in remote files mode.
+   * @returns A promise that resolves to the synced profile ID, or undefined if not found.
+   */
   async syncActiveProfileFromDefaultHome(): Promise<string | undefined> {
     const defaultProfileId = await this.getDefaultHomeActiveProfileId()
     if (!defaultProfileId) {
@@ -259,6 +318,10 @@ export class ProfileStateService {
     return ok ? defaultProfileId : undefined
   }
 
+  /**
+   * Gets the ID of the last active profile before the current one.
+   * @returns A promise that resolves to the last profile ID, or undefined if no previous profile exists.
+   */
   async getLastProfileId(): Promise<string | undefined> {
     return readLastProfileIdFromState(
       this.getStateBucket(),
@@ -272,6 +335,11 @@ export class ProfileStateService {
     )
   }
 
+  /**
+   * Sets the ID of the last active profile.
+   * @param profileId - The profile ID to store, or undefined to clear the last profile.
+   * @returns A promise that resolves when the operation completes.
+   */
   async setLastProfileId(profileId: string | undefined): Promise<void> {
     await writeLastProfileIdToState(
       this.getStateBucket(),
@@ -284,6 +352,10 @@ export class ProfileStateService {
     )
   }
 
+  /**
+   * Toggles between the current and previous active profiles.
+   * @returns A promise that resolves to the newly activated profile ID, or undefined if toggle failed.
+   */
   async toggleLastProfileId(): Promise<string | undefined> {
     const active = await this.getActiveProfileId()
     const last = await this.getLastProfileId()

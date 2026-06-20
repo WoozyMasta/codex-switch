@@ -1,3 +1,4 @@
+/** Tests for import-entry. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseImportEntry } from '../../src/utils/import-entry'

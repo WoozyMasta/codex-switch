@@ -1,3 +1,4 @@
+/** Runs all Node.js test files with optional coverage reporting. */
 import { writeFileSync, mkdirSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'

@@ -6,33 +6,68 @@ import {
 } from '../utils/profile-auth-preservation'
 import type { ProfileTokens } from '../utils/profile-records'
 
+/**
+ * Result of attempting to preserve live authentication to a matching profile.
+ */
 export interface LiveAuthPreservationResult {
+  /** Status indicating whether live auth existed, was saved, or was unsaved. */
   status: 'noLiveAuth' | 'saved' | 'unsaved'
 }
 
+/**
+ * Dependencies for ProfileAuthRecoveryService.
+ */
 interface ProfileAuthRecoveryServiceDeps {
+  /** Function to get the currently active profile ID. */
   getActiveProfileId: () => Promise<string | undefined>
+  /** Function to retrieve a profile by ID. */
   getProfile: (profileId: string) => Promise<ProfileSummary | undefined>
+  /** Function to list all profiles. */
   listProfiles: () => Promise<ProfileSummary[]>
+  /** Function to load authentication data for a profile. */
   loadAuthData: (profileId: string) => Promise<AuthData | null>
+  /** Function to load the current live Codex auth data. */
   loadLiveCodexAuthData: () => Promise<AuthData | null>
+  /** Function to get the active Codex auth file path. */
   getActiveCodexAuthPath: () => string
+  /** Function to replace profile authentication data. */
   replaceProfileAuth: (
     profileId: string,
     authData: AuthData,
   ) => Promise<boolean>
+  /** Function to delete a profile. */
   deleteProfile: (profileId: string) => Promise<boolean>
+  /** Function to read tokens from remote profile storage. */
   readRemoteProfileTokens: (profileId: string) => ProfileTokens | null
+  /** Function to write tokens to storage. */
   writeStoredTokens: (profileId: string, tokens: ProfileTokens) => Promise<void>
+  /** Function indicating whether remote files mode is enabled. */
   isRemoteFilesMode: () => boolean
+  /** Function to show warning messages in the UI. */
   showWarningMessage: typeof vscode.window.showWarningMessage
+  /** Function to show error messages in the UI. */
   showErrorMessage: typeof vscode.window.showErrorMessage
+  /** Function to translate localized strings. */
   translate: typeof vscode.l10n.t
 }
 
+/**
+ * Handles recovery of authentication data when tokens are missing or corrupted.
+ * Assists with preserving live auth, recovering from remote storage, and importing from files.
+ */
 export class ProfileAuthRecoveryService {
+  /**
+   * Creates a new ProfileAuthRecoveryService instance.
+   * @param deps - Dependencies for recovery operations.
+   */
   constructor(private readonly deps: ProfileAuthRecoveryServiceDeps) {}
 
+  /**
+   * Preserves the stored profile's auth by updating it with current live auth if appropriate.
+   * A best-effort operation that doesn't block profile switching on failure.
+   * @param profileId - The ID of the profile to preserve auth for.
+   * @returns A promise that resolves when the operation completes.
+   */
   async preserveStoredProfileAuthFromLive(profileId: string): Promise<void> {
     try {
       const profile = await this.deps.getProfile(profileId)
@@ -59,6 +94,10 @@ export class ProfileAuthRecoveryService {
     }
   }
 
+  /**
+   * Attempts to preserve the current live Codex auth by finding and updating a matching profile.
+   * @returns A promise that resolves to the preservation result.
+   */
   async preserveLiveAuthForMatchingProfile(): Promise<LiveAuthPreservationResult> {
     const liveAuth = await this.deps.loadLiveCodexAuthData()
     if (!liveAuth) {
@@ -92,6 +131,12 @@ export class ProfileAuthRecoveryService {
     return { status: 'saved' }
   }
 
+  /**
+   * Recovers authentication tokens for a profile when they are missing or inaccessible.
+   * Presents the user with options to recover from remote storage, import from the live auth file, or delete the profile.
+   * @param profileId - The ID of the profile to recover tokens for.
+   * @returns A promise that resolves to the recovered auth data, or null if recovery failed or was canceled.
+   */
   async recoverMissingTokens(profileId: string): Promise<AuthData | null> {
     const profile = await this.deps.getProfile(profileId)
     const recoverLabel = this.deps.translate('Recover from remote store')

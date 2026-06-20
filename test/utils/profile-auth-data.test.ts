@@ -1,3 +1,4 @@
+/** Tests for profile-auth-data. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ProfileSummary } from '../../src/types'

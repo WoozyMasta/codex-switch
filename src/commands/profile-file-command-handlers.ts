@@ -10,26 +10,48 @@ import {
   type ProfileCommandPromptDeps,
 } from './profile-command-prompts'
 
+/**
+ * Dependencies for profile file command handlers.
+ */
 export interface ProfileFileCommandDeps {
+  /** Dependencies for profile command prompts. */
   promptDeps: ProfileCommandPromptDeps
+  /** Function to get the default settings export URI. */
   getDefaultSettingsExportUri: () => vscode.Uri
+  /** Function to export profiles for transfer. */
   exportProfilesForTransfer: () => Promise<{
     data: ExportedSettingsV1
     skipped: number
   }>
+  /** Function to import profiles from transfer data. */
   importProfilesFromTransfer: (value: unknown) => Promise<ImportProfilesResult>
+  /** Function to show file open dialogs. */
   showOpenDialog: typeof vscode.window.showOpenDialog
+  /** Function to show file save dialogs. */
   showSaveDialog: typeof vscode.window.showSaveDialog
+  /** Function to show warning messages. */
   showWarningMessage: typeof vscode.window.showWarningMessage
+  /** Function to show error messages. */
   showErrorMessage: typeof vscode.window.showErrorMessage
+  /** Function to show information messages. */
   showInformationMessage: typeof vscode.window.showInformationMessage
+  /** Function to translate localized strings. */
   translate: typeof vscode.l10n.t
+  /** Function to check if a file path exists. */
   pathExists: (path: string) => boolean
+  /** Function to read file text. */
   readFileText: (path: string) => string
+  /** Function to restart after profile switch if configured. */
   maybeRestartAfterProfileSwitch: () => Promise<void>
+  /** Function to invoke when authentication changes. */
   onAuthChanged: () => Promise<void>
 }
 
+/**
+ * Handles the "Import auth.json" command to add a profile from a file.
+ * @param deps - Dependencies for file handling and profile operations.
+ * @returns A promise that resolves when the command completes.
+ */
 export async function addFromFile(deps: ProfileFileCommandDeps): Promise<void> {
   const uri = await deps.showOpenDialog({
     canSelectMany: false,
@@ -59,6 +81,11 @@ export async function addFromFile(deps: ProfileFileCommandDeps): Promise<void> {
   await addCurrentAuthJsonAsProfile(deps.promptDeps, true)
 }
 
+/**
+ * Handles the "Export profiles" command to export profiles for transfer.
+ * @param deps - Dependencies for file handling and profile operations.
+ * @returns A promise that resolves when the command completes.
+ */
 export async function exportProfiles(
   deps: ProfileFileCommandDeps,
 ): Promise<void> {
@@ -107,6 +134,11 @@ export async function exportProfiles(
   )
 }
 
+/**
+ * Handles the "Import profiles" command to import profiles from a transfer export file.
+ * @param deps - Dependencies for file handling and profile operations.
+ * @returns A promise that resolves when the command completes.
+ */
 export async function importProfiles(
   deps: ProfileFileCommandDeps,
 ): Promise<void> {

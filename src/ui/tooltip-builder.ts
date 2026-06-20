@@ -12,6 +12,15 @@ import {
   padTableCell,
 } from '../utils/profile-tooltip-format'
 
+/**
+ * Creates a markdown tooltip for displaying profile information.
+ * Shows a table of all profiles with their plan type, rate limits, and refresh status.
+ * @param activeProfile - The currently active profile, or null if none is active.
+ * @param profiles - All available profiles to display in the tooltip.
+ * @param home - The currently active Codex home, if applicable.
+ * @param getRefreshLabel - Optional function to get the refresh status label for each profile.
+ * @returns A VS Code MarkdownString containing the formatted tooltip.
+ */
 export function createProfileTooltip(
   activeProfile: ProfileSummary | null,
   profiles: ProfileSummary[],

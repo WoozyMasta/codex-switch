@@ -19,6 +19,11 @@ setDebugLoggingEnabledResolver(() => {
     .get<boolean>('debugLogging', false)
 })
 
+/**
+ * Initializes the Codex Switch VS Code extension, setting up all services and the extension runtime.
+ * Called by VS Code when the extension is activated.
+ * @param context - The extension context from VS Code.
+ */
 export function activate(context: vscode.ExtensionContext) {
   debugLog('Codex Switch activated')
 
@@ -28,6 +33,12 @@ export function activate(context: vscode.ExtensionContext) {
   startExtensionRuntime(context, services)
 }
 
+/**
+ * Cleans up extension resources when the extension is deactivating.
+ * Disposes background services and finalizes state.
+ * Called by VS Code when the extension is deactivated.
+ * @returns A promise that resolves when cleanup completes.
+ */
 export async function deactivate() {
   await profileMaintenanceService?.dispose()
   await profileRateLimitService?.dispose()

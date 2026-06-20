@@ -1,5 +1,6 @@
 import type { AuthData, ProfileSummary } from '../types'
 
+/** Syncs a profile's auth data to Codex auth file if the profile has changed since last sync. */
 export async function maybeSyncProfileAuthToCodexAuthFile(
   deps: {
     lastSyncedProfileId: string | undefined
@@ -26,6 +27,7 @@ export async function maybeSyncProfileAuthToCodexAuthFile(
   deps.syncProfileAuthToCodexAuthFile(profileId, authData)
 }
 
+/** Captures live Codex auth and updates the matching profile if auth has changed. */
 export async function captureLiveAuthForMatchingProfile(
   deps: {
     lastSyncedAuthHash: string | undefined

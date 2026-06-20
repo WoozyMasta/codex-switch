@@ -1,8 +1,11 @@
 import type { ProfileSummary } from '../types'
 import { parseProfileSummary } from './profile-summary'
 
+/** V1 format for the profiles.json metadata index file. */
 export interface ProfilesFileV1 {
+  /** Format version. */
   version: 1
+  /** Array of profile summaries. */
   profiles: ProfileSummary[]
 }
 
@@ -13,6 +16,7 @@ function asObject(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+/** Parses raw JSON into a ProfilesFileV1, handling both legacy and current formats. */
 export function parseProfilesFile(raw: string): ProfilesFileV1 | null {
   let parsed: unknown
   try {

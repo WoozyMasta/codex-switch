@@ -2,17 +2,23 @@ import { mkdirSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 import { setTimeout as delay } from 'timers/promises'
 
+/** Milliseconds to wait between lock acquisition attempts. */
 const LOCK_RETRY_DELAY_MS = 50
+/** Lock file age in milliseconds before considering it stale. */
 const LOCK_STALE_MS = 30_000
 
+/** Optional dependencies for lock file timing. */
 interface ProfilesFileLockDeps {
+  /** Optional current time function (defaults to Date.now). */
   now?: () => number
 }
 
+/** Checks if an error is an EEXIST file already exists error. */
 function isEEXIST(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === 'EEXIST'
 }
 
+/** Determines if a lock file is stale (older than threshold). */
 function isStaleLock(lockPath: string, now: () => number): boolean {
   const stat = statSync(lockPath)
   if (now() - stat.mtimeMs > LOCK_STALE_MS) {
@@ -21,6 +27,7 @@ function isStaleLock(lockPath: string, now: () => number): boolean {
   return false
 }
 
+/** Waits for lock release by checking staleness or yielding control. */
 async function waitForLockRelease(
   lockPath: string,
   now: () => number,
@@ -33,6 +40,7 @@ async function waitForLockRelease(
   await delay(LOCK_RETRY_DELAY_MS)
 }
 
+/** Acquires a lock on the profiles file and executes an action, releasing the lock afterward. */
 export async function withProfilesFileLock<T>(
   profilesPath: string,
   action: () => Promise<T>,

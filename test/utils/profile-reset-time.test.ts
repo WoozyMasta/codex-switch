@@ -1,3 +1,4 @@
+/** Tests for profile-reset-time. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { formatProfileResetTime } from '../../src/utils/profile-reset-time'

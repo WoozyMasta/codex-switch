@@ -1,3 +1,4 @@
+/** Tests for storage-mode. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { resolveStorageMode } from '../../src/utils/storage-mode'

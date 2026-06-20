@@ -56,6 +56,14 @@ import { getCanonicalTokenBundle } from '../utils/auth-payload'
 const PROFILES_FILENAME = 'profiles.json'
 const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
 
+/**
+ * Outcome of an attempt to replace a profile's authentication with newer credentials.
+ * - 'updated': Auth was successfully replaced.
+ * - 'unchanged': Auth was not replaced because it is already current.
+ * - 'conflict': Auth was not replaced due to a concurrent modification or identity mismatch.
+ * - 'missing': Profile not found.
+ * - 'failed': Write operation failed.
+ */
 export type ProfileAuthReplacementOutcome =
   | 'updated'
   | 'unchanged'
@@ -63,20 +71,41 @@ export type ProfileAuthReplacementOutcome =
   | 'missing'
   | 'failed'
 
+/**
+ * Dependencies for ProfileStorageService.
+ */
 interface ProfileStorageServiceDeps {
+  /** File system operations adapter. */
   fs: SyncFileSystem
+  /** Global VS Code state storage. */
   globalState: StateStore
+  /** Workspace-level VS Code state storage. */
   workspaceState: StateStore
+  /** Secure storage for sensitive authentication data. */
   secrets: SecretStorageStore
+  /** URI to the global storage directory. */
   globalStorageUri: vscode.Uri
+  /** Function indicating whether remote files mode is enabled. */
   isRemoteFilesMode: () => boolean
+  /** Function to get the active Codex home configuration. */
   getActiveCodexHome: () => ResolvedCodexHome
+  /** Function to show error messages in the UI. */
   showErrorMessage: typeof vscode.window.showErrorMessage
+  /** Function to show informational messages in the UI. */
   showInformationMessage: typeof vscode.window.showInformationMessage
+  /** Function to translate localized strings. */
   translate: typeof vscode.l10n.t
 }
 
+/**
+ * Manages persistent storage and retrieval of user profiles and their authentication data.
+ * Handles multiple storage modes (local and remote), profile CRUD operations, and token management.
+ */
 export class ProfileStorageService {
+  /**
+   * Creates a new ProfileStorageService instance.
+   * @param deps - Dependencies including file system, state stores, and messaging functions.
+   */
   constructor(private readonly deps: ProfileStorageServiceDeps) {}
 
   private getStorageDir(): string {
@@ -133,6 +162,11 @@ export class ProfileStorageService {
     }
   }
 
+  /**
+   * Reads the shared active profile marker from remote storage.
+   * Only applicable in remote files mode.
+   * @returns The shared active profile data, or null if not in remote mode or file not found.
+   */
   readSharedActiveProfile(): SharedActiveProfile | null {
     if (!this.deps.isRemoteFilesMode()) {
       return null
@@ -147,17 +181,32 @@ export class ProfileStorageService {
     )
   }
 
+  /**
+   * Reads the active profile ID from the default home's shared state.
+   * Only applicable in remote files mode.
+   * @returns The active profile ID from the default home, or undefined if not found.
+   */
   readDefaultHomeSharedActiveProfileId(): string | undefined {
     return readJsonFile<SharedActiveProfile>(
       getSharedActiveProfilePathForHome('default'),
     )?.profileId
   }
 
+  /**
+   * Reads the legacy active profile ID from the global shared state.
+   * Only applicable in remote files mode.
+   * @returns The legacy active profile ID, or undefined if not found.
+   */
   readDefaultHomeSharedLegacyActiveProfileId(): string | undefined {
     return readJsonFile<SharedActiveProfile>(getSharedActiveProfilePath())
       ?.profileId
   }
 
+  /**
+   * Writes the active profile marker to remote shared storage.
+   * Only applicable in remote files mode.
+   * @param profileId - The ID of the profile to mark as active.
+   */
   writeSharedActiveProfile(profileId: string): void {
     if (!this.deps.isRemoteFilesMode()) {
       return
@@ -171,6 +220,10 @@ export class ProfileStorageService {
     )
   }
 
+  /**
+   * Deletes the active profile marker from remote shared storage.
+   * Only applicable in remote files mode.
+   */
   deleteSharedActiveProfile(): void {
     if (!this.deps.isRemoteFilesMode()) {
       return
@@ -180,10 +233,20 @@ export class ProfileStorageService {
     )
   }
 
+  /**
+   * Reads stored authentication tokens from remote shared storage for a profile.
+   * @param profileId - The ID of the profile.
+   * @returns The stored tokens, or null if not found or not in remote mode.
+   */
   readRemoteProfileTokens(profileId: string): ProfileTokens | null {
     return readJsonFile<ProfileTokens>(getSharedProfileSecretsPath(profileId))
   }
 
+  /**
+   * Reads stored authentication tokens for a profile from either local or remote storage.
+   * @param profileId - The ID of the profile.
+   * @returns A promise that resolves to the stored tokens, or null if not found.
+   */
   async readStoredTokens(profileId: string): Promise<ProfileTokens | null> {
     return readStoredProfileTokens(
       {
@@ -365,17 +428,33 @@ export class ProfileStorageService {
     await this.deps.globalState.update(MIGRATED_LEGACY_KEY, true)
   }
 
+  /**
+   * Lists all stored profiles sorted by name.
+   * Triggers legacy profile migration on first call.
+   * @returns A promise that resolves to an array of profile summaries.
+   */
   async listProfiles(): Promise<ProfileSummary[]> {
     await this.tryMigrateLegacyProfilesOnce()
     const file = await readProfilesFile(this.profilesFileStorageDeps())
     return [...file.profiles].sort((a, b) => a.name.localeCompare(b.name))
   }
 
+  /**
+   * Retrieves a specific profile by ID.
+   * @param profileId - The ID of the profile to retrieve.
+   * @returns A promise that resolves to the profile summary, or undefined if not found.
+   */
   async getProfile(profileId: string): Promise<ProfileSummary | undefined> {
     const profiles = await this.listProfiles()
     return profiles.find((p) => p.id === profileId)
   }
 
+  /**
+   * Finds an existing profile that matches the given authentication data.
+   * Matches on identity fields like email, account ID, and organization.
+   * @param authData - The authentication data to search for.
+   * @returns A promise that resolves to a matching profile summary, or undefined if not found.
+   */
   async findDuplicateProfile(
     authData: AuthData,
   ): Promise<ProfileSummary | undefined> {
@@ -383,6 +462,11 @@ export class ProfileStorageService {
     return file.profiles.find((p) => this.matchesAuth(p, authData))
   }
 
+  /**
+   * Infers the profile ID matching an authentication file.
+   * @param authPath - The path to an auth.json file.
+   * @returns A promise that resolves to the matching profile ID, or undefined if not found.
+   */
   async inferActiveProfileIdFromAuthFile(
     authPath: string,
   ): Promise<string | undefined> {
@@ -395,6 +479,11 @@ export class ProfileStorageService {
     return findMatchingProfileIdForAuth(profiles, authData)
   }
 
+  /**
+   * Loads the full authentication data for a profile.
+   * @param profileId - The ID of the profile.
+   * @returns A promise that resolves to the auth data, or null if not found or tokens missing.
+   */
   async loadAuthData(profileId: string): Promise<AuthData | null> {
     const profile = await this.getProfile(profileId)
     if (!profile) {
@@ -423,6 +512,13 @@ export class ProfileStorageService {
     )
   }
 
+  /**
+   * Replaces the authentication data for a profile with new credentials.
+   * Uses file locking to ensure atomic updates.
+   * @param profileId - The ID of the profile to update.
+   * @param authData - The new authentication data.
+   * @returns A promise that resolves to true if the replacement succeeded, false otherwise.
+   */
   async replaceProfileAuth(
     profileId: string,
     authData: AuthData,
@@ -539,6 +635,13 @@ export class ProfileStorageService {
     }
   }
 
+  /**
+   * Creates a new profile with the given name and authentication data.
+   * Generates a unique ID and timestamp for the profile.
+   * @param name - The display name for the profile.
+   * @param authData - The authentication data for the profile.
+   * @returns A promise that resolves to the created profile summary.
+   */
   async createProfile(
     name: string,
     authData: AuthData,
@@ -575,6 +678,13 @@ export class ProfileStorageService {
     return profile
   }
 
+  /**
+   * Renames an existing profile.
+   * Updates the modification timestamp.
+   * @param profileId - The ID of the profile to rename.
+   * @param newName - The new display name for the profile.
+   * @returns A promise that resolves to true if the rename succeeded, false otherwise.
+   */
   async renameProfile(profileId: string, newName: string): Promise<boolean> {
     return withProfilesFileLock(this.getProfilesPath(), async () => {
       const file = await requireWritableProfilesFile(
@@ -597,6 +707,12 @@ export class ProfileStorageService {
     })
   }
 
+  /**
+   * Deletes a profile and its associated authentication data.
+   * Removes both the profile record and stored tokens.
+   * @param profileId - The ID of the profile to delete.
+   * @returns A promise that resolves to true if the deletion succeeded, false otherwise.
+   */
   async deleteProfile(profileId: string): Promise<boolean> {
     return withProfilesFileLock(this.getProfilesPath(), async () => {
       const file = await requireWritableProfilesFile(
@@ -618,6 +734,13 @@ export class ProfileStorageService {
   }
 }
 
+/**
+ * Compares the token bundles of two authentication data objects.
+ * @param a - The first authentication data.
+ * @param b - The second authentication data.
+ * @returns True if the tokens differ between the two auth data objects.
+ * @internal
+ */
 function authTokensDiffer(a: AuthData, b: AuthData): boolean {
   const tokensA = getCanonicalTokenBundle(a)
   const tokensB = getCanonicalTokenBundle(b)

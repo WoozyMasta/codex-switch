@@ -1,3 +1,4 @@
+/** Tests for profile-maintenance-lease. */
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync } from 'node:fs'
 import * as realFs from 'node:fs/promises'

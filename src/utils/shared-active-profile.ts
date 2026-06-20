@@ -1,9 +1,12 @@
 import { firstDefinedString } from './strings'
 
+/** Minimal interface for objects that identify an active profile. */
 export interface SharedActiveProfileLike {
+  /** The ID of the active profile. */
   profileId: string
 }
 
+/** Resolves the active profile, preferring per-home over legacy unless in non-default home. */
 export function resolveSharedActiveProfile<T extends SharedActiveProfileLike>(
   perHome: T | null,
   legacy: T | null,
@@ -20,6 +23,7 @@ export function resolveSharedActiveProfile<T extends SharedActiveProfileLike>(
   return null
 }
 
+/** Resolves the active profile ID for the default home, checking remote or local sources based on mode. */
 export function resolveDefaultHomeActiveProfileId(
   remoteDefault: string | null | undefined,
   remoteLegacy: string | null | undefined,

@@ -57,8 +57,16 @@ interface CacheEntry {
  * `refreshedAuth` is kept only in memory and is never persisted to
  * coordination state.
  */
+/**
+ * Both outputs of a single temporary-home maintenance request:
+ * the normalized rate limits and any auth Codex refreshed in the temp home.
+ * `refreshedAuth` is kept only in memory and is never persisted to
+ * coordination state.
+ */
 interface ProfileMaintenanceResult {
+  /** Rate limits retrieved from the temporary home. */
   rateLimits: ProfileRateLimits | null
+  /** Updated authentication data from Codex, if tokens were refreshed. */
   refreshedAuth: AuthData | null
 }
 
@@ -67,8 +75,11 @@ interface ProfileMaintenanceResult {
  * used by the cross-window scheduler to publish shared state.
  */
 export interface ProfileMaintenanceRunResult {
+  /** Status of the maintenance run. */
   status: 'success' | 'failed'
+  /** Rate limits retrieved during the maintenance run. */
   rateLimits: ProfileRateLimits | null
+  /** Category of error if the maintenance run failed. */
   errorCategory?: MaintenanceErrorCategory
 }
 
@@ -455,6 +466,11 @@ class CodexAppServerClient {
   }
 }
 
+/**
+ * Manages rate limit caching and refreshing for profiles via temporary Codex homes.
+ * Handles querying rate limits from the Codex app server, caching results,
+ * and persisting any refreshed authentication data.
+ */
 export class ProfileRateLimitService {
   private readonly clientVersion: string
   private readonly env: ProcessEnv
@@ -478,6 +494,11 @@ export class ProfileRateLimitService {
   private readonly appServerWaitQueue: AppServerWaiter[] = []
   private disposed = false
 
+  /**
+   * Creates a new ProfileRateLimitService instance.
+   * @param clientVersion - Version string to report to the Codex app server.
+   * @param deps - Optional dependencies for testing and configuration.
+   */
   constructor(clientVersion: string, deps: ProfileRateLimitServiceDeps = {}) {
     this.clientVersion = clientVersion
     this.env = deps.env ?? process.env
@@ -489,6 +510,11 @@ export class ProfileRateLimitService {
     this.tempHomeFs = deps.tempHomeFs ?? fs
   }
 
+  /**
+   * Applies cached rate limits to profiles without querying the server.
+   * @param profiles - Array of profiles to decorate with cached rate limits.
+   * @returns The profiles with cached rate limit data applied.
+   */
   applyCachedRateLimits(profiles: ProfileSummary[]): ProfileSummary[] {
     return profiles.map((profile) => ({
       ...profile,
@@ -496,12 +522,19 @@ export class ProfileRateLimitService {
     }))
   }
 
+  /**
+   * Cancels all pending rate limit refresh operations.
+   */
   cancelPendingWork(): void {
     for (const controller of this.activeOperationControllers) {
       controller.abort()
     }
   }
 
+  /**
+   * Disposes the service and cleans up resources.
+   * @returns A promise that resolves when cleanup completes.
+   */
   async dispose(): Promise<void> {
     if (this.disposed) {
       return
@@ -517,6 +550,14 @@ export class ProfileRateLimitService {
     this.appServerWaitQueue.length = 0
   }
 
+  /**
+   * Fetches rate limits for each profile and decorates them with the results.
+   * Uses cached values when available.
+   * @param profileManager - Manager for accessing profile authentication data.
+   * @param profiles - Array of profiles to fetch rate limits for.
+   * @param options - Options for controlling refresh behavior.
+   * @returns A promise that resolves to the decorated profiles with rate limit data.
+   */
   async decorateProfiles(
     profileManager: ProfileManager,
     profiles: ProfileSummary[],
@@ -539,10 +580,13 @@ export class ProfileRateLimitService {
   }
 
   /**
-   * Run one maintenance pass for a single profile and return a structured
-   * outcome. The cross-window scheduler calls this serially under a lease; it
-   * performs the temporary-home request, persists any rotated auth, and updates
-   * the in-memory cache so the UI reflects the latest result.
+   * Runs one maintenance pass for a single profile and returns a structured outcome.
+   * The cross-window scheduler calls this serially under a lease; it performs the
+   * temporary-home request, persists any rotated auth, and updates the in-memory
+   * cache so the UI reflects the latest result.
+   * @param profileManager - Manager for accessing and updating profile data.
+   * @param profile - The profile to run maintenance for.
+   * @returns A promise that resolves to the maintenance run result.
    */
   async runProfileMaintenance(
     profileManager: ProfileManager,
@@ -876,10 +920,14 @@ export class ProfileRateLimitService {
   }
 
   /**
-   * Scheduling status derived from the in-memory cache for UI rendering. The
-   * computation is read-only and keys on the profile revision so a stale entry
-   * is ignored after auth changes. `intervalSeconds` is the normalized user
-   * interval; `0` means automatic refresh is disabled.
+   * Gets the scheduling status for profile rate limit refresh.
+   * Derived from the in-memory cache for UI rendering. The computation is
+   * read-only and keys on the profile revision so a stale entry is ignored
+   * after auth changes. `intervalSeconds` is the normalized user interval;
+   * `0` means automatic refresh is disabled.
+   * @param profile - The profile to get refresh status for.
+   * @param intervalSeconds - The configured refresh interval in seconds, or 0 to disable.
+   * @returns The refresh status for the profile.
    */
   getRefreshStatus(
     profile: ProfileSummary,
@@ -947,6 +995,21 @@ export class ProfileRateLimitService {
   }
 }
 
+/**
+ * Queries rate limits for a profile using a temporary Codex home.
+ * @param authData - The authentication data for the profile.
+ * @param clientVersion - Version string to report to the Codex app server.
+ * @param codexCliCommand - The Codex CLI command to spawn.
+ * @param signal - Optional abort signal to cancel the operation.
+ * @param now - Clock function for getting current time.
+ * @param tmpdir - Function to get the system temp directory.
+ * @param debugLog - Function for debug logging.
+ * @param env - Process environment variables.
+ * @param spawnAppServer - Function to spawn the Codex app server.
+ * @param tempHomeFs - File system adapter for temp home operations.
+ * @returns A promise that resolves to the maintenance result with rate limits and refreshed auth.
+ * @internal
+ */
 async function queryRateLimitsViaTemporaryCodexHome(
   authData: AuthData,
   clientVersion: string,
@@ -1020,6 +1083,14 @@ async function queryRateLimitsViaTemporaryCodexHome(
   }
 }
 
+/**
+ * Reads refreshed authentication data from a temporary home's auth file.
+ * @param authFilePath - Path to the auth.json file in the temp home.
+ * @param tempHomeFs - File system adapter for reading the file.
+ * @param debugLog - Function for debug logging.
+ * @returns A promise that resolves to the refreshed auth data, or null if not found or invalid.
+ * @internal
+ */
 async function readRefreshedAuthFromTempHome(
   authFilePath: string,
   tempHomeFs: AsyncFileSystem,
@@ -1062,9 +1133,13 @@ async function readRefreshedAuthFromTempHome(
 }
 
 /**
- * In-memory comparison of the baseline auth written into the temp home and the
- * auth read back afterwards. Returns true only when canonical tokens or
- * `last_refresh` changed, so the common no-rotation path never touches storage.
+ * Compares baseline and refreshed authentication in memory.
+ * Returns true only when canonical tokens or `last_refresh` changed,
+ * so the common no-rotation path never touches storage.
+ * @param baseline - The baseline authentication data.
+ * @param refreshed - The refreshed authentication data.
+ * @returns True if the authentication tokens or refresh time changed.
+ * @internal
  */
 function authChangedInMemory(baseline: AuthData, refreshed: AuthData): boolean {
   const baselineTokens = getCanonicalTokenBundle(baseline)
@@ -1084,6 +1159,16 @@ function authChangedInMemory(baseline: AuthData, refreshed: AuthData): boolean {
   return getAuthLastRefresh(baseline) !== getAuthLastRefresh(refreshed)
 }
 
+/**
+ * Removes a temporary Codex home directory.
+ * Securely wipes the auth file and cleans up the directory tree.
+ * @param tempHomePath - Path to the temporary home directory.
+ * @param authFilePath - Path to the auth.json file to wipe.
+ * @param debugLog - Function for debug logging.
+ * @param tempHomeFs - File system adapter for cleanup operations.
+ * @returns A promise that resolves when cleanup completes.
+ * @internal
+ */
 async function removeTemporaryCodexHome(
   tempHomePath: string,
   authFilePath: string,
@@ -1115,6 +1200,12 @@ async function removeTemporaryCodexHome(
   }
 }
 
+/**
+ * Categorizes an error from a maintenance operation.
+ * @param error - The error to categorize.
+ * @returns A category describing the type of error.
+ * @internal
+ */
 function categorizeMaintenanceError(error: unknown): MaintenanceErrorCategory {
   const message = error instanceof Error ? error.message : String(error)
   if (/Timed out waiting/i.test(message)) {

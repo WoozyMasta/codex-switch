@@ -18,25 +18,54 @@ import type {
   SyncFileSystem,
 } from './runtime-adapters'
 
+/**
+ * Dependencies and adapters for the ProfileManagerRuntime.
+ * Provides access to file system, configuration, state stores, and UI messaging.
+ */
 export interface ProfileManagerDeps {
+  /** File system operations adapter. */
   fs: SyncFileSystem
+  /** Configuration getter for accessing VS Code settings. */
   getConfiguration: ConfigurationGetter
+  /** Name of the remote (SSH, Dev Container, etc.), or undefined if local. */
   remoteName: string | undefined
+  /** Global VS Code state storage. */
   globalState: StateStore
+  /** Workspace-level VS Code state storage. */
   workspaceState: StateStore
+  /** Secure storage for sensitive authentication data. */
   secrets: SecretStorageStore
+  /** URI to the global storage directory. */
   globalStorageUri: vscode.Uri
+  /** Function to create file system watchers. */
   createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
+  /** Function to show error messages in the UI. */
   showErrorMessage: typeof vscode.window.showErrorMessage
+  /** Function to show informational messages in the UI. */
   showInformationMessage: typeof vscode.window.showInformationMessage
+  /** Function to show warning messages in the UI. */
   showWarningMessage: typeof vscode.window.showWarningMessage
+  /** Function to translate localized strings. */
   translate: typeof vscode.l10n.t
+  /** Factory function to create VS Code disposables. */
   createDisposable: (dispose: () => void) => vscode.Disposable
+  /** Factory function to create VS Code file URIs. */
   uriFile: (path: string) => vscode.Uri
+  /** Factory function to create relative glob patterns for file watching. */
   relativePattern: (base: vscode.Uri, pattern: string) => vscode.RelativePattern
 }
 
+/**
+ * Runtime container for all profile management services.
+ * Initializes and wires together the individual profile-related services with
+ * their dependencies, providing a unified runtime environment.
+ */
 export class ProfileManagerRuntime {
+  /**
+   * Creates a new ProfileManagerRuntime instance.
+   * @param codexHomeManager - Manager for Codex home directory configuration.
+   * @param deps - All required dependencies and adapters.
+   */
   constructor(
     private readonly codexHomeManager: CodexHomeManager,
     deps: ProfileManagerDeps,
@@ -236,14 +265,27 @@ export class ProfileManagerRuntime {
     return this.codexHomeManager.getActiveHome()
   }
 
+  /**
+   * Gets the file path to the active Codex authentication file.
+   * @returns The full path to the currently active auth.json file.
+   */
   getActiveCodexAuthPath(): string {
     return this.getActiveCodexHome().authPath
   }
 
+  /**
+   * Gets the currently active Codex home configuration.
+   * @returns Summary information about the active Codex home.
+   */
   getActiveCodexHomeSummary() {
     return this.getActiveCodexHome()
   }
 
+  /**
+   * Synchronizes the active profile's authentication to the Codex auth.json file.
+   * @returns A promise that resolves when synchronization completes.
+   * @internal
+   */
   private async syncActiveProfileToCodexAuthFile(): Promise<void> {
     const active = await this.profileStateService.getActiveProfileId()
     if (!active) {

@@ -1,3 +1,4 @@
+/** Tests for profile-manage-quick-pick. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildManageProfilesQuickPickItems } from '../../src/utils/profile-manage-quick-pick'

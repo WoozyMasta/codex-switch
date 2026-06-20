@@ -1,3 +1,4 @@
+/** Tests for profiles-file-lock. */
 import assert from 'node:assert/strict'
 import fs from 'fs'
 import os from 'os'

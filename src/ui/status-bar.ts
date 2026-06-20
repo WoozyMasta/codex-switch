@@ -5,6 +5,10 @@ import { createProfileTooltip } from './tooltip-builder'
 let statusBarItem: vscode.StatusBarItem
 let cachedProfiles: ProfileSummary[] = []
 
+/**
+ * Creates and initializes the status bar item for displaying the active profile.
+ * @returns The created status bar item.
+ */
 export function createStatusBarItem(): vscode.StatusBarItem {
   statusBarItem = vscode.window.createStatusBarItem(
     'codex-switch.profile',
@@ -17,6 +21,13 @@ export function createStatusBarItem(): vscode.StatusBarItem {
   return statusBarItem
 }
 
+/**
+ * Updates the status bar item to display the current profile status.
+ * @param profile - The currently active profile, or null if none is active.
+ * @param profiles - All available profiles for switching context.
+ * @param home - The currently active Codex home, if applicable.
+ * @param getRefreshLabel - Optional function to get the refresh status label for a profile.
+ */
 export function updateProfileStatus(
   profile: ProfileSummary | null,
   profiles: ProfileSummary[],
@@ -57,6 +68,10 @@ export function updateProfileStatus(
   )
 }
 
+/**
+ * Gets the current status bar item instance.
+ * @returns The status bar item.
+ */
 export function getStatusBarItem(): vscode.StatusBarItem {
   return statusBarItem
 }

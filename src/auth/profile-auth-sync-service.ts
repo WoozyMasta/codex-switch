@@ -12,30 +12,62 @@ import {
   SHARED_ACTIVE_PROFILE_FILENAME,
 } from './shared-profile-store'
 
+/**
+ * Dependencies for ProfileAuthSyncService.
+ */
 interface ProfileAuthSyncServiceDeps {
+  /** Function to get the currently active profile ID. */
   getActiveProfileId: () => Promise<string | undefined>
+  /** Function to retrieve a profile by ID. */
   getProfile: (profileId: string) => Promise<ProfileSummary | undefined>
+  /** Function to load authentication data for a profile. */
   loadAuthData: (profileId: string) => Promise<AuthData | null>
+  /** Function to load the current live Codex auth data. */
   loadLiveCodexAuthData: () => Promise<AuthData | null>
+  /** Function to get the active Codex auth file path. */
   getActiveCodexAuthPath: () => string
+  /** Function to set the last active profile ID. */
   setLastProfileId: (profileId: string | undefined) => Promise<void>
+  /** Function to write active profile ID to state. */
   setActiveProfileIdInState: (profileId: string | undefined) => Promise<void>
+  /** Function to sync the active profile to the Codex auth file. */
   syncActiveProfileToCodexAuthFile: () => Promise<void>
+  /** Function to capture live auth for a matching profile. */
   captureLiveAuthForMatchingProfile: (authPath: string) => Promise<void>
+  /** Function to list all profiles. */
   listProfiles: () => Promise<ProfileSummary[]>
+  /** Function to replace profile authentication data. */
   replaceProfileAuth: (
     profileId: string,
     authData: AuthData,
   ) => Promise<boolean>
+  /** Function to create file system watchers. */
   createFileSystemWatcher: typeof vscode.workspace.createFileSystemWatcher
+  /** Function to create file URIs. */
   uriFile: (path: string) => vscode.Uri
+  /** Function to create relative glob patterns. */
   relativePattern: (base: vscode.Uri, pattern: string) => vscode.RelativePattern
+  /** Function indicating whether remote files mode is enabled. */
   isRemoteFilesMode: () => boolean
 }
 
+/**
+ * Manages synchronization between the Codex auth.json file and stored profiles.
+ * Reconciles profile state when auth files change and creates file watchers to detect changes.
+ */
 export class ProfileAuthSyncService {
+  /**
+   * Creates a new ProfileAuthSyncService instance.
+   * @param deps - Dependencies for auth file sync operations.
+   */
   constructor(private readonly deps: ProfileAuthSyncServiceDeps) {}
 
+  /**
+   * Reconciles the active profile's state with the Codex auth.json file.
+   * Handles cases where the auth file has been modified externally and may not
+   * match the current active profile.
+   * @returns A promise that resolves when reconciliation completes.
+   */
   async reconcileActiveProfileWithCodexAuthFile(): Promise<void> {
     const activeId = await this.deps.getActiveProfileId()
     const activeProfile = activeId
@@ -94,6 +126,12 @@ export class ProfileAuthSyncService {
     await this.deps.syncActiveProfileToCodexAuthFile()
   }
 
+  /**
+   * Creates file system watchers to monitor changes to the Codex auth file and shared profile state.
+   * @param onChanged - Callback function invoked when watched files change.
+   * @param authPath - Optional path to the auth file to watch; defaults to the active path.
+   * @returns An array of disposables for the created watchers.
+   */
   createWatchers(
     onChanged: () => void,
     authPath?: string,

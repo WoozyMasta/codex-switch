@@ -1,3 +1,4 @@
+/** Tests for profile-rate-limit-service. */
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import path from 'node:path'

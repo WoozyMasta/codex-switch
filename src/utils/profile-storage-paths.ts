@@ -1,6 +1,7 @@
 import { homedir } from 'os'
 import { join } from 'path'
 
+/** Resolves the path to profiles.json based on storage mode, using home directory for remote mode or storageDir otherwise. */
 export function resolveProfilesPath(
   isRemoteFilesMode: boolean,
   storageDir: string,

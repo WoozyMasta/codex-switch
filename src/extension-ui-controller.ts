@@ -15,11 +15,31 @@ import {
 } from './utils/profile-refresh-status'
 import type { MaintenanceProfileState } from './utils/profile-maintenance-state'
 
+/**
+ * Controller for managing the extension's UI state and updates.
+ */
 export interface ExtensionUiController {
+  /**
+   * Refreshes the UI to reflect current profile and state.
+   * @param options - Optional options controlling what to refresh.
+   * @returns A promise that resolves when the UI refresh completes.
+   */
   refreshUi(options?: RefreshProfileUiOptions): Promise<void>
+  /**
+   * Reconciles the stored profile state with Codex auth and refreshes the UI.
+   * Called on extension startup to handle external auth changes.
+   * @returns A promise that resolves when reconciliation and refresh complete.
+   */
   reconcileAndRefresh(): Promise<void>
 }
 
+/**
+ * Creates a UI controller for managing the extension's UI state.
+ * Handles status bar updates, profile switching, and rate limit display.
+ * @param context - The extension context from VS Code.
+ * @param services - The initialized extension services.
+ * @returns A controller for managing extension UI updates.
+ */
 export function createExtensionUiController(
   context: vscode.ExtensionContext,
   services: ExtensionServices,

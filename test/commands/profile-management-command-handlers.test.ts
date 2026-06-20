@@ -1,3 +1,4 @@
+/** Tests for profile-management-command-handlers. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {

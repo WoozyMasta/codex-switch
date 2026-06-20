@@ -1,3 +1,4 @@
+/** Tests for profile-active-state. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type {

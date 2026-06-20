@@ -4,6 +4,7 @@ import {
   compareIdentitySnapshots,
 } from './auth-identity'
 
+/** Finds a profile matching the authentication data through identity comparison, or undefined if no match. */
 export function findMatchingProfileIdForAuth(
   profiles: ProfileSummary[],
   authData: AuthData,

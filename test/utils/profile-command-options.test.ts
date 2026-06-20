@@ -1,3 +1,4 @@
+/** Tests for profile-command-options. */
 import assert from 'node:assert/strict'
 import * as path from 'path'
 import test from 'node:test'

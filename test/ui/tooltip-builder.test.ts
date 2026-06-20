@@ -1,3 +1,4 @@
+/** Tests for tooltip-builder. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ProfileSummary, ResolvedCodexHome } from '../../src/types'

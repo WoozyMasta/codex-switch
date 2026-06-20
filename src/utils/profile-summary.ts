@@ -1,8 +1,10 @@
 import type { ProfileRateLimits, ProfileSummary } from '../types'
 
+/** UUID v1-v5 pattern validation for profile IDs. */
 const PROFILE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+/** Safely casts an unknown value to a plain object, or null if invalid. */
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -10,6 +12,7 @@ function asObject(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>
 }
 
+/** Converts an unknown value to a trimmed string or undefined if not a valid string. */
 function asOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined
@@ -18,6 +21,7 @@ function asOptionalString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
+/** Validates and returns a UUID, or null if the value doesn't match the UUID pattern. */
 function parseProfileId(value: unknown): string | null {
   const id = asOptionalString(value)
   if (!id || !PROFILE_ID_PATTERN.test(id)) {
@@ -26,6 +30,7 @@ function parseProfileId(value: unknown): string | null {
   return id
 }
 
+/** Parses and normalizes a timestamp to ISO string format, or null if invalid. */
 function parseProfileTimestamp(value: unknown): string | null {
   const timestamp = asOptionalString(value)
   if (!timestamp) {
@@ -40,6 +45,7 @@ function parseProfileTimestamp(value: unknown): string | null {
   return new Date(parsed).toISOString()
 }
 
+/** Parses a rate limit window object with usage and reset time, or undefined if invalid. */
 function parseProfileRateLimitWindow(
   value: unknown,
 ): ProfileRateLimits['fiveHour'] | undefined {
@@ -73,6 +79,7 @@ function parseProfileRateLimitWindow(
   return { usedPercent, remainingPercent, resetsAt: resetsAt ?? undefined }
 }
 
+/** Parses profile rate limits with fiveHour and weekly windows, handling null/undefined states. */
 function parseProfileRateLimits(
   value: unknown,
 ): ProfileRateLimits | null | undefined {
@@ -100,6 +107,7 @@ function parseProfileRateLimits(
   }
 }
 
+/** Parses and validates a complete profile summary from an unknown value, returning null if invalid. */
 export function parseProfileSummary(value: unknown): ProfileSummary | null {
   const profile = asObject(value)
   if (!profile) {

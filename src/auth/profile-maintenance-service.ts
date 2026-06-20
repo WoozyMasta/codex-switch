@@ -22,47 +22,85 @@ import {
   deriveStartupJitterSeconds,
 } from '../utils/refresh-options'
 
+/**
+ * File system interface for profile maintenance operations.
+ * Extends lease-based file locking with async file reading.
+ */
 export interface MaintenanceFileSystem extends LeaseFileSystem {
+  /** Reads a file asynchronously. */
   readFile: (path: string, encoding: 'utf8') => Promise<string>
 }
 
+/**
+ * Function type for running a single profile maintenance operation.
+ */
 interface RunMaintenance {
+  /**
+   * Runs maintenance for a single profile.
+   * @param profileManager - Manager for profile operations.
+   * @param profile - The profile to run maintenance for.
+   * @returns A promise that resolves to the maintenance result.
+   */
   (
     profileManager: ProfileManager,
     profile: ProfileSummary,
   ): Promise<ProfileMaintenanceRunResult>
 }
 
+/**
+ * Dependencies for ProfileMaintenanceService.
+ */
 export interface ProfileMaintenanceServiceDeps {
+  /** Maintenance file paths and utilities. */
   paths: MaintenancePaths
+  /** Lease diagnostics for debugging coordination. */
   diagnostics: LeaseDiagnostics
+  /** File system adapter for lease management and file operations. */
   fs: MaintenanceFileSystem
+  /** Manager for accessing profiles and their data. */
   profileManager: ProfileManager
+  /** Function to run a single profile's maintenance. */
   runProfileMaintenance: RunMaintenance
+  /** Function to get the configured refresh interval in seconds. */
   getIntervalSeconds: () => number
+  /** Optional clock function; defaults to Date.now. */
   now?: () => number
+  /** Optional random number generator; defaults to Math.random. */
   random?: () => number
+  /** Optional UUID generator; defaults to crypto.randomUUID. */
   uuid?: () => string
+  /** Optional timer function; defaults to setTimeout. */
   setTimer?: (callback: () => void, ms: number) => ReturnType<typeof setTimeout>
+  /** Optional timer clear function; defaults to clearTimeout. */
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void
+  /** Optional debug logger. */
   debugLog?: (...args: unknown[]) => void
+  /** Optional callback when maintenance state changes. */
   onStateChanged?: () => void
 }
 
+/**
+ * Options for a maintenance request cycle.
+ */
 export interface RequestCycleOptions {
+  /** Optional list of profile IDs to force refresh regardless of schedule. */
   forceProfileIds?: readonly string[]
 }
 
 const MIN_POLL_MS = 5_000
 
 /**
- * Coordinates background profile maintenance across all windows of one IDE
- * product. There is no permanent leader: each cycle is owned by whichever
- * window currently holds the store-wide lease. The owner checks every due
- * profile serially, persists rotated auth, and publishes per-profile shared
- * state that other windows read without launching Codex.
+ * Coordinates background profile maintenance across all windows of one IDE product.
+ * There is no permanent leader: each cycle is owned by whichever window
+ * currently holds the store-wide lease. The owner checks every due profile serially,
+ * persists rotated auth, and publishes per-profile shared state that other windows
+ * read without launching Codex.
  */
 export class ProfileMaintenanceService {
+  /**
+   * Creates a new ProfileMaintenanceService instance.
+   * @param deps - All required dependencies and configuration.
+   */
   private readonly fs: MaintenanceFileSystem
   private readonly now: () => number
   private readonly random: () => number
@@ -84,6 +122,10 @@ export class ProfileMaintenanceService {
   private pendingForceIds = new Set<string>()
   private activeProfileId: string | undefined
 
+  /**
+   * Creates a new instance with the provided dependencies.
+   * @param deps - Dependencies for maintenance coordination.
+   */
   constructor(private readonly deps: ProfileMaintenanceServiceDeps) {
     this.fs = deps.fs
     this.now = deps.now ?? Date.now
@@ -101,7 +143,10 @@ export class ProfileMaintenanceService {
     })
   }
 
-  /** Begin polling after a short startup jitter. Safe to call once. */
+  /**
+   * Begins polling for maintenance after a short startup jitter.
+   * Safe to call once.
+   */
   start(): void {
     if (this.disposed) {
       return
@@ -117,7 +162,9 @@ export class ProfileMaintenanceService {
     unrefTimer(this.startupTimer)
   }
 
-  /** Reset polling cadence after a configuration change. */
+  /**
+   * Resets polling cadence after a configuration change.
+   */
   reschedule(): void {
     this.clearPollTimer()
     if (!this.disposed) {
@@ -126,9 +173,11 @@ export class ProfileMaintenanceService {
   }
 
   /**
-   * Request a maintenance cycle now. Only the lease owner launches Codex; other
-   * windows observe the lease and return. In-process the cycle is deduplicated,
-   * and forced profile ids are merged across overlapping requests.
+   * Requests a maintenance cycle immediately.
+   * Only the lease owner launches Codex; other windows observe the lease and return.
+   * In-process the cycle is deduplicated, and forced profile IDs are merged across overlapping requests.
+   * @param options - Options controlling which profiles to force refresh.
+   * @returns A promise that resolves when the cycle completes or is requested.
    */
   async requestCycle(options: RequestCycleOptions = {}): Promise<void> {
     for (const id of options.forceProfileIds ?? []) {
@@ -148,13 +197,21 @@ export class ProfileMaintenanceService {
     }
   }
 
+  /**
+   * Reads the maintenance state for a profile.
+   * @param profileId - The ID of the profile.
+   * @returns A promise that resolves to the maintenance state, or null if not found.
+   */
   async readProfileState(
     profileId: string,
   ): Promise<MaintenanceProfileState | null> {
     return this.readState(profileId)
   }
 
-  /** Set the listener invoked after each profile result is published. */
+  /**
+   * Sets the listener invoked after each profile result is published.
+   * @param listener - Callback function invoked on state changes.
+   */
   setStateChangedListener(listener: () => void): void {
     this.onStateChanged = listener
   }
@@ -474,6 +531,12 @@ function unrefTimer(handle: ReturnType<typeof setTimeout>): void {
 /**
  * A profile is due when it has no state, its scheduled refresh time has passed,
  * or a failed attempt's retry time has passed.
+ */
+/**
+ * Determines if a profile is due for maintenance based on its current state and the current time.
+ * @param state - The profile's maintenance state, or null if no state exists.
+ * @param now - The current time in milliseconds.
+ * @returns True if the profile is due for maintenance, false otherwise.
  */
 export function isProfileDue(
   state: MaintenanceProfileState | null,

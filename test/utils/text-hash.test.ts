@@ -1,3 +1,4 @@
+/** Tests for text-hash. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sha256Text } from '../../src/utils/text-hash'

@@ -2,10 +2,13 @@ import type { AuthData, ProfileSummary } from '../types'
 import { shouldReplaceStoredProfileAuthWithLive } from './auth-refresh-policy'
 import { matchesPreservationIdentityForProfile } from './preservation-identity'
 
+/** Base dependencies for loading stored authentication data. */
 export interface ProfileAuthLookupDependencies {
+  /** Loads stored auth data for a profile ID. */
   loadAuthData: (profileId: string) => Promise<AuthData | null>
 }
 
+/** Replaces profile auth with live auth if identity matches and refresh policy permits. */
 export async function maybeReplaceProfileAuthWithLive(
   deps: ProfileAuthLookupDependencies & {
     replaceProfileAuth: (
@@ -28,6 +31,7 @@ export async function maybeReplaceProfileAuthWithLive(
   return deps.replaceProfileAuth(profile.id, liveAuth)
 }
 
+/** Finds a profile matching live auth identity, preferring the specified profile if given. */
 export async function findProfileByPreservationIdentity(
   deps: ProfileAuthLookupDependencies & {
     listProfiles: () => Promise<ProfileSummary[]>

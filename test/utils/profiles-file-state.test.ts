@@ -1,3 +1,4 @@
+/** Tests for profiles-file-state. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseProfilesFileState } from '../../src/utils/profiles-file-state'

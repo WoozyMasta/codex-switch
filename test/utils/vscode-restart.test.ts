@@ -1,3 +1,4 @@
+/** Tests for vscode-restart. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as vscode from 'vscode'

@@ -4,6 +4,7 @@ const RESTART_EXTENSION_HOST_COMMAND_ID =
   'workbench.action.restartExtensionHost'
 const RELOAD_WINDOW_COMMAND_ID = 'workbench.action.reloadWindow'
 
+/** Restarts the extension host if available, or reloads the window as a fallback. */
 export async function restartExtensionHostOrReloadWindow(): Promise<void> {
   const commandIds = await vscode.commands.getCommands(true)
   if (commandIds.includes(RESTART_EXTENSION_HOST_COMMAND_ID)) {

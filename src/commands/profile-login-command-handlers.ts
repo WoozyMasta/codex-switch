@@ -7,24 +7,46 @@ import {
 } from './profile-command-prompts'
 import { ResolvedCodexHome } from '../types'
 
+/**
+ * Dependencies for the login via CLI command handler.
+ */
 export interface LoginViaCliDeps {
+  /** Dependencies for profile command prompts. */
   promptDeps: ProfileCommandPromptDeps
+  /** Function to get the active Codex auth file path. */
   getActiveCodexAuthPath: () => string
+  /** Function to get the login command text. */
   getLoginCommandText: () => string
+  /** Function to create and show a terminal for Codex commands. */
   createCodexTerminal: (
     name?: string,
     home?: ResolvedCodexHome,
   ) => { show: () => void; sendText: (text: string) => void }
+  /** The runtime Codex home configuration. */
   runtimeHome: ResolvedCodexHome
+  /** Function to execute VS Code commands. */
   executeCommand: typeof vscode.commands.executeCommand
+  /** Function to show information messages. */
   showInformationMessage: typeof vscode.window.showInformationMessage
+  /** Function to translate localized strings. */
   translate: typeof vscode.l10n.t
+  /** Function to check file existence. */
   fsExistsSync: typeof fs.existsSync
+  /** Function to watch directory changes. */
   fsWatch: typeof fs.watch
+  /** Function to get directory name from path. */
   dirname: typeof path.dirname
+  /** Function to schedule cleanup with timeout. */
   scheduleCleanup: typeof setTimeout
 }
 
+/**
+ * Handles the "Login via CLI" command to initiate Codex login flow.
+ * Opens a terminal and watches for the auth.json file to be created,
+ * then prompts to import it as a profile.
+ * @param deps - Dependencies for the login command.
+ * @returns A promise that resolves when the command completes.
+ */
 export async function loginViaCli(deps: LoginViaCliDeps): Promise<void> {
   const canReplaceLiveAuth = await ensureLiveAuthIsSavedBeforeReplacing(
     deps.promptDeps,

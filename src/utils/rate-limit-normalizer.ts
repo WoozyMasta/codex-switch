@@ -1,7 +1,10 @@
 import { ProfileRateLimitWindow, ProfileRateLimits } from '../types'
 
+/** Duration in minutes for the 5-hour rolling rate-limit window. */
 export const FIVE_HOUR_WINDOW_MINUTES = 5 * 60
+/** Duration in minutes for the weekly rolling rate-limit window. */
 export const WEEKLY_WINDOW_MINUTES = 7 * 24 * 60
+/** Key used to identify Codex-specific rate limits in the API response. */
 export const CODEX_LIMIT_ID = 'codex'
 
 interface NormalizedRateLimitWindow {
@@ -13,6 +16,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+/** Clamps and rounds a percentage value to the 0–100 range, treating non-finite numbers as 0. */
 export function clampPercent(value: number): number {
   if (!Number.isFinite(value)) {
     return 0
@@ -157,6 +161,7 @@ function readRateLimitSnapshots(response: unknown): unknown[] {
   return snapshots
 }
 
+/** Parses and normalizes raw rate-limit API response into a structured ProfileRateLimits object. */
 export function normalizeRateLimitResponse(
   response: unknown,
   nowSeconds: number,

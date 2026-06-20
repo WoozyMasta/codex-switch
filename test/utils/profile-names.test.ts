@@ -1,3 +1,4 @@
+/** Tests for profile-names. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { buildDefaultProfileName } from '../../src/utils/profile-names'

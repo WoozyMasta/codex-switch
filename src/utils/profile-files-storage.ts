@@ -5,13 +5,19 @@ import {
   type ProfilesFileState as ParsedProfilesFileState,
 } from './profiles-file-state'
 
+/** Dependencies for reading/writing profiles file with file system abstraction. */
 export interface ProfileFilesStorageDeps {
+  /** Creates storage directory if it doesn't exist. */
   ensureStorageDir: () => void
+  /** Returns the path to the profiles file. */
   getProfilesPath: () => string
+  /** Optional file existence check (defaults to fs.existsSync). */
   existsSync?: (path: string) => boolean
+  /** Optional file read function (defaults to fs.readFileSync). */
   readFileSync?: (path: string, encoding: 'utf8') => string
 }
 
+/** Reads profiles file state, returning valid, corrupt, or missing status. */
 export async function readProfilesFileState(
   deps: ProfileFilesStorageDeps,
 ): Promise<
@@ -41,6 +47,7 @@ export async function readProfilesFileState(
   }
 }
 
+/** Reads profiles file, returning empty file if missing/corrupt and notifying user of errors. */
 export async function readProfilesFile(
   deps: ProfileFilesStorageDeps & {
     showReadErrorMessage: (path: string) => void
@@ -56,6 +63,7 @@ export async function readProfilesFile(
   return { version: 1, profiles: [] }
 }
 
+/** Writes profiles data to file, ensuring storage directory exists. */
 export function writeProfilesFile(
   deps: {
     ensureStorageDir: () => void
@@ -68,6 +76,7 @@ export function writeProfilesFile(
   deps.writeJsonFile(deps.getProfilesPath(), data)
 }
 
+/** Reads profiles file for writing, returning null if corrupt and notifying user, empty if missing. */
 export async function requireWritableProfilesFile(
   deps: ProfileFilesStorageDeps & {
     showWriteErrorMessage: (path: string) => void

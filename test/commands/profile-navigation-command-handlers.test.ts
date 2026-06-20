@@ -1,3 +1,4 @@
+/** Tests for profile-navigation-command-handlers. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {

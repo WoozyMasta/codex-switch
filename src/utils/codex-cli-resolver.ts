@@ -10,18 +10,26 @@ import * as os from 'os'
 import * as path from 'path'
 import * as vscode from 'vscode'
 
+/** Standard npm bin directory name. */
 const NPM_BIN_DIRECTORY = 'npm'
 
+/** Represents a resolved Codex CLI command with executable path and arguments. */
 export interface CodexCliCommand {
+  /** Path to the executable or command name. */
   command: string
+  /** Arguments to pass to the command. */
   args: string[]
 }
 
+/** Optional dependencies for testing and platform abstraction. */
 export interface CodexCliResolverDeps {
+  /** Process environment variables (defaults to process.env). */
   env?: typeof process.env
+  /** Platform identifier (defaults to process.platform). */
   platform?: typeof process.platform
 }
 
+/** Resolves the Codex CLI command by checking configuration or finding the executable in PATH. */
 export function resolveCodexCliCommand(
   deps: CodexCliResolverDeps = {},
 ): CodexCliCommand | null {
@@ -34,6 +42,7 @@ export function resolveCodexCliCommand(
   return executable ? createCodexCommand(executable, deps) : null
 }
 
+/** Checks for a user-configured Codex CLI path in VS Code settings. */
 function resolveConfiguredCodexCommand(
   deps: CodexCliResolverDeps,
 ): CodexCliCommand | null {
@@ -54,6 +63,7 @@ function resolveConfiguredCodexCommand(
   return createCodexCommand(executable, deps)
 }
 
+/** Validates and resolves a configured Codex CLI path, returning the executable or null. */
 function resolveConfiguredCodexExecutable(
   configuredPath: string,
   deps: CodexCliResolverDeps,
@@ -71,6 +81,7 @@ function resolveConfiguredCodexExecutable(
   return findCodexExecutable(deps, candidate)
 }
 
+/** Constructs a CodexCliCommand with platform-specific handling for Windows batch files. */
 function createCodexCommand(
   executable: string,
   deps: CodexCliResolverDeps,
@@ -98,6 +109,7 @@ function createCodexCommand(
   }
 }
 
+/** Searches for a Codex executable in PATH and common install directories. */
 function findCodexExecutable(
   deps: CodexCliResolverDeps,
   commandName = 'codex',
@@ -115,6 +127,7 @@ function findCodexExecutable(
   return null
 }
 
+/** Collects all directories to search for Codex CLI, including PATH and platform-specific locations. */
 function getCodexSearchDirectories(deps: CodexCliResolverDeps): string[] {
   const env = deps.env ?? process.env
   const dirs: string[] = []
@@ -137,6 +150,7 @@ function getCodexSearchDirectories(deps: CodexCliResolverDeps): string[] {
   return dirs
 }
 
+/** Generates platform-appropriate executable names, adding .exe and .cmd variants on Windows. */
 function buildExecutableCandidateNames(
   commandName: string,
   deps: CodexCliResolverDeps,
@@ -153,6 +167,7 @@ function buildExecutableCandidateNames(
   return names
 }
 
+/** Checks if a string represents a path-like pattern (absolute, relative, or with separators). */
 function isPathLike(value: string): boolean {
   return (
     path.isAbsolute(value) ||
@@ -163,6 +178,7 @@ function isPathLike(value: string): boolean {
   )
 }
 
+/** Adds standard installation directories for Codex CLI across platforms. */
 function addCommonCodexSearchDirectories(
   addDir: (dir: string | undefined) => void,
   deps: CodexCliResolverDeps,
@@ -190,6 +206,7 @@ function addCommonCodexSearchDirectories(
   addDir('/usr/bin')
 }
 
+/** Searches for Codex CLI bundled with VS Code extensions (Windows only). */
 function getBundledCodexSearchDirectories(
   deps: CodexCliResolverDeps,
 ): string[] {
@@ -236,11 +253,15 @@ function getBundledCodexSearchDirectories(
     .map((candidate) => candidate.binaryDirectory)
 }
 
+/** Candidate for a bundled Codex CLI from a VS Code extension. */
 interface BundledCodexCandidate {
+  /** Name of the VS Code extension directory. */
   extensionName: string
+  /** Path to the binary directory. */
   binaryDirectory: string
 }
 
+/** Compares bundled Codex candidates by version (descending) then by name. */
 function compareBundledCodexCandidates(
   left: BundledCodexCandidate,
   right: BundledCodexCandidate,
@@ -262,6 +283,7 @@ function compareBundledCodexCandidates(
   return left.extensionName.localeCompare(right.extensionName)
 }
 
+/** Extracts semantic version numbers from a bundled extension name, or null if not found. */
 function extractVersionFromBundledExtensionName(
   extensionName: string,
 ): number[] | null {
@@ -273,6 +295,7 @@ function extractVersionFromBundledExtensionName(
   return match.slice(1).map((part) => Number.parseInt(part, 10))
 }
 
+/** Compares two semantic version arrays component-wise, returning -1, 0, or 1. */
 function compareVersionParts(left: number[], right: number[]): number {
   for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
     const leftPart = left[i] ?? 0
@@ -285,6 +308,7 @@ function compareVersionParts(left: number[], right: number[]): number {
   return 0
 }
 
+/** Checks if a file exists and is executable (with platform-specific handling). */
 function isExecutableFile(filePath: string): boolean {
   if (!existsSync(filePath)) {
     return false
@@ -311,10 +335,12 @@ function isExecutableFile(filePath: string): boolean {
   }
 }
 
+/** Escapes and quotes a string for safe use with Windows cmd.exe. */
 function quoteWindowsCmdArgument(value: string): string {
   return `"${value.replace(/%/g, '%%')}"`
 }
 
+/** Compares two paths for equality, normalizing and lowercasing for cross-platform consistency. */
 function isSamePath(a: string, b: string): boolean {
   return path.normalize(a).toLowerCase() === path.normalize(b).toLowerCase()
 }

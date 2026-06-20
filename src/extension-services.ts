@@ -15,18 +15,36 @@ import {
 } from './utils/profile-maintenance-paths'
 import { debugLog } from './utils/log'
 
+/**
+ * Runtime context for the extension containing the active Codex home configuration.
+ */
 export interface ExtensionRuntimeContext {
+  /** The currently active Codex home directory configuration. */
   home: ResolvedCodexHome
 }
 
+/**
+ * All services created and managed by the extension.
+ */
 export interface ExtensionServices {
+  /** Manager for Codex home directory configuration and switching. */
   codexHomeManager: CodexHomeManager
+  /** Manager for profile operations and storage. */
   profileManager: ProfileManager
+  /** Service for managing rate limit data and queries. */
   profileRateLimitService: ProfileRateLimitService
+  /** Service for coordinating background maintenance across windows. */
   profileMaintenanceService: ProfileMaintenanceService
+  /** Runtime context with active Codex home information. */
   runtime: ExtensionRuntimeContext
 }
 
+/**
+ * Creates and initializes all extension services.
+ * Sets up managers for profiles, Codex homes, rate limits, and maintenance coordination.
+ * @param context - The extension context from VS Code.
+ * @returns An object containing all created services.
+ */
 export function createExtensionServices(
   context: vscode.ExtensionContext,
 ): ExtensionServices {

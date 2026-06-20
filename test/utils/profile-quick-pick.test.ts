@@ -1,3 +1,4 @@
+/** Tests for profile-quick-pick. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {

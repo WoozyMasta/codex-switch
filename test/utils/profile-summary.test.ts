@@ -1,3 +1,4 @@
+/** Tests for profile-summary. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseProfileSummary } from '../../src/utils/profile-summary'

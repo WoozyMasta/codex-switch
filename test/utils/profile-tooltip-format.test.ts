@@ -1,3 +1,4 @@
+/** Tests for profile-tooltip-format. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {

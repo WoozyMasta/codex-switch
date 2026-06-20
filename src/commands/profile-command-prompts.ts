@@ -2,37 +2,66 @@ import * as vscode from 'vscode'
 import { AuthData } from '../types'
 import { buildDefaultProfileName } from '../utils/profile-names'
 
+/**
+ * Dependencies for profile command prompt functions.
+ */
 export interface ProfileCommandPromptDeps {
+  /** Function to get the active Codex auth file path. */
   getActiveCodexAuthPath: () => string
+  /** Function to get the login command text. */
   getLoginCommandText: () => string
+  /** Function to load auth data from a file. */
   loadAuthDataFromFile: (path: string) => Promise<AuthData | null>
+  /** Function to find a duplicate profile by auth data. */
   findDuplicateProfile: (
     authData: AuthData,
   ) => Promise<{ id: string; name: string } | undefined>
+  /** Function to replace a profile's authentication. */
   replaceProfileAuth: (
     profileId: string,
     authData: AuthData,
   ) => Promise<boolean>
+  /** Function to create a new profile. */
   createProfile: (name: string, authData: AuthData) => Promise<{ id: string }>
+  /** Function to set the active profile. */
   setActiveProfileId: (profileId: string) => Promise<boolean>
+  /** Function to preserve live auth for a matching profile. */
   preserveLiveAuthForMatchingProfile: () => Promise<{
     status: 'noLiveAuth' | 'saved' | 'unsaved'
   }>
+  /** Function to update the Codex CLI path. */
   updateCodexCliPath: (path: string) => Promise<void>
+  /** Function to check if Codex CLI is available. */
   hasCodexCli: () => boolean
+  /** Function to execute VS Code commands. */
   executeCommand: typeof vscode.commands.executeCommand
+  /** Function to show error messages. */
   showErrorMessage: typeof vscode.window.showErrorMessage
+  /** Function to show information messages. */
   showInformationMessage: typeof vscode.window.showInformationMessage
+  /** Function to show warning messages. */
   showWarningMessage: typeof vscode.window.showWarningMessage
+  /** Function to show input boxes. */
   showInputBox: typeof vscode.window.showInputBox
+  /** Function to show file open dialogs. */
   showOpenDialog: typeof vscode.window.showOpenDialog
+  /** Function to translate localized strings. */
   translate: typeof vscode.l10n.t
+  /** Function to restart the extension after import. */
   restartAfterImport: () => Promise<void>
+  /** Function to invoke when authentication changes. */
   onAuthChanged: (options?: {
     forceRateLimitRefresh?: boolean
   }) => Promise<void>
 }
 
+/**
+ * Prompts the user to add the current Codex auth.json as a profile.
+ * Handles deduplication, replacement, and profile activation.
+ * @param deps - Dependencies for prompts and profile operations.
+ * @param restartAfterImport - Whether to restart the extension after successful import.
+ * @returns A promise that resolves to true if the profile was successfully added or updated, false if canceled.
+ */
 export async function addCurrentAuthJsonAsProfile(
   deps: ProfileCommandPromptDeps,
   restartAfterImport: boolean,
@@ -117,6 +146,13 @@ export async function addCurrentAuthJsonAsProfile(
   }
 }
 
+/**
+ * Ensures that the current live Codex authentication is saved before allowing an operation.
+ * Prompts the user to save if there is unsaved live auth.
+ * @param deps - Dependencies for prompts and profile operations.
+ * @param operationName - The name of the operation being performed (for the warning message).
+ * @returns A promise that resolves to true if safe to proceed, false if the user canceled.
+ */
 export async function ensureLiveAuthIsSavedBeforeReplacing(
   deps: ProfileCommandPromptDeps,
   operationName: string,
@@ -150,6 +186,12 @@ export async function ensureLiveAuthIsSavedBeforeReplacing(
   return false
 }
 
+/**
+ * Ensures the Codex CLI is available for rate limit operations.
+ * If not found, prompts the user to set the CLI path.
+ * @param deps - Subset of dependencies needed for CLI configuration.
+ * @returns A promise that resolves to true if CLI is available or user completed setup, false otherwise.
+ */
 export async function ensureCodexCliForRateLimits(
   deps: Pick<
     ProfileCommandPromptDeps,

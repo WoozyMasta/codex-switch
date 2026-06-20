@@ -1,38 +1,63 @@
 import type { ProfileSummary } from '../types'
 import { firstDefinedString } from './strings'
 
+/** Generic key-value store interface for profile state persistence. */
 export interface ProfileStateBucketLike {
+  /** Retrieves a value by key, returning undefined if not found. */
   get<T>(key: string): T | undefined
+  /** Updates or deletes a key-value pair, supporting synchronous or asynchronous operations. */
   update(key: string, value: unknown): PromiseLike<void> | Promise<void> | void
 }
 
+/** Storage keys for tracking active profile state across different versions. */
 export interface ActiveProfileStateKeys {
+  /** Key for the current home-scoped active profile. */
   current: string
+  /** Key for the base home-scoped active profile (pre-migration). */
   currentBase: string
+  /** Key for the legacy global active profile. */
   legacy: string
 }
 
+/** Dependencies for resolving the active profile with multi-source fallback logic. */
 export interface ActiveProfileStateDependencies {
+  /** Whether operating in remote files mode. */
   isRemoteFilesMode: boolean
+  /** Storage bucket for current home-scoped state. */
   currentBucket: ProfileStateBucketLike
+  /** Storage bucket for legacy global state. */
   legacyBucket: ProfileStateBucketLike
+  /** State storage keys. */
   keys: ActiveProfileStateKeys
+  /** Whether to attempt migration from legacy state format. */
   shouldMigrateLegacyProfileState: boolean
+  /** Reads explicitly set shared active profile ID. */
   readSharedActiveProfile: () => string | undefined
+  /** Writes shared active profile ID. */
   writeSharedActiveProfile: (profileId: string) => void
+  /** Fetches a profile by ID. */
   getProfile: (profileId: string) => Promise<ProfileSummary | undefined>
+  /** Infers active profile ID from authentication file. */
   inferActiveProfileIdFromAuthFile: () => Promise<string | undefined>
+  /** Falls back to default profile for current home if empty. */
   inheritDefaultProfileIfCurrentHomeIsEmpty: () => Promise<string | undefined>
 }
 
+/** Dependencies for updating the active profile state. */
 export interface ActiveProfileStateWriteDependencies {
+  /** Whether operating in remote files mode. */
   isRemoteFilesMode: boolean
+  /** Storage bucket for current home-scoped state. */
   currentBucket: ProfileStateBucketLike
+  /** State storage keys (current and legacy only). */
   keys: Pick<ActiveProfileStateKeys, 'current' | 'legacy'>
+  /** Writes shared active profile ID. */
   writeSharedActiveProfile: (profileId: string) => void
+  /** Clears shared active profile state. */
   deleteSharedActiveProfile: () => void
 }
 
+/** Determines the active profile ID using a cascading resolution strategy with migration support. */
 export async function resolveActiveProfileId(
   deps: ActiveProfileStateDependencies,
 ): Promise<string | undefined> {
@@ -106,6 +131,7 @@ export async function resolveActiveProfileId(
   return deps.inheritDefaultProfileIfCurrentHomeIsEmpty()
 }
 
+/** Updates active profile state, handling both remote and local storage modes appropriately. */
 export async function setActiveProfileIdInState(
   deps: ActiveProfileStateWriteDependencies,
   profileId: string | undefined,

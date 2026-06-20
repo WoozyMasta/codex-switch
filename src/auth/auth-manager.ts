@@ -90,6 +90,7 @@ function parseJWT(token: string): any {
   }
 }
 
+/** Extracts and validates authentication fields from raw Codex CLI auth.json output. */
 export function extractAuthDataFromAuthJson(
   authJson: unknown,
 ): Partial<AuthData> | null {
@@ -130,15 +131,14 @@ export function extractAuthDataFromAuthJson(
   }
 }
 
-/**
- * Resolve default Codex home path.
- */
+/** Resolves the default Codex home directory path (from env or platform default). */
 export function getDefaultCodexHomePath(
   deps: AuthManagerClockDeps = {},
 ): string {
   return resolveDefaultCodexHomePath(deps.env?.CODEX_HOME)
 }
 
+/** Resolves the auth.json path for a given Codex home, with WSL fallback on Windows if enabled. */
 export function getDefaultCodexAuthPathForHome(
   codexHomePath: string,
   deps: AuthManagerClockDeps = {},
@@ -152,13 +152,12 @@ export function getDefaultCodexAuthPathForHome(
   return wslPath || localPath
 }
 
-/**
- * Resolve default Codex auth file path.
- */
+/** Resolves the default Codex auth.json file path using platform defaults. */
 export function getDefaultCodexAuthPath(): string {
   return getDefaultCodexAuthPathForHome(getDefaultCodexHomePath())
 }
 
+/** Determines whether to use the WSL auth path on Windows (requires explicit opt-in). */
 export function shouldUseWslAuthPath(enabled?: boolean): boolean {
   if (process.platform !== 'win32') {
     return false
@@ -213,6 +212,7 @@ function resolveWslDefaultCodexAuthPath(
   }
 }
 
+/** Reads and validates an auth.json file, returning a complete AuthData object or null if invalid. */
 export async function loadAuthDataFromFile(
   authPath: string,
 ): Promise<AuthData | null> {

@@ -1,3 +1,4 @@
+/** Tests for codex-paths. */
 import assert from 'node:assert/strict'
 import * as path from 'node:path'
 import test from 'node:test'

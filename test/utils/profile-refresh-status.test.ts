@@ -1,3 +1,4 @@
+/** Tests for profile-refresh-status. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {

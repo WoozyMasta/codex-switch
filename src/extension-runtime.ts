@@ -4,6 +4,12 @@ import { createExtensionUiController } from './extension-ui-controller'
 import { createStatusBarItem } from './ui/status-bar'
 import { registerCommands } from './commands'
 
+/**
+ * Starts the extension runtime, initializing the UI, command handlers, and watchers.
+ * Called after all services are created to wire up the extension's interactive components.
+ * @param context - The extension context from VS Code.
+ * @param services - The initialized extension services.
+ */
 export function startExtensionRuntime(
   context: vscode.ExtensionContext,
   services: ExtensionServices,

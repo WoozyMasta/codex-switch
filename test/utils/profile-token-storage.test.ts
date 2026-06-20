@@ -1,3 +1,4 @@
+/** Tests for profile-token-storage. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ProfileTokens } from '../../src/utils/profile-records'

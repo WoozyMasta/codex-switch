@@ -1,6 +1,7 @@
 import type { AuthData } from '../types'
 import { getCanonicalTokenBundle } from './auth-payload'
 
+/** Parses a last refresh timestamp from various formats (number, date string, or numeric string). */
 export function parseAuthLastRefresh(value: unknown): number | undefined {
   if (typeof value === 'number') {
     if (Number.isFinite(value)) {
@@ -30,6 +31,7 @@ export function parseAuthLastRefresh(value: unknown): number | undefined {
   return undefined
 }
 
+/** Extracts the last refresh timestamp from AuthData's authJson field. */
 export function getAuthLastRefresh(
   authData: AuthData | null,
 ): number | undefined {
@@ -42,6 +44,7 @@ export function getAuthLastRefresh(
   )
 }
 
+/** Determines whether live authentication should replace stored auth based on refresh time and token changes. */
 export function shouldReplaceStoredProfileAuthWithLive(
   storedAuth: AuthData | null,
   liveAuth: AuthData,

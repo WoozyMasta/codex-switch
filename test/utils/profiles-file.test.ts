@@ -1,3 +1,4 @@
+/** Tests for profiles-file. */
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { parseProfilesFile } from '../../src/utils/profiles-file'

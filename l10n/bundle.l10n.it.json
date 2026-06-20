@@ -65,5 +65,11 @@
   "Delete broken profile": "Elimina profilo danneggiato",
   "Import current ~/.codex/auth.json": "Importa ~/.codex/auth.json corrente",
   "Profile \"{0}\" is missing tokens. Restore it before switching.": "Nel profilo \"{0}\" mancano i token. Ripristinali prima di cambiare.",
-  "Recover from remote store": "Recupera da archivio remoto"
+  "Recover from remote store": "Recupera da archivio remoto",
+  "Refresh": "Aggiornamento",
+  "Updating now…": "Aggiornamento…",
+  "Updated {0} ago": "Aggiornato {0} fa",
+  "Next refresh in {0}": "Prossimo aggiornamento tra {0}",
+  "Retry in {0}": "Nuovo tentativo tra {0}",
+  "Automatic refresh disabled": "Aggiornamento automatico disattivato"
 }

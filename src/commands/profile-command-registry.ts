@@ -7,6 +7,7 @@ import { ProfileRateLimitService } from '../auth/profile-rate-limit-service'
 import { loadAuthDataFromFile } from '../auth/auth-manager'
 import { CodexHomeManager } from '../codex-home/codex-home-manager'
 import { resolveCodexCliCommand } from '../utils/codex-cli-resolver'
+import { getRateLimitAutoRefreshIntervalSeconds } from '../utils/refresh-config'
 import {
   resolveDefaultSettingsExportPath,
   resolveStatusBarClickBehavior,
@@ -155,6 +156,7 @@ export function registerCommands(
     showInformationMessage: vscode.window.showInformationMessage,
     executeCommand: vscode.commands.executeCommand,
     translate: vscode.l10n.t,
+    getRateLimitAutoRefreshIntervalSeconds,
     getLoginCommandText,
     createCodexTerminal:
       codexHomeManager.createCodexTerminal.bind(codexHomeManager),

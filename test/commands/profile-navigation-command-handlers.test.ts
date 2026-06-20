@@ -129,6 +129,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
       applyCachedRateLimits: (value: ProfileSummary[]) => value,
       decorateProfiles: async (_manager: unknown, value: ProfileSummary[]) =>
         value,
+      getRefreshStatus: () => ({ isRefreshing: false }),
     },
     maybeRestartAfterProfileSwitch: async () => {
       calls.push('restart')
@@ -187,6 +188,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
       }
       return result
     },
+    getRateLimitAutoRefreshIntervalSeconds: () => 900,
     getLoginCommandText: () => 'codex login',
     createCodexTerminal: () => ({
       show: () => calls.push('terminal:show'),
@@ -295,6 +297,7 @@ test('switchProfileCommand ignores decoration failures', async () => {
       decorateProfiles: async () => {
         throw new Error('decorate failed')
       },
+      getRefreshStatus: () => ({ isRefreshing: false }),
     },
   })
 
@@ -307,6 +310,7 @@ test('switchProfileCommand clears busy after async decoration resolves', async (
   const deps = makeDeps({
     profileRateLimitService: {
       applyCachedRateLimits: (value: ProfileSummary[]) => value,
+      getRefreshStatus: () => ({ isRefreshing: false }),
       decorateProfiles: () =>
         new Promise<ProfileSummary[]>((resolve) => {
           setTimeout(

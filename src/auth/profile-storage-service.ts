@@ -46,9 +46,22 @@ import { buildProfileAuthData } from '../utils/profile-auth-data'
 import { buildProfileSecretKeys } from '../utils/profile-secret-keys'
 import { findMatchingProfileIdForAuth } from '../utils/profile-auth-match'
 import { sortLegacyProfileMigrationCandidates } from '../utils/legacy-profile-migration'
+import { matchesPreservationIdentityForProfile } from '../utils/preservation-identity'
+import {
+  getAuthLastRefresh,
+  shouldReplaceStoredProfileAuthWithLive,
+} from '../utils/auth-refresh-policy'
+import { getCanonicalTokenBundle } from '../utils/auth-payload'
 
 const PROFILES_FILENAME = 'profiles.json'
 const MIGRATED_LEGACY_KEY = 'codexSwitch.migratedLegacyProfiles'
+
+export type ProfileAuthReplacementOutcome =
+  | 'updated'
+  | 'unchanged'
+  | 'conflict'
+  | 'missing'
+  | 'failed'
 
 interface ProfileStorageServiceDeps {
   fs: SyncFileSystem
@@ -462,6 +475,70 @@ export class ProfileStorageService {
     })
   }
 
+  /**
+   * Conditionally persist auth that Codex refreshed in a temporary home back
+   * into the saved profile. Reuses the existing identity and freshness policies
+   * and the durable, locked `replaceProfileAuth` write. Token comparison stays
+   * in process memory; nothing about the tokens is recorded elsewhere.
+   *
+   * `baselineAuth` is the auth that was loaded to start Codex; it is used to
+   * detect a concurrent mutation (import, switch, delete) of the stored auth
+   * while maintenance was running.
+   */
+  async replaceProfileAuthIfFresher(
+    profileId: string,
+    refreshedAuth: AuthData,
+    baselineAuth: AuthData,
+  ): Promise<ProfileAuthReplacementOutcome> {
+    const profile = await this.getProfile(profileId)
+    if (!profile) {
+      return 'missing'
+    }
+
+    if (!getCanonicalTokenBundle(refreshedAuth)) {
+      return 'conflict'
+    }
+
+    const currentAuth = await this.loadAuthData(profileId)
+
+    // Identity must unambiguously match the intended profile (org included).
+    if (
+      !matchesPreservationIdentityForProfile(
+        profile,
+        refreshedAuth,
+        currentAuth,
+      )
+    ) {
+      return 'conflict'
+    }
+
+    // Not older than current, and tokens / last_refresh actually changed.
+    if (!shouldReplaceStoredProfileAuthWithLive(currentAuth, refreshedAuth)) {
+      return 'unchanged'
+    }
+
+    // Concurrent mutation: stored auth changed versus the baseline used to
+    // start Codex. Only override it when refreshed auth is strictly newer.
+    if (currentAuth && authTokensDiffer(currentAuth, baselineAuth)) {
+      const currentRefresh = getAuthLastRefresh(currentAuth)
+      const refreshedRefresh = getAuthLastRefresh(refreshedAuth)
+      if (
+        currentRefresh === undefined ||
+        refreshedRefresh === undefined ||
+        refreshedRefresh <= currentRefresh
+      ) {
+        return 'conflict'
+      }
+    }
+
+    try {
+      const written = await this.replaceProfileAuth(profileId, refreshedAuth)
+      return written ? 'updated' : 'missing'
+    } catch {
+      return 'failed'
+    }
+  }
+
   async createProfile(
     name: string,
     authData: AuthData,
@@ -539,4 +616,17 @@ export class ProfileStorageService {
       return true
     })
   }
+}
+
+function authTokensDiffer(a: AuthData, b: AuthData): boolean {
+  const tokensA = getCanonicalTokenBundle(a)
+  const tokensB = getCanonicalTokenBundle(b)
+  if (!tokensA || !tokensB) {
+    return true
+  }
+  return (
+    tokensA.idToken !== tokensB.idToken ||
+    tokensA.accessToken !== tokensB.accessToken ||
+    tokensA.refreshToken !== tokensB.refreshToken
+  )
 }

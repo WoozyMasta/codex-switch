@@ -27,7 +27,7 @@ export type SyncFileSystem = Pick<
 >
 export type AsyncFileSystem = Pick<
   typeof fsPromises,
-  'mkdtemp' | 'chmod' | 'writeFile' | 'unlink' | 'rm'
+  'mkdtemp' | 'chmod' | 'writeFile' | 'readFile' | 'unlink' | 'rm'
 >
 export type SpawnAppServer = (
   codexCommand: CodexCliCommand,

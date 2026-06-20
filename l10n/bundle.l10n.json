@@ -65,5 +65,11 @@
   "Delete broken profile": "Delete broken profile",
   "Import current ~/.codex/auth.json": "Import current ~/.codex/auth.json",
   "Profile \"{0}\" is missing tokens. Restore it before switching.": "Profile \"{0}\" is missing tokens. Restore it before switching.",
-  "Recover from remote store": "Recover from remote store"
+  "Recover from remote store": "Recover from remote store",
+  "Refresh": "Refresh",
+  "Updating now…": "Updating now…",
+  "Updated {0} ago": "Updated {0} ago",
+  "Next refresh in {0}": "Next refresh in {0}",
+  "Retry in {0}": "Retry in {0}",
+  "Automatic refresh disabled": "Automatic refresh disabled"
 }

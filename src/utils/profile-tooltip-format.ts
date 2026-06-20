@@ -35,6 +35,7 @@ export interface BuildProfileTooltipRowInput {
   fiveHourReset: string
   weekly: string
   weeklyReset: string
+  refresh: string
   email: string
   isActive: boolean
 }
@@ -54,7 +55,7 @@ export function buildProfileTooltipRow(
     : `[${name}](${switchUri} "${linkTitle}")`
   const status = input.isActive ? '$(check)' : ''
 
-  return `| ${padTableCell(status)} | ${padTableCell(linkedName)} | ${padTableCell(input.plan)} | ${padTableCell(input.fiveHour)} | ${padTableCell(input.fiveHourReset)} | ${padTableCell(input.weekly)} | ${padTableCell(input.weeklyReset)} |\n`
+  return `| ${padTableCell(status)} | ${padTableCell(linkedName)} | ${padTableCell(input.plan)} | ${padTableCell(input.fiveHour)} | ${padTableCell(input.fiveHourReset)} | ${padTableCell(input.weekly)} | ${padTableCell(input.weeklyReset)} | ${padTableCell(input.refresh)} |\n`
 }
 
 export function buildProfileTooltipHomeSection(

@@ -16,6 +16,7 @@ export function createProfileTooltip(
   activeProfile: ProfileSummary | null,
   profiles: ProfileSummary[],
   home?: ResolvedCodexHome,
+  getRefreshLabel?: (profileId: string) => string,
 ): vscode.MarkdownString {
   const tooltip = new vscode.MarkdownString()
   tooltip.supportThemeIcons = true
@@ -35,9 +36,9 @@ export function createProfileTooltip(
   } else {
     const activeId = activeProfile?.id
     tooltip.appendMarkdown(
-      `|  | ${padTableCell(escapeTableCell(vscode.l10n.t('Profile')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Plan')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('5h')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Weekly')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} |\n`,
+      `|  | ${padTableCell(escapeTableCell(vscode.l10n.t('Profile')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Plan')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('5h')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Weekly')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Refresh')))} |\n`,
     )
-    tooltip.appendMarkdown('|---|---|---|---:|---|---:|---|\n')
+    tooltip.appendMarkdown('|---|---|---|---:|---|---:|---|---|\n')
 
     for (const p of profiles) {
       const plan = escapeTableCell(getProfilePlanDisplay(p.planType))
@@ -56,6 +57,7 @@ export function createProfileTooltip(
         vscode.l10n.t('Unknown'),
       )
       const isActive = Boolean(activeId && p.id === activeId)
+      const refresh = escapeTableCell(getRefreshLabel?.(p.id) ?? '')
 
       tooltip.appendMarkdown(
         buildProfileTooltipRow({
@@ -66,6 +68,7 @@ export function createProfileTooltip(
           fiveHourReset,
           weekly,
           weeklyReset,
+          refresh,
           email: emailDisplay,
           isActive,
         }),

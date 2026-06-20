@@ -65,5 +65,11 @@
   "Delete broken profile": "손상된 프로필 삭제",
   "Import current ~/.codex/auth.json": "현재 ~/.codex/auth.json 가져오기",
   "Profile \"{0}\" is missing tokens. Restore it before switching.": "프로필 \"{0}\"에 토큰이 없습니다. 전환하기 전에 복구하세요.",
-  "Recover from remote store": "원격 저장소에서 복구"
+  "Recover from remote store": "원격 저장소에서 복구",
+  "Refresh": "새로 고침",
+  "Updating now…": "업데이트 중…",
+  "Updated {0} ago": "{0} 전 업데이트됨",
+  "Next refresh in {0}": "다음 새로 고침까지 {0}",
+  "Retry in {0}": "{0} 후 재시도",
+  "Automatic refresh disabled": "자동 새로 고침 비활성화됨"
 }

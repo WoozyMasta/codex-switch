@@ -4,10 +4,15 @@ import * as os from 'os'
 import * as path from 'path'
 import * as readline from 'readline'
 import { buildCodexAuthJson } from './codex-auth-sync'
+import { extractAuthDataFromAuthJson } from './auth-manager'
 import type { ProfileManager } from './profile-manager'
 import type { AuthData, ProfileRateLimits, ProfileSummary } from '../types'
 import type { CodexCliCommand } from '../utils/codex-cli-resolver'
 import { normalizeRateLimitResponse } from '../utils/rate-limit-normalizer'
+import { getCanonicalTokenBundle } from '../utils/auth-payload'
+import { getAuthLastRefresh } from '../utils/auth-refresh-policy'
+import type { ProfileRefreshStatus } from '../utils/profile-refresh-status'
+import type { MaintenanceErrorCategory } from '../utils/profile-maintenance-state'
 import type {
   AsyncFileSystem,
   Clock,
@@ -42,7 +47,29 @@ interface CacheEntry {
   profileUpdatedAt: string
   fetchedAt: number
   rateLimits: ProfileRateLimits | null
+  lastSuccessAt?: number
   lastFailureAt?: number
+}
+
+/**
+ * Both outputs of a single temporary-home maintenance request:
+ * the normalized rate limits and any auth Codex refreshed in the temp home.
+ * `refreshedAuth` is kept only in memory and is never persisted to
+ * coordination state.
+ */
+interface ProfileMaintenanceResult {
+  rateLimits: ProfileRateLimits | null
+  refreshedAuth: AuthData | null
+}
+
+/**
+ * Structured outcome of one serial maintenance pass over a single profile,
+ * used by the cross-window scheduler to publish shared state.
+ */
+export interface ProfileMaintenanceRunResult {
+  status: 'success' | 'failed'
+  rateLimits: ProfileRateLimits | null
+  errorCategory?: MaintenanceErrorCategory
 }
 
 interface DecorateProfilesOptions {
@@ -511,6 +538,103 @@ export class ProfileRateLimitService {
     )
   }
 
+  /**
+   * Run one maintenance pass for a single profile and return a structured
+   * outcome. The cross-window scheduler calls this serially under a lease; it
+   * performs the temporary-home request, persists any rotated auth, and updates
+   * the in-memory cache so the UI reflects the latest result.
+   */
+  async runProfileMaintenance(
+    profileManager: ProfileManager,
+    profile: ProfileSummary,
+  ): Promise<ProfileMaintenanceRunResult> {
+    if (this.disposed) {
+      return {
+        status: 'failed',
+        rateLimits: this.getCachedRateLimits(profile) ?? null,
+        errorCategory: 'canceled',
+      }
+    }
+
+    const codexCliCommand = this.resolveCodexCliCommand()
+    if (!codexCliCommand) {
+      return {
+        status: 'failed',
+        rateLimits: this.getCachedRateLimits(profile) ?? null,
+        errorCategory: 'cli-not-found',
+      }
+    }
+
+    const authData = await profileManager.loadAuthData(profile.id)
+    if (!authData) {
+      this.cacheFailure(profile)
+      return {
+        status: 'failed',
+        rateLimits: this.getCachedRateLimits(profile) ?? null,
+        errorCategory: 'auth-missing',
+      }
+    }
+
+    const operationController = new AbortController()
+    this.activeOperationControllers.add(operationController)
+    try {
+      const result = await this.runWithAppServerConcurrencyLimit(
+        () =>
+          queryRateLimitsViaTemporaryCodexHome(
+            authData,
+            this.clientVersion,
+            codexCliCommand,
+            operationController.signal,
+            this.now,
+            this.tmpdir,
+            this.debugLog,
+            this.env,
+            this.spawnAppServer,
+            this.tempHomeFs,
+          ),
+        operationController.signal,
+      )
+
+      const { summary, persistFailed } =
+        await this.persistRefreshedAuthIfChanged(
+          profileManager,
+          profile,
+          authData,
+          result.refreshedAuth,
+        )
+      this.cacheSuccess(summary, result.rateLimits)
+
+      if (persistFailed) {
+        return {
+          status: 'failed',
+          rateLimits: result.rateLimits,
+          errorCategory: 'storage-write-failed',
+        }
+      }
+      return { status: 'success', rateLimits: result.rateLimits }
+    } catch (error) {
+      if (isAbortError(error) || operationController.signal.aborted) {
+        return {
+          status: 'failed',
+          rateLimits: this.getCachedRateLimits(profile) ?? null,
+          errorCategory: 'canceled',
+        }
+      }
+      this.debugLog(
+        `Maintenance failed for profile ${profile.id}:`,
+        error instanceof Error ? error.message : error,
+      )
+      this.cacheFailure(profile)
+      return {
+        status: 'failed',
+        rateLimits: this.getCachedRateLimits(profile) ?? null,
+        errorCategory: categorizeMaintenanceError(error),
+      }
+    } finally {
+      this.activeOperationControllers.delete(operationController)
+    }
+  }
+
   private getFreshCachedRateLimits(
     profile: ProfileSummary,
   ): ProfileRateLimits | null | undefined {
@@ -605,7 +729,7 @@ export class ProfileRateLimitService {
         return this.getCachedRateLimits(profile) ?? null
       }
 
-      const rateLimits = await this.runWithAppServerConcurrencyLimit(
+      const result = await this.runWithAppServerConcurrencyLimit(
         () =>
           queryRateLimitsViaTemporaryCodexHome(
             authData,
@@ -621,8 +745,15 @@ export class ProfileRateLimitService {
           ),
         signal,
       )
-      this.cacheSuccess(profile, rateLimits)
-      return rateLimits
+
+      const { summary } = await this.persistRefreshedAuthIfChanged(
+        profileManager,
+        profile,
+        authData,
+        result.refreshedAuth,
+      )
+      this.cacheSuccess(summary, result.rateLimits)
+      return result.rateLimits
     } catch (error) {
       if (isAbortError(error) || signal.aborted) {
         return this.getCachedRateLimits(profile) ?? null
@@ -633,6 +764,48 @@ export class ProfileRateLimitService {
       )
       this.cacheFailure(profile)
       return null
+    }
+  }
+
+  /**
+   * Persist auth that Codex refreshed inside the temporary home back into the
+   * saved profile, then return the profile summary whose `updatedAt` the
+   * rate-limit cache should key on. When nothing changed (the common path) the
+   * original summary is returned without touching storage. `persistFailed`
+   * signals that a refresh was available but could not be written, so callers
+   * can record a retryable failure instead of a clean success.
+   */
+  private async persistRefreshedAuthIfChanged(
+    profileManager: ProfileManager,
+    profile: ProfileSummary,
+    baselineAuth: AuthData,
+    refreshedAuth: AuthData | null,
+  ): Promise<{ summary: ProfileSummary; persistFailed: boolean }> {
+    if (!refreshedAuth || !authChangedInMemory(baselineAuth, refreshedAuth)) {
+      return { summary: profile, persistFailed: false }
+    }
+
+    try {
+      const outcome = await profileManager.replaceProfileAuthIfFresher(
+        profile.id,
+        refreshedAuth,
+        baselineAuth,
+      )
+      if (outcome === 'failed') {
+        return { summary: profile, persistFailed: true }
+      }
+      if (outcome !== 'updated') {
+        return { summary: profile, persistFailed: false }
+      }
+
+      const updated = await profileManager.getProfile(profile.id)
+      return { summary: updated ?? profile, persistFailed: false }
+    } catch (error) {
+      this.debugLog(
+        `Could not persist refreshed auth for profile ${profile.id}:`,
+        error instanceof Error ? error.message : error,
+      )
+      return { summary: profile, persistFailed: true }
     }
   }
 
@@ -693,11 +866,46 @@ export class ProfileRateLimitService {
     profile: ProfileSummary,
     rateLimits: ProfileRateLimits | null,
   ): void {
+    const now = this.now()
     this.cache.set(profile.id, {
       profileUpdatedAt: profile.updatedAt,
-      fetchedAt: this.now(),
+      fetchedAt: now,
       rateLimits,
+      lastSuccessAt: now,
     })
+  }
+
+  /**
+   * Scheduling status derived from the in-memory cache for UI rendering. The
+   * computation is read-only and keys on the profile revision so a stale entry
+   * is ignored after auth changes. `intervalSeconds` is the normalized user
+   * interval; `0` means automatic refresh is disabled.
+   */
+  getRefreshStatus(
+    profile: ProfileSummary,
+    intervalSeconds: number,
+  ): ProfileRefreshStatus {
+    const isRefreshing = this.inflight.has(profile.id)
+    const entry = this.cache.get(profile.id)
+    if (!entry || entry.profileUpdatedAt !== profile.updatedAt) {
+      return { isRefreshing }
+    }
+
+    const lastSuccessAt = entry.lastSuccessAt
+    const nextDueAt =
+      lastSuccessAt !== undefined && intervalSeconds > 0
+        ? lastSuccessAt + intervalSeconds * 1000
+        : undefined
+
+    const failed =
+      entry.lastFailureAt !== undefined &&
+      (lastSuccessAt === undefined || entry.lastFailureAt > lastSuccessAt)
+    const nextRetryAt =
+      failed && entry.lastFailureAt !== undefined
+        ? entry.lastFailureAt + RATE_LIMIT_FAILURE_BACKOFF_MS
+        : undefined
+
+    return { lastSuccessAt, nextDueAt, nextRetryAt, isRefreshing }
   }
 
   private cacheFailure(profile: ProfileSummary): void {
@@ -750,9 +958,9 @@ async function queryRateLimitsViaTemporaryCodexHome(
   env: ProcessEnv = process.env,
   spawnAppServer: SpawnAppServer = spawnCodexAppServer,
   tempHomeFs: AsyncFileSystem = fs,
-): Promise<ProfileRateLimits | null> {
+): Promise<ProfileMaintenanceResult> {
   if (signal?.aborted) {
-    return null
+    return { rateLimits: null, refreshedAuth: null }
   }
 
   const tempHomePath = await tempHomeFs.mkdtemp(
@@ -780,13 +988,27 @@ async function queryRateLimitsViaTemporaryCodexHome(
       env,
       spawnAppServer,
     )
+    let rateLimits: ProfileRateLimits | null = null
     try {
       await client.initialize()
       const response = await client.readRateLimits()
-      return normalizeRateLimitResponse(response, Math.floor(now() / 1000))
+      rateLimits = normalizeRateLimitResponse(
+        response,
+        Math.floor(now() / 1000),
+      )
     } finally {
       await client.dispose()
     }
+
+    // Codex may rewrite auth.json with rotated tokens while handling the
+    // request or during shutdown. Read it after the client is fully disposed,
+    // before the temporary home is removed. Kept in memory only.
+    const refreshedAuth = await readRefreshedAuthFromTempHome(
+      authFilePath,
+      tempHomeFs,
+      debugLog,
+    )
+    return { rateLimits, refreshedAuth }
   } finally {
     signal?.removeEventListener('abort', onAbort)
     await removeTemporaryCodexHome(
@@ -796,6 +1018,70 @@ async function queryRateLimitsViaTemporaryCodexHome(
       tempHomeFs,
     )
   }
+}
+
+async function readRefreshedAuthFromTempHome(
+  authFilePath: string,
+  tempHomeFs: AsyncFileSystem,
+  debugLog: (...args: unknown[]) => void = () => undefined,
+): Promise<AuthData | null> {
+  try {
+    const content = await tempHomeFs.readFile(authFilePath, 'utf8')
+    const authJson = JSON.parse(content) as unknown
+    const extracted = extractAuthDataFromAuthJson(authJson)
+    if (
+      !extracted ||
+      !extracted.idToken ||
+      !extracted.accessToken ||
+      !extracted.refreshToken
+    ) {
+      return null
+    }
+
+    return {
+      idToken: extracted.idToken,
+      accessToken: extracted.accessToken,
+      refreshToken: extracted.refreshToken,
+      accountId: extracted.accountId,
+      defaultOrganizationId: extracted.defaultOrganizationId,
+      defaultOrganizationTitle: extracted.defaultOrganizationTitle,
+      chatgptUserId: extracted.chatgptUserId,
+      userId: extracted.userId,
+      subject: extracted.subject,
+      email: extracted.email || 'Unknown',
+      planType: extracted.planType || 'Unknown',
+      authJson: extracted.authJson,
+    }
+  } catch (error) {
+    debugLog(
+      'Could not read refreshed temporary auth:',
+      error instanceof Error ? error.message : error,
+    )
+    return null
+  }
+}
+
+/**
+ * In-memory comparison of the baseline auth written into the temp home and the
+ * auth read back afterwards. Returns true only when canonical tokens or
+ * `last_refresh` changed, so the common no-rotation path never touches storage.
+ */
+function authChangedInMemory(baseline: AuthData, refreshed: AuthData): boolean {
+  const baselineTokens = getCanonicalTokenBundle(baseline)
+  const refreshedTokens = getCanonicalTokenBundle(refreshed)
+  if (!refreshedTokens) {
+    return false
+  }
+  if (
+    !baselineTokens ||
+    baselineTokens.idToken !== refreshedTokens.idToken ||
+    baselineTokens.accessToken !== refreshedTokens.accessToken ||
+    baselineTokens.refreshToken !== refreshedTokens.refreshToken
+  ) {
+    return true
+  }
+
+  return getAuthLastRefresh(baseline) !== getAuthLastRefresh(refreshed)
 }
 
 async function removeTemporaryCodexHome(
@@ -827,6 +1113,24 @@ async function removeTemporaryCodexHome(
       error instanceof Error ? error.message : error,
     )
   }
+}
+
+function categorizeMaintenanceError(error: unknown): MaintenanceErrorCategory {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/Timed out waiting/i.test(message)) {
+    return 'request-timeout'
+  }
+  if (/invalid response/i.test(message)) {
+    return 'response-invalid'
+  }
+  if (
+    /Failed to start|exited before completing|stdin write failed|client is closing/i.test(
+      message,
+    )
+  ) {
+    return 'process-failed'
+  }
+  return 'unknown'
 }
 
 function isAbortError(error: unknown): boolean {

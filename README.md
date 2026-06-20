@@ -176,11 +176,46 @@ Main settings:
 * `codexSwitch.statusBarClickBehavior` (`cycle`, `toggleLast` or `selector`)
 * `codexSwitch.codexHome.enabled`
 * `codexSwitch.codexHome.inheritDefaultProfileWhenEmpty`
+* `codexSwitch.rateLimitAutoRefreshIntervalSeconds`
 
 When `codexSwitch.reloadWindowAfterProfileSwitch` is enabled, the extension
 tries to restart only the extension host after a successful switch or import.
 This lets Codex re-read `auth.json` without reloading the full VS Code window.
 If extension-host restart is unavailable, it falls back to full window reload.
+
+### Account Limit Refresh
+
+`codexSwitch.rateLimitAutoRefreshIntervalSeconds` controls how often saved
+Codex account limits refresh in the background. The default is 15 minutes
+(`900`); the enabled range is 30 seconds through 12 hours (`43200`), and `0`
+disables automatic refresh while keeping the manual *Refresh limits* action.
+
+The background refresh covers all saved profiles, not only the active one, and
+runs even when the window is not focused. When Codex rotates its tokens during
+a refresh, the updated authentication is written back into the same saved
+profile so a later switch does not restore a stale refresh token. Auth is only
+written to the profile's existing credential backend (`secretStorage` or
+`remoteFiles`); it is never written into any live `CODEX_HOME/auth.json`.
+
+Profile usage shows the age of the last successful result and the next
+scheduled refresh or retry beside each profile.
+
+Multiple windows of the same IDE product coordinate so that only one window
+runs a given background check at a time, with no permanent leader: any window
+can take over after another closes or crashes. Different IDE products (VS Code,
+Cursor, VSCodium) stay isolated because they normally use independent
+credential stores. Coordination uses small files under:
+
+```text
+~/.codex-switch/maintenance/v1/
+```
+
+These files hold only scheduling status and normalized usage — never tokens,
+auth payloads, account identity, or profile names. The directory is safe to
+delete while all related IDE windows are closed; doing so removes only cached
+limits and scheduling state, never profiles or credentials. If it cannot be
+written, automatic refresh stops rather than running uncoordinated checks; the
+manual *Refresh limits* action remains available.
 
 ## Development
 

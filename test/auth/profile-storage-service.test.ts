@@ -7,6 +7,7 @@ import type * as vscode from 'vscode'
 import type { AuthData, ProfileSummary } from '../../src/types'
 import { ProfileStorageService } from '../../src/auth/profile-storage-service'
 import { buildProfileSecretKeys } from '../../src/utils/profile-secret-keys'
+import { buildProfileTokensFromAuth } from '../../src/utils/profile-records'
 const profileFilesStorage =
   require('../../src/utils/profile-files-storage') as {
     writeProfilesFile: typeof import('../../src/utils/profile-files-storage').writeProfilesFile
@@ -115,6 +116,203 @@ function makeService(dir: string, secrets = makeSecrets()) {
     }),
   }
 }
+
+function seedProfile(
+  dir: string,
+  secrets: ReturnType<typeof makeSecrets>,
+  profile: ProfileSummary,
+  auth: AuthData,
+): void {
+  profileFilesStorage.writeProfilesFile(
+    {
+      ensureStorageDir: () => {
+        fs.mkdirSync(dir, { recursive: true })
+      },
+      getProfilesPath: () => path.join(dir, 'profiles.json'),
+      writeJsonFile: (file: string, data) => {
+        fs.writeFileSync(file, JSON.stringify(data), 'utf8')
+      },
+    },
+    { version: 1, profiles: [profile] },
+  )
+  secrets.values.set(
+    buildProfileSecretKeys(profile.id).current,
+    JSON.stringify(buildProfileTokensFromAuth(auth)),
+  )
+}
+
+function makeRefreshedAuth(
+  id: string,
+  options: { suffix?: string; lastRefresh?: number } = {},
+): AuthData {
+  const suffix = options.suffix ?? '2'
+  const base = makeAuthData(id)
+  const tokens: Record<string, unknown> = {
+    id_token: `${id}-id`,
+    access_token: `${id}-access-${suffix}`,
+    refresh_token: `${id}-refresh-${suffix}`,
+    account_id: `${id}-account`,
+  }
+  const authJson: Record<string, unknown> = { tokens }
+  if (options.lastRefresh !== undefined) {
+    authJson.last_refresh = options.lastRefresh
+  }
+  return {
+    ...base,
+    accessToken: `${id}-access-${suffix}`,
+    refreshToken: `${id}-refresh-${suffix}`,
+    authJson,
+  }
+}
+
+const PROFILE_ID = '123e4567-e89b-12d3-a456-426614174000'
+
+test('replaceProfileAuthIfFresher reports missing for an unknown profile', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const { service } = makeService(dir)
+  const result = await service.replaceProfileAuthIfFresher(
+    'unknown',
+    makeRefreshedAuth('alpha', { lastRefresh: 100 }),
+    makeAuthData('alpha'),
+  )
+  assert.equal(result, 'missing')
+})
+
+test('replaceProfileAuthIfFresher leaves unchanged auth untouched', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const secrets = makeSecrets()
+  const { service } = makeService(dir, secrets)
+  const profile = makeProfile(PROFILE_ID, 'Alpha')
+  const auth = makeAuthData(PROFILE_ID)
+  seedProfile(dir, secrets, profile, auth)
+
+  const result = await service.replaceProfileAuthIfFresher(
+    PROFILE_ID,
+    auth,
+    auth,
+  )
+  assert.equal(result, 'unchanged')
+})
+
+test('replaceProfileAuthIfFresher persists newer matching auth', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const secrets = makeSecrets()
+  const { service } = makeService(dir, secrets)
+  const profile = makeProfile(PROFILE_ID, 'Alpha')
+  const baseline = makeAuthData(PROFILE_ID)
+  seedProfile(dir, secrets, profile, baseline)
+
+  const refreshed = makeRefreshedAuth(PROFILE_ID, { lastRefresh: 5000 })
+  const result = await service.replaceProfileAuthIfFresher(
+    PROFILE_ID,
+    refreshed,
+    baseline,
+  )
+  assert.equal(result, 'updated')
+
+  const stored = await service.readStoredTokens(PROFILE_ID)
+  assert.equal(stored?.refreshToken, `${PROFILE_ID}-refresh-2`)
+})
+
+test('replaceProfileAuthIfFresher rejects older temporary auth', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const secrets = makeSecrets()
+  const { service } = makeService(dir, secrets)
+  const profile = makeProfile(PROFILE_ID, 'Alpha')
+  const baseline = makeRefreshedAuth(PROFILE_ID, {
+    suffix: '1',
+    lastRefresh: 9000,
+  })
+  seedProfile(dir, secrets, profile, baseline)
+
+  const older = makeRefreshedAuth(PROFILE_ID, {
+    suffix: '2',
+    lastRefresh: 1000,
+  })
+  const result = await service.replaceProfileAuthIfFresher(
+    PROFILE_ID,
+    older,
+    baseline,
+  )
+  assert.equal(result, 'unchanged')
+})
+
+test('replaceProfileAuthIfFresher rejects incomplete auth', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const secrets = makeSecrets()
+  const { service } = makeService(dir, secrets)
+  const profile = makeProfile(PROFILE_ID, 'Alpha')
+  const baseline = makeAuthData(PROFILE_ID)
+  seedProfile(dir, secrets, profile, baseline)
+
+  const incomplete: AuthData = {
+    ...baseline,
+    authJson: { tokens: { id_token: `${PROFILE_ID}-id` } },
+  }
+  const result = await service.replaceProfileAuthIfFresher(
+    PROFILE_ID,
+    incomplete,
+    baseline,
+  )
+  assert.equal(result, 'conflict')
+})
+
+test('replaceProfileAuthIfFresher rejects mismatched identity', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const secrets = makeSecrets()
+  const { service } = makeService(dir, secrets)
+  const profile = makeProfile(PROFILE_ID, 'Alpha')
+  const baseline = makeAuthData(PROFILE_ID)
+  seedProfile(dir, secrets, profile, baseline)
+
+  const mismatched: AuthData = {
+    ...makeRefreshedAuth(PROFILE_ID, { lastRefresh: 5000 }),
+    userId: 'someone-else',
+    subject: 'someone-else',
+  }
+  const result = await service.replaceProfileAuthIfFresher(
+    PROFILE_ID,
+    mismatched,
+    baseline,
+  )
+  assert.equal(result, 'conflict')
+})
+
+test('replaceProfileAuthIfFresher overrides a concurrent change only when strictly newer', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-switch-storage-'))
+  const secrets = makeSecrets()
+  const { service } = makeService(dir, secrets)
+  const profile = makeProfile(PROFILE_ID, 'Alpha')
+  const baseline = makeAuthData(PROFILE_ID)
+  // Storage was concurrently changed to a newer import after Codex started.
+  const concurrent = makeRefreshedAuth(PROFILE_ID, {
+    suffix: 'c',
+    lastRefresh: 2000,
+  })
+  seedProfile(dir, secrets, profile, concurrent)
+
+  const sameAge = makeRefreshedAuth(PROFILE_ID, {
+    suffix: '2',
+    lastRefresh: 2000,
+  })
+  assert.equal(
+    await service.replaceProfileAuthIfFresher(PROFILE_ID, sameAge, baseline),
+    'conflict',
+  )
+
+  const strictlyNewer = makeRefreshedAuth(PROFILE_ID, {
+    suffix: '3',
+    lastRefresh: 3000,
+  })
+  assert.equal(
+    await service.replaceProfileAuthIfFresher(
+      PROFILE_ID,
+      strictlyNewer,
+      baseline,
+    ),
+    'updated',
+  )
+})
 
 async function withPlatform<T>(
   platform: NodeJS.Platform,

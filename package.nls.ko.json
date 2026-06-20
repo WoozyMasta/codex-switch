@@ -17,7 +17,7 @@
   "command.profile.syncFromDefaultHome.title": "Codex Switch: 여기에서 기본 CODEX_HOME 프로필 사용",
   "configuration.reloadWindowAfterProfileSwitch.description": "프로필 전환/가져오기에 성공한 후 VS Code 확장 호스트를 다시 시작하고, 사용할 수 없으면 Codex 확장이 auth.json을 다시 읽도록 창을 다시 로드합니다",
   "configuration.codexCliPath.description": "계정 속도 제한에 사용할 Codex CLI 바이너리 경로입니다. 비워 두면 자동으로 감지합니다",
-  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "VS Code 창에 포커스가 있을 때 Codex 계정 속도 제한을 자동으로 새로 고치는 간격입니다. 수동 새로 고침만 사용하려면 0으로 설정하세요",
+  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "백그라운드에서 Codex 계정 속도 제한을 자동으로 새로 고치는 간격입니다. Codex가 토큰을 교체할 때 저장된 Codex 인증도 최신 상태로 유지합니다. 수동 새로 고침만 사용하려면 0으로 설정하세요",
   "configuration.statusBarClickBehavior.description": "상태 표시줄의 프로필 항목 클릭 동작",
   "configuration.statusBarClickBehavior.cycle": "저장된 모든 프로필을 순환 전환",
   "configuration.statusBarClickBehavior.toggleLast": "현재 프로필과 이전 프로필 간 전환",

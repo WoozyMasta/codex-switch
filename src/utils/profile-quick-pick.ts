@@ -23,6 +23,7 @@ export function buildProfileSwitchQuickPickItems(
   activeProfileId: string | undefined,
   activeLabel: string,
   formatDescription: (profile: ProfileSummary) => string,
+  formatRefreshLabel?: (profile: ProfileSummary) => string,
 ): ProfileQuickPickItem[] {
   return profiles.map((profile) => ({
     label: profile.name,
@@ -30,6 +31,7 @@ export function buildProfileSwitchQuickPickItems(
     detail: [
       formatProfileEmailDescription(profile.email),
       profile.id === activeProfileId ? activeLabel : undefined,
+      formatRefreshLabel?.(profile) || undefined,
     ]
       .filter((value): value is string => Boolean(value))
       .join(' • '),

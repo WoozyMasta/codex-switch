@@ -156,8 +156,9 @@
         },
         "codexSwitch.rateLimitAutoRefreshIntervalSeconds": {
           "type": "number",
-          "default": 30,
+          "default": 900,
           "minimum": 0,
+          "maximum": 43200,
           "description": "%configuration.rateLimitAutoRefreshIntervalSeconds.description%"
         },
         "codexSwitch.statusBarClickBehavior": {

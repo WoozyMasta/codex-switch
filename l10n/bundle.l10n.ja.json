@@ -65,5 +65,11 @@
   "Delete broken profile": "壊れたプロファイルを削除",
   "Import current ~/.codex/auth.json": "現在の ~/.codex/auth.json をインポート",
   "Profile \"{0}\" is missing tokens. Restore it before switching.": "プロファイル「{0}」にはトークンがありません。切り替える前に復元してください。",
-  "Recover from remote store": "リモートストアから復元"
+  "Recover from remote store": "リモートストアから復元",
+  "Refresh": "更新",
+  "Updating now…": "更新中…",
+  "Updated {0} ago": "{0}前に更新",
+  "Next refresh in {0}": "次回更新まで{0}",
+  "Retry in {0}": "{0}後に再試行",
+  "Automatic refresh disabled": "自動更新は無効"
 }

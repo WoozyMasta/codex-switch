@@ -12,6 +12,8 @@ import {
   type ProfileQuickPickItem,
 } from '../utils/profile-quick-pick'
 import { type StatusBarClickBehavior } from '../utils/profile-command-options'
+import { formatProfileRefreshLabel } from '../utils/profile-refresh-status'
+import type { ProfileSummary } from '../types'
 
 type ProfileNavigationProfileManager = Pick<
   ProfileManager,
@@ -23,7 +25,7 @@ type ProfileNavigationProfileManager = Pick<
 
 type ProfileNavigationRateLimitService = Pick<
   ProfileRateLimitService,
-  'applyCachedRateLimits' | 'decorateProfiles'
+  'applyCachedRateLimits' | 'decorateProfiles' | 'getRefreshStatus'
 >
 
 export interface ProfileNavigationCommandDeps {
@@ -36,6 +38,7 @@ export interface ProfileNavigationCommandDeps {
   showInformationMessage: typeof vscode.window.showInformationMessage
   executeCommand: typeof vscode.commands.executeCommand
   translate: typeof vscode.l10n.t
+  getRateLimitAutoRefreshIntervalSeconds: () => number
   getLoginCommandText: () => string
   createCodexTerminal: (
     profileId?: string,
@@ -123,6 +126,7 @@ export async function switchProfileCommand(
     | 'profileRateLimitService'
     | 'executeCommand'
     | 'translate'
+    | 'getRateLimitAutoRefreshIntervalSeconds'
     | 'maybeRestartAfterProfileSwitch'
     | 'onAuthChanged'
     | 'createQuickPick'
@@ -135,6 +139,17 @@ export async function switchProfileCommand(
   }
 
   const activeId = await deps.profileManager.getActiveProfileId()
+  const intervalSeconds = deps.getRateLimitAutoRefreshIntervalSeconds()
+  const refreshLabelNow = Date.now()
+  const formatRefreshLabel = (profile: ProfileSummary): string =>
+    formatProfileRefreshLabel(
+      deps.profileRateLimitService.getRefreshStatus(profile, intervalSeconds),
+      {
+        now: refreshLabelNow,
+        autoRefreshEnabled: intervalSeconds > 0,
+        translate: (message, ...args) => deps.translate(message, ...args),
+      },
+    )
   const quickPick = deps.createQuickPick<ProfileQuickPickItem>()
   quickPick.placeholder = deps.translate('Switch profile')
   quickPick.items = buildProfileSwitchQuickPickItems(
@@ -142,6 +157,7 @@ export async function switchProfileCommand(
     activeId,
     deps.translate('Active'),
     (profile) => buildProfileMetaDisplay(profile.planType, profile.rateLimits),
+    formatRefreshLabel,
   )
   quickPick.busy = true
 
@@ -175,6 +191,7 @@ export async function switchProfileCommand(
         deps.translate('Active'),
         (profile) =>
           buildProfileMetaDisplay(profile.planType, profile.rateLimits),
+        formatRefreshLabel,
       )
     }
   } catch {

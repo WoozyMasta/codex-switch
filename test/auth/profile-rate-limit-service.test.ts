@@ -140,17 +140,34 @@ function makeHarness(
   overrides: {
     now?: () => number
     unlinkFails?: boolean
+    refreshedAuthContent?: string
+    replaceOutcome?: string
+    updatedProfile?: ProfileSummary
   } = {},
 ) {
   const writes: Array<[string, string, unknown]> = []
+  const reads: string[] = []
   const unlinks: string[] = []
   const rms: string[] = []
+  const replaceCalls: Array<{
+    profileId: string
+    refreshed: AuthData
+    baseline: AuthData
+  }> = []
+  let lastAuthWritten = '{}'
   const child = new FakeAppServer(behavior)
   const tempHomeFs = {
     mkdtemp: async () => '/tmp/codex-switch-rate-limits-1',
     chmod: async () => undefined,
     writeFile: async (filePath: string, content: string, options: unknown) => {
       writes.push([filePath, content, options])
+      if (path.basename(filePath) === 'auth.json') {
+        lastAuthWritten = content
+      }
+    },
+    readFile: async (filePath: string) => {
+      reads.push(filePath)
+      return overrides.refreshedAuthContent ?? lastAuthWritten
     },
     unlink: async (filePath: string) => {
       unlinks.push(filePath)
@@ -175,7 +192,16 @@ function makeHarness(
 
   const profileManager = {
     loadAuthData: async (profileId: string) => makeAuth(profileId),
-    getProfile: async (profileId: string) => makeProfile(profileId),
+    getProfile: async (profileId: string) =>
+      overrides.updatedProfile ?? makeProfile(profileId),
+    replaceProfileAuthIfFresher: async (
+      profileId: string,
+      refreshed: AuthData,
+      baseline: AuthData,
+    ) => {
+      replaceCalls.push({ profileId, refreshed, baseline })
+      return overrides.replaceOutcome ?? 'updated'
+    },
   } as any
 
   return {
@@ -183,8 +209,10 @@ function makeHarness(
     profileManager,
     service,
     rms,
+    reads,
     unlinks,
     writes,
+    replaceCalls,
   }
 }
 
@@ -263,6 +291,62 @@ test('ProfileRateLimitService fetches, caches, and reuses rate limits', async ()
     path.basename(harness.rms[0] ?? ''),
     'codex-switch-rate-limits-1',
   )
+})
+
+test('ProfileRateLimitService persists auth Codex rotated in the temp home', async () => {
+  const refreshedAuthContent = JSON.stringify({
+    tokens: {
+      id_token: 'profile-1-id',
+      access_token: 'profile-1-access-new',
+      refresh_token: 'profile-1-refresh-new',
+    },
+    last_refresh: 12_345,
+  })
+  const harness = makeHarness(
+    {
+      rateLimitsResult: {
+        rateLimits: {
+          primary: { usedPercent: 25, windowDurationMins: 300 },
+        },
+      },
+      autoRespondInitialize: true,
+      autoRespondRateLimits: true,
+      autoRespondShutdown: true,
+    },
+    { refreshedAuthContent },
+  )
+  const profile = makeProfile('profile-1')
+
+  const result = await harness.service.decorateProfiles(
+    harness.profileManager,
+    [profile],
+  )
+
+  assert.equal(result[0]?.rateLimits?.fiveHour?.usedPercent, 25)
+  assert.ok(harness.reads.some((p) => path.basename(p) === 'auth.json'))
+  assert.equal(harness.replaceCalls.length, 1)
+  assert.equal(
+    harness.replaceCalls[0]?.refreshed.refreshToken,
+    'profile-1-refresh-new',
+  )
+})
+
+test('ProfileRateLimitService does not persist auth when tokens are unchanged', async () => {
+  const harness = makeHarness({
+    rateLimitsResult: {
+      rateLimits: {
+        primary: { usedPercent: 40, windowDurationMins: 300 },
+      },
+    },
+    autoRespondInitialize: true,
+    autoRespondRateLimits: true,
+    autoRespondShutdown: true,
+  })
+  const profile = makeProfile('profile-1')
+
+  await harness.service.decorateProfiles(harness.profileManager, [profile])
+
+  assert.equal(harness.replaceCalls.length, 0)
 })
 
 test('ProfileRateLimitService deduplicates inflight rate-limit refreshes', async () => {

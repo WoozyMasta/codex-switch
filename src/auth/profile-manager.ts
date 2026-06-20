@@ -10,6 +10,7 @@ import {
   ProfileManagerRuntime,
   type ProfileManagerDeps,
 } from './profile-manager-runtime'
+import type { ProfileAuthReplacementOutcome } from './profile-storage-service'
 
 // Backward compatibility keys (pre-rename).
 interface LiveAuthPreservationResult {
@@ -168,6 +169,18 @@ export class ProfileManager {
     authData: AuthData,
   ): Promise<boolean> {
     return this.profileStorageService.replaceProfileAuth(profileId, authData)
+  }
+
+  async replaceProfileAuthIfFresher(
+    profileId: string,
+    refreshedAuth: AuthData,
+    baselineAuth: AuthData,
+  ): Promise<ProfileAuthReplacementOutcome> {
+    return this.profileStorageService.replaceProfileAuthIfFresher(
+      profileId,
+      refreshedAuth,
+      baselineAuth,
+    )
   }
 
   async createProfile(

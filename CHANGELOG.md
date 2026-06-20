@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
+* Saved Codex authentication is now updated when
+  a periodic account-limit check causes Codex to rotate its tokens,
+  so rarely selected profiles no longer restore a stale refresh token.
+* Profile usage now shows how long ago the limits were last refreshed
+  and when the next refresh or retry is scheduled.
+* Multiple windows of the same IDE product now coordinate background checks
+  so only one window refreshes a given profile at a time,
+  recovering automatically when a window closes or crashes.
+  Different IDE products stay isolated,
+  and the coordination files under `~/.codex-switch/maintenance/v1/`
+  never store tokens or account identity.
 * Optional `CODEX_HOME`-aware active profile state.
   When enabled, VS Code windows launched with different `CODEX_HOME`
   values keep separate active and previous profile selections.
@@ -36,6 +47,11 @@ and this project adheres to [Semantic Versioning][].
 
 ### Changed
 
+* The default account-limit refresh interval is now 15 minutes
+  (was 30 seconds), with a supported range of 30 seconds to 12 hours
+  and `0` to disable automatic refresh.
+* Automatic limit refresh no longer requires the window to be focused, so an
+  open background window keeps saved profiles maintained.
 * Active and previous profile state can now be stored per resolved `CODEX_HOME`,
   including per-home shared active-profile files in `remoteFiles` mode.
 * Warn before switching, activating, cycling, importing,

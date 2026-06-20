@@ -1,15 +1,19 @@
 import * as vscode from 'vscode'
 import type { ExtensionServices } from './extension-services'
-import type { ResolvedCodexHome } from './types'
+import type { ProfileSummary, ResolvedCodexHome } from './types'
 import { errorLog } from './utils/log'
 import {
-  DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS,
   mergeRefreshOptions,
-  normalizeRateLimitAutoRefreshIntervalSeconds,
   type RefreshProfileUiOptions,
 } from './utils/refresh-options'
+import { getRateLimitAutoRefreshIntervalSeconds } from './utils/refresh-config'
 import { restartExtensionHostOrReloadWindow } from './utils/vscode-restart'
 import { updateProfileStatus } from './ui/status-bar'
+import {
+  formatProfileRefreshLabel,
+  type ProfileRefreshStatus,
+} from './utils/profile-refresh-status'
+import type { MaintenanceProfileState } from './utils/profile-maintenance-state'
 
 export interface ExtensionUiController {
   refreshUi(options?: RefreshProfileUiOptions): Promise<void>
@@ -20,19 +24,65 @@ export function createExtensionUiController(
   context: vscode.ExtensionContext,
   services: ExtensionServices,
 ): ExtensionUiController {
-  const { profileManager, codexHomeManager, profileRateLimitService, runtime } =
-    services
+  const {
+    profileManager,
+    codexHomeManager,
+    profileRateLimitService,
+    profileMaintenanceService,
+    runtime,
+  } = services
 
   let refreshProfileUiGeneration = 0
   let refreshProfileUiPromise: Promise<void> | null = null
   let pendingRefreshProfileUiOptions: RefreshProfileUiOptions | null = null
-  let autoRefreshTimer: ReturnType<typeof setInterval> | undefined
+
+  const mapStateToRefreshStatus = (
+    profileId: string,
+    state: MaintenanceProfileState | null,
+  ): ProfileRefreshStatus => ({
+    lastSuccessAt: state?.lastSuccessAt ?? undefined,
+    nextDueAt: state?.nextDueAt ?? undefined,
+    nextRetryAt: state?.nextRetryAt ?? undefined,
+    isRefreshing: profileMaintenanceService.getActiveProfileId() === profileId,
+  })
+
+  const loadRefreshStatuses = async (
+    profiles: ProfileSummary[],
+  ): Promise<Map<string, ProfileRefreshStatus>> => {
+    const entries = await Promise.all(
+      profiles.map(async (profile): Promise<[string, ProfileRefreshStatus]> => {
+        const state = await profileMaintenanceService
+          .readProfileState(profile.id)
+          .catch(() => null)
+        return [profile.id, mapStateToRefreshStatus(profile.id, state)]
+      }),
+    )
+    return new Map(entries)
+  }
+
+  const buildRefreshLabel = (
+    statuses: Map<string, ProfileRefreshStatus>,
+  ): ((profileId: string) => string) => {
+    const intervalSeconds = getRateLimitAutoRefreshIntervalSeconds()
+    const now = Date.now()
+    const autoRefreshEnabled = intervalSeconds > 0
+    return (profileId: string): string => {
+      const status = statuses.get(profileId)
+      if (!status) {
+        return ''
+      }
+      return formatProfileRefreshLabel(status, {
+        now,
+        autoRefreshEnabled,
+        translate: (message, ...args) => vscode.l10n.t(message, ...args),
+      })
+    }
+  }
 
   const refreshProfileUi = async (
     home: ResolvedCodexHome,
     options: RefreshProfileUiOptions = {},
   ): Promise<void> => {
-    profileRateLimitService?.cancelPendingWork()
     const generation = ++refreshProfileUiGeneration
 
     const profiles = await profileManager.listProfiles()
@@ -50,54 +100,26 @@ export function createExtensionUiController(
       ? cachedProfiles.find((profile) => profile.id === activeId) || null
       : null
 
-    if (generation !== refreshProfileUiGeneration) {
-      return
-    }
-
-    updateProfileStatus(cachedActiveProfile, cachedProfiles, activeHome)
-
-    if (!profileRateLimitService || profiles.length === 0) {
-      return
-    }
-
-    const rateLimitProfiles =
-      options.refreshActiveRateLimitOnly && activeId
-        ? profiles.filter((profile) => profile.id === activeId)
-        : profiles
-
-    if (rateLimitProfiles.length === 0) {
-      return
-    }
-
-    const profilesWithRateLimits =
-      await profileRateLimitService.decorateProfiles(
-        profileManager,
-        rateLimitProfiles,
-        {
-          forceRefresh: options.forceRateLimitRefresh === true,
-        },
-      )
-    const rateLimitProfilesById = new Map(
-      profilesWithRateLimits.map((profile) => [profile.id, profile]),
-    )
-    const mergedProfilesWithRateLimits = cachedProfiles.map(
-      (profile) => rateLimitProfilesById.get(profile.id) || profile,
-    )
-    const activeProfileWithRateLimits = activeId
-      ? mergedProfilesWithRateLimits.find(
-          (profile) => profile.id === activeId,
-        ) || null
-      : null
+    const statuses = await loadRefreshStatuses(profiles)
 
     if (generation !== refreshProfileUiGeneration) {
       return
     }
 
     updateProfileStatus(
-      activeProfileWithRateLimits,
-      mergedProfilesWithRateLimits,
+      cachedActiveProfile,
+      cachedProfiles,
       activeHome,
+      buildRefreshLabel(statuses),
     )
+
+    // Background freshness, all-profile coverage, and auth write-back are owned
+    // by the maintenance scheduler. A manual refresh forces every profile.
+    if (options.forceRateLimitRefresh) {
+      void profileMaintenanceService.requestCycle({
+        forceProfileIds: profiles.map((profile) => profile.id),
+      })
+    }
   }
 
   const refreshUi = async (options: RefreshProfileUiOptions = {}) => {
@@ -133,35 +155,21 @@ export function createExtensionUiController(
     }
   }
 
-  const resetAutoRefreshTimer = () => {
-    if (autoRefreshTimer) {
-      clearInterval(autoRefreshTimer)
-      autoRefreshTimer = undefined
-    }
-
-    const intervalSeconds = getRateLimitAutoRefreshIntervalSeconds()
-    if (intervalSeconds <= 0) {
-      return
-    }
-
-    autoRefreshTimer = setInterval(() => {
-      if (!profileRateLimitService || !vscode.window.state.focused) {
-        return
-      }
-
-      void refreshUi({ refreshActiveRateLimitOnly: true })
-    }, intervalSeconds * 1000)
-  }
-
-  resetAutoRefreshTimer()
+  // Re-render whenever the maintenance scheduler publishes a new result.
+  profileMaintenanceService.setStateChangedListener(() => {
+    void refreshUi()
+  })
+  profileMaintenanceService.start()
 
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((state) => {
-      if (!state.focused || !profileRateLimitService) {
+      if (!state.focused) {
         return
       }
-
-      void refreshUi({ refreshActiveRateLimitOnly: true })
+      // Refresh local UI from shared state and request a cycle without
+      // bypassing freshness; the lease prevents duplicate background work.
+      void profileMaintenanceService.requestCycle()
+      void refreshUi()
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (
@@ -170,6 +178,7 @@ export function createExtensionUiController(
         event.affectsConfiguration('chatgpt.runCodexInWindowsSubsystemForLinux')
       ) {
         void (async () => {
+          await profileMaintenanceService.dispose()
           await profileRateLimitService?.dispose()
           vscode.window.showInformationMessage(
             'Codex Switch auth/storage settings changed. Restarting the extension host to apply the new home and storage targets.',
@@ -184,13 +193,12 @@ export function createExtensionUiController(
           'codexSwitch.rateLimitAutoRefreshIntervalSeconds',
         )
       ) {
-        resetAutoRefreshTimer()
+        profileMaintenanceService.reschedule()
+        void refreshUi()
       }
     }),
     new vscode.Disposable(() => {
-      if (autoRefreshTimer) {
-        clearInterval(autoRefreshTimer)
-      }
+      void profileMaintenanceService.dispose()
     }),
   )
 
@@ -205,14 +213,4 @@ export function createExtensionUiController(
       }
     },
   }
-}
-
-function getRateLimitAutoRefreshIntervalSeconds(): number {
-  const value = vscode.workspace
-    .getConfiguration('codexSwitch')
-    .get<number>(
-      'rateLimitAutoRefreshIntervalSeconds',
-      DEFAULT_RATE_LIMIT_AUTO_REFRESH_INTERVAL_SECONDS,
-    )
-  return normalizeRateLimitAutoRefreshIntervalSeconds(value)
 }

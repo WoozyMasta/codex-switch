@@ -49,10 +49,11 @@ test('profile tooltip formatting helpers build profile rows', () => {
       fiveHourReset: '10:30',
       weekly: '1%',
       weeklyReset: '-',
+      refresh: 'Updated 4m ago · Next refresh in 11m',
       email: 'line1\r\nline2@example.com',
       isActive: true,
     }),
-    `| &nbsp;$(check)&nbsp; | &nbsp;[**Alpha $\\(zap\\) \\[open\\]\\(command:evil\\)**](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "line1\r\nline2@example.com")&nbsp; | &nbsp;PRO&nbsp; | &nbsp;58%&nbsp; | &nbsp;10:30&nbsp; | &nbsp;1%&nbsp; | &nbsp;-&nbsp; |\n`,
+    `| &nbsp;$(check)&nbsp; | &nbsp;[**Alpha $\\(zap\\) \\[open\\]\\(command:evil\\)**](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "line1\r\nline2@example.com")&nbsp; | &nbsp;PRO&nbsp; | &nbsp;58%&nbsp; | &nbsp;10:30&nbsp; | &nbsp;1%&nbsp; | &nbsp;-&nbsp; | &nbsp;Updated 4m ago · Next refresh in 11m&nbsp; |\n`,
   )
   assert.equal(
     buildProfileTooltipRow({
@@ -63,10 +64,11 @@ test('profile tooltip formatting helpers build profile rows', () => {
       fiveHourReset: '-',
       weekly: '-',
       weeklyReset: '-',
+      refresh: '',
       email: 'Unknown',
       isActive: false,
     }),
-    `| &nbsp;&nbsp; | &nbsp;[Beta](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "Unknown")&nbsp; | &nbsp;PLUS&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; |\n`,
+    `| &nbsp;&nbsp; | &nbsp;[Beta](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "Unknown")&nbsp; | &nbsp;PLUS&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;&nbsp; |\n`,
   )
 })
 

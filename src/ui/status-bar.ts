@@ -21,6 +21,7 @@ export function updateProfileStatus(
   profile: ProfileSummary | null,
   profiles: ProfileSummary[],
   home?: ResolvedCodexHome,
+  getRefreshLabel?: (profileId: string) => string,
 ) {
   if (!statusBarItem) {
     return
@@ -32,7 +33,12 @@ export function updateProfileStatus(
     const homeSuffix = home ? ` @ ${home.name}` : ''
     statusBarItem.text = `$(account) ${vscode.l10n.t('Codex: {0}', vscode.l10n.t('none'))}${homeSuffix}`
     statusBarItem.command = 'codex-switch.profile.manage'
-    statusBarItem.tooltip = createProfileTooltip(null, cachedProfiles, home)
+    statusBarItem.tooltip = createProfileTooltip(
+      null,
+      cachedProfiles,
+      home,
+      getRefreshLabel,
+    )
     return
   }
 
@@ -43,7 +49,12 @@ export function updateProfileStatus(
     cachedProfiles.length <= 1
       ? 'codex-switch.profile.manage'
       : 'codex-switch.profile.toggleLast'
-  statusBarItem.tooltip = createProfileTooltip(profile, cachedProfiles, home)
+  statusBarItem.tooltip = createProfileTooltip(
+    profile,
+    cachedProfiles,
+    home,
+    getRefreshLabel,
+  )
 }
 
 export function getStatusBarItem(): vscode.StatusBarItem {

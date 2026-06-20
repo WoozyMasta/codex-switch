@@ -17,7 +17,7 @@
   "command.profile.syncFromDefaultHome.title": "Codex Switch: 既定の CODEX_HOME プロファイルをここで使用",
   "configuration.reloadWindowAfterProfileSwitch.description": "プロファイルの切り替え/インポート成功後に VS Code の拡張機能ホストを再起動し、利用できない場合はウィンドウを再読み込みして Codex 拡張機能が auth.json を再読込するようにします",
   "configuration.codexCliPath.description": "アカウントのレート制限に使用する Codex CLI バイナリのパスです。空のままにすると自動検出します",
-  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "VS Code ウィンドウにフォーカスがある間、Codex アカウントのレート制限を自動更新する間隔です。手動更新のみにするには 0 を設定します",
+  "configuration.rateLimitAutoRefreshIntervalSeconds.description": "バックグラウンドで Codex アカウントのレート制限を自動更新する間隔です。Codex がトークンを更新した際に、保存済みの Codex 認証も最新の状態に保ちます。手動更新のみにするには 0 を設定します",
   "configuration.statusBarClickBehavior.description": "ステータスバーのプロファイル項目をクリックしたときの動作",
   "configuration.statusBarClickBehavior.cycle": "保存済みプロファイルを順番に切り替える",
   "configuration.statusBarClickBehavior.toggleLast": "現在のプロファイルと前回のプロファイルを切り替える",

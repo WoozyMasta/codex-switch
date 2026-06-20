@@ -65,5 +65,11 @@
   "Delete broken profile": "刪除損壞的設定檔",
   "Import current ~/.codex/auth.json": "匯入目前的 ~/.codex/auth.json",
   "Profile \"{0}\" is missing tokens. Restore it before switching.": "設定檔「{0}」缺少權杖。請先還原後再切換。",
-  "Recover from remote store": "從遠端儲存還原"
+  "Recover from remote store": "從遠端儲存還原",
+  "Refresh": "重新整理",
+  "Updating now…": "正在更新…",
+  "Updated {0} ago": "{0}前更新",
+  "Next refresh in {0}": "{0}後重新整理",
+  "Retry in {0}": "{0}後重試",
+  "Automatic refresh disabled": "自動重新整理已停用"
 }

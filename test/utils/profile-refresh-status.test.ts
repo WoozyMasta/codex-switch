@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  formatProfileRefreshCells,
   formatProfileRefreshLabel,
   formatRelativeDuration,
   type RefreshLabelTranslate,
@@ -109,5 +110,68 @@ test('formatProfileRefreshLabel omits timing when no successful result exists', 
       { now, autoRefreshEnabled: true, translate },
     ),
     '',
+  )
+})
+
+test('formatProfileRefreshCells returns ellipsis while refreshing', () => {
+  assert.deepEqual(
+    formatProfileRefreshCells(
+      { isRefreshing: true, lastSuccessAt: 1000 },
+      { now: 5000, autoRefreshEnabled: true, translate },
+    ),
+    { updated: '…', next: '' },
+  )
+})
+
+test('formatProfileRefreshCells returns compact durations when auto-refresh is enabled', () => {
+  const now = 1_000_000
+  assert.deepEqual(
+    formatProfileRefreshCells(
+      {
+        isRefreshing: false,
+        lastSuccessAt: now - 4 * 60_000,
+        nextDueAt: now + 11 * 60_000,
+      },
+      { now, autoRefreshEnabled: true, translate },
+    ),
+    { updated: '4m', next: '11m' },
+  )
+})
+
+test('formatProfileRefreshCells omits next when auto-refresh is disabled', () => {
+  const now = 1_000_000
+  assert.deepEqual(
+    formatProfileRefreshCells(
+      { isRefreshing: false, lastSuccessAt: now - 60_000 },
+      { now, autoRefreshEnabled: false, translate },
+    ),
+    { updated: '1m', next: '' },
+  )
+})
+
+test('formatProfileRefreshCells uses retry time in next when pending', () => {
+  const now = 1_000_000
+  assert.deepEqual(
+    formatProfileRefreshCells(
+      {
+        isRefreshing: false,
+        lastSuccessAt: now - 19 * 60_000,
+        nextDueAt: now + 60_000,
+        nextRetryAt: now + 2 * 60_000,
+      },
+      { now, autoRefreshEnabled: true, translate },
+    ),
+    { updated: '19m', next: '2m' },
+  )
+})
+
+test('formatProfileRefreshCells returns empty strings when no data', () => {
+  const now = 1_000_000
+  assert.deepEqual(
+    formatProfileRefreshCells(
+      { isRefreshing: false },
+      { now, autoRefreshEnabled: true, translate },
+    ),
+    { updated: '', next: '' },
   )
 })

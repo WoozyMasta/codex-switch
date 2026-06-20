@@ -10,7 +10,7 @@ import { getRateLimitAutoRefreshIntervalSeconds } from './utils/refresh-config'
 import { restartExtensionHostOrReloadWindow } from './utils/vscode-restart'
 import { updateProfileStatus } from './ui/status-bar'
 import {
-  formatProfileRefreshLabel,
+  formatProfileRefreshCells,
   type ProfileRefreshStatus,
 } from './utils/profile-refresh-status'
 import type { MaintenanceProfileState } from './utils/profile-maintenance-state'
@@ -46,15 +46,15 @@ export function createExtensionUiController(
     isRefreshing: profileMaintenanceService.getActiveProfileId() === profileId,
   })
 
-  const loadRefreshStatuses = async (
+  const loadMaintenanceStates = async (
     profiles: ProfileSummary[],
-  ): Promise<Map<string, ProfileRefreshStatus>> => {
+  ): Promise<Map<string, MaintenanceProfileState | null>> => {
     const entries = await Promise.all(
-      profiles.map(async (profile): Promise<[string, ProfileRefreshStatus]> => {
+      profiles.map(async (profile): Promise<[string, MaintenanceProfileState | null]> => {
         const state = await profileMaintenanceService
           .readProfileState(profile.id)
           .catch(() => null)
-        return [profile.id, mapStateToRefreshStatus(profile.id, state)]
+        return [profile.id, state]
       }),
     )
     return new Map(entries)
@@ -71,11 +71,18 @@ export function createExtensionUiController(
       if (!status) {
         return ''
       }
-      return formatProfileRefreshLabel(status, {
+      if (status.isRefreshing) {
+        return '…'
+      }
+      const cells = formatProfileRefreshCells(status, {
         now,
         autoRefreshEnabled,
         translate: (message, ...args) => vscode.l10n.t(message, ...args),
       })
+      if (!cells.updated) {
+        return ''
+      }
+      return cells.next ? `${cells.updated}/${cells.next}` : cells.updated
     }
   }
 
@@ -93,14 +100,35 @@ export function createExtensionUiController(
     }
 
     const activeHome = codexHomeManager.isEnabled() ? home : undefined
-    const cachedProfiles = profileRateLimitService
-      ? profileRateLimitService.applyCachedRateLimits(profiles)
-      : profiles
+
+    const maintenanceStates = await loadMaintenanceStates(profiles)
+
+    // Apply in-memory cached rate limits; fall back to the state-file rate limits
+    // when the in-memory cache is empty (e.g. after an extension restart or
+    // when another window ran the last maintenance cycle).
+    const cachedProfiles = profiles.map((profile) => {
+      const withCache = profileRateLimitService
+        ? profileRateLimitService.applyCachedRateLimits([profile])[0]
+        : profile
+      if (withCache.rateLimits === undefined) {
+        const state = maintenanceStates.get(profile.id)
+        if (state?.rateLimits) {
+          return { ...withCache, rateLimits: state.rateLimits }
+        }
+      }
+      return withCache
+    })
+
+    const statuses = new Map(
+      profiles.map((profile) => {
+        const state = maintenanceStates.get(profile.id)
+        return [profile.id, mapStateToRefreshStatus(profile.id, state ?? null)]
+      }),
+    )
+
     const cachedActiveProfile = activeId
       ? cachedProfiles.find((profile) => profile.id === activeId) || null
       : null
-
-    const statuses = await loadRefreshStatuses(profiles)
 
     if (generation !== refreshProfileUiGeneration) {
       return

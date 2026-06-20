@@ -86,3 +86,39 @@ export function formatProfileRefreshLabel(
 
   return parts.join(' · ')
 }
+
+export interface ProfileRefreshCells {
+  /** Time since last successful refresh, or '…' while refreshing, or '' if unknown. */
+  updated: string
+  /** Time until next refresh/retry, or '' if auto-refresh is disabled or not scheduled. */
+  next: string
+}
+
+/**
+ * Returns compact cell values for two separate "Updated" and "Next" tooltip columns.
+ * Rows show only the duration; headers are single words.
+ */
+export function formatProfileRefreshCells(
+  status: ProfileRefreshStatus,
+  options: FormatProfileRefreshLabelOptions,
+): ProfileRefreshCells {
+  const { now, autoRefreshEnabled } = options
+
+  if (status.isRefreshing) {
+    return { updated: '…', next: '' }
+  }
+
+  const updated =
+    status.lastSuccessAt !== undefined
+      ? formatRelativeDuration(now - status.lastSuccessAt)
+      : ''
+
+  let next = ''
+  if (status.nextRetryAt !== undefined && status.nextRetryAt > now) {
+    next = formatRelativeDuration(status.nextRetryAt - now)
+  } else if (autoRefreshEnabled && status.nextDueAt !== undefined) {
+    next = formatRelativeDuration(Math.max(0, status.nextDueAt - now))
+  }
+
+  return { updated, next }
+}

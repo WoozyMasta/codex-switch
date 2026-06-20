@@ -271,6 +271,44 @@ test('ensureCodexCliForRateLimits stores a selected CLI path', async () => {
   assert.deepEqual(calls, ['path:/opt/codex', 'info:Codex CLI path saved.'])
 })
 
+test('ensureCodexCliForRateLimits adds executable filters on windows', async () => {
+  const calls: string[] = []
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
+  assert.ok(originalPlatform)
+  Object.defineProperty(process, 'platform', {
+    value: 'win32',
+  })
+
+  try {
+    const deps = makeDeps({
+      showWarningMessage: async () => 'Set CLI Path',
+      showOpenDialog: async (options: { filters?: unknown }) => {
+        assert.deepEqual(options.filters, {
+          Executables: ['exe', 'cmd'],
+          All: ['*'],
+        })
+        return [{ fsPath: 'C:\\codex\\codex.exe' }]
+      },
+      updateCodexCliPath: async (path: string) => {
+        calls.push(`path:${path}`)
+      },
+      showInformationMessage: (message: string) => {
+        calls.push(`info:${message}`)
+        return undefined
+      },
+      calls,
+    })
+
+    assert.equal(await ensureCodexCliForRateLimits(deps as any), true)
+    assert.deepEqual(calls, [
+      'path:C:\\codex\\codex.exe',
+      'info:Codex CLI path saved.',
+    ])
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform)
+  }
+})
+
 test('ensureCodexCliForRateLimits omits executable filters off windows', async () => {
   const calls: string[] = []
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')

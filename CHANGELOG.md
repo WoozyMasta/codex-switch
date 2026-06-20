@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
-## Unreleased
+## [1.4.0][] - 2026-06-20
 
 ### Added
 
@@ -61,6 +61,8 @@ and this project adheres to [Semantic Versioning][].
 * Preserve refreshed live Codex auth into the matching saved profile before
   destructive replacement flows to avoid restoring stale `auth.json` data.
   (PR #23 #24 by @panella87)
+
+[1.4.0]: https://github.com/WoozyMasta/codex-switch/compare/1.3.2...1.4.0
 
 ## [1.3.2][] - 2026-04-28
 

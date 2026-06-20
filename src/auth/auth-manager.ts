@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import { execFileSync } from 'child_process'
 import { AuthData } from '../types'
-import { errorLog } from '../utils/log'
+import { debugLog, errorLog } from '../utils/log'
 import {
   getCodexAuthPathForHome,
   resolveDefaultCodexHomePath,
@@ -83,7 +83,9 @@ function parseJWT(token: string): any {
     const payload = Buffer.from(parts[1], 'base64url').toString()
     return JSON.parse(payload)
   } catch (error) {
-    errorLog('Error parsing JWT:', error)
+    // A token that is not a parseable JWT is a handled fallback (we return {}),
+    // not an application error, so keep it at debug level to avoid log noise.
+    debugLog('Could not parse token as JWT:', error)
     return {}
   }
 }

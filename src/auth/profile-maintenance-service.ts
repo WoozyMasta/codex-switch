@@ -114,6 +114,7 @@ export class ProfileMaintenanceService {
       void this.requestCycle()
       this.scheduleNextPoll()
     }, jitterMs)
+    unrefTimer(this.startupTimer)
   }
 
   /** Reset polling cadence after a configuration change. */
@@ -411,6 +412,7 @@ export class ProfileMaintenanceService {
         this.scheduleNextPoll()
       })
     }, this.pollMs())
+    unrefTimer(this.timer)
   }
 
   private clearPollTimer(): void {
@@ -458,6 +460,15 @@ export class ProfileMaintenanceService {
       throw error
     }
   }
+}
+
+/**
+ * Background scheduling must never keep the host (or a test process) from
+ * exiting cleanly. The VS Code event loop stays alive on its own, so unref'd
+ * timers still fire while the window is open but do not block shutdown.
+ */
+function unrefTimer(handle: ReturnType<typeof setTimeout>): void {
+  ;(handle as { unref?: () => void }).unref?.()
 }
 
 /**

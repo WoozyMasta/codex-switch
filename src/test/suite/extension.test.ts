@@ -1,4 +1,4 @@
-/* global suite, suiteSetup, suiteTeardown, test */
+/* global suite, suiteSetup, test */
 import assert from 'node:assert/strict'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
@@ -77,14 +77,6 @@ function makeAuthData(id: string) {
   }
 }
 
-async function closeWindow(): Promise<void> {
-  try {
-    await vscode.commands.executeCommand('workbench.action.closeWindow')
-  } catch {
-    // Ignore shutdown errors in the smoke harness.
-  }
-}
-
 let extension: vscode.Extension<unknown>
 
 suite('Codex Switch extension smoke', () => {
@@ -95,10 +87,6 @@ suite('Codex Switch extension smoke', () => {
     assert.ok(discovered, 'extension should be discoverable')
     extension = discovered
     await extension.activate()
-  })
-
-  suiteTeardown(async () => {
-    await closeWindow()
   })
 
   test('registers commands and writes auth.json after a profile switch', async () => {
@@ -188,6 +176,11 @@ suite('Codex Switch extension smoke', () => {
       assert.equal(executedCommands.length > 0, true)
     } finally {
       commandModule.executeCommand = originalExecuteCommand
+      await configuration.update(
+        'storageMode',
+        originalStorageMode,
+        vscode.ConfigurationTarget.Global,
+      )
     }
   })
 })

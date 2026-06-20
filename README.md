@@ -182,6 +182,12 @@ tries to restart only the extension host after a successful switch or import.
 This lets Codex re-read `auth.json` without reloading the full VS Code window.
 If extension-host restart is unavailable, it falls back to full window reload.
 
+## Development
+
+Development commands are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+Use `npm run check` for the fast gate and
+`npm run check:release` for the full release gate.
+
 ## Security Notes
 
 For local single-client use, `secretStorage` is the safer default.

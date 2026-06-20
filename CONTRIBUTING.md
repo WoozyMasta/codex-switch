@@ -7,21 +7,23 @@ Thanks for contributing to Codex Switch.
 * Use Node.js 24.
 * Install dependencies with `npm ci`.
 
-## Development Commands
+## Commands
 
-* `npm run watch` for TypeScript watch build.
-* `npm run compile` for one-off TypeScript build.
-* `npm run lint:ts` for ESLint on TypeScript sources.
-* `npm run lint:md` for markdownlint checks.
-* `npm run format` to apply Prettier formatting.
-* `npm run format:check` to verify Prettier formatting.
-* `npm run lint` to run all lint and format checks.
+* `npm run build` for a one-off TypeScript build.
+* `npm run build:test` for compiled test output.
+* `npm run lint` for lint and format checks.
+* `npm run test:unit` for the fast Node test suite.
+* `npm run test:coverage` for coverage.
+* `npm run test:integration` for the VS Code smoke suite.
+* `npm run check` for the fast CI gate.
+* `npm run check:release` for the full release gate.
 * `npm run vscode:package` to build a `.vsix` package.
 
-## Pull Requests
+## Workflow
 
 * Keep changes focused and scoped.
-* Make sure `npm run lint` and `npm run compile` pass.
+* Run `npm run check` before opening a PR.
+* Run `npm run check:release` before release tagging or packaging.
 * Update `CHANGELOG.md` when behavior or user-facing features change.
 
 ## Releases

@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
+## Unreleased
+
+### Changed
+
+* The profile tooltip now hides empty Plan, 5h, and Weekly columns
+  when no saved profile has data for them.
+
 ## [1.4.0][] - 2026-06-20
 
 ### Added

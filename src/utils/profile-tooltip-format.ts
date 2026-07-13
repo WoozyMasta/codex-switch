@@ -54,6 +54,12 @@ export interface BuildProfileTooltipRowInput {
   email: string
   /** Whether this profile is currently active. */
   isActive: boolean
+  /** Whether to include the plan column. */
+  includePlan: boolean
+  /** Whether to include the 5-hour rate-limit columns. */
+  includeFiveHour: boolean
+  /** Whether to include the weekly rate-limit columns. */
+  includeWeekly: boolean
 }
 
 /** Builds a markdown table row for a profile with clickable name linking to activation command. */
@@ -71,8 +77,19 @@ export function buildProfileTooltipRow(
     ? `[**${name}**](${switchUri} "${linkTitle}")`
     : `[${name}](${switchUri} "${linkTitle}")`
   const status = input.isActive ? '$(check)' : ''
+  const cells = [padTableCell(status), padTableCell(linkedName)]
+  if (input.includePlan) {
+    cells.push(padTableCell(input.plan))
+  }
+  if (input.includeFiveHour) {
+    cells.push(padTableCell(input.fiveHour), padTableCell(input.fiveHourReset))
+  }
+  if (input.includeWeekly) {
+    cells.push(padTableCell(input.weekly), padTableCell(input.weeklyReset))
+  }
+  cells.push(padTableCell(input.refresh))
 
-  return `| ${padTableCell(status)} | ${padTableCell(linkedName)} | ${padTableCell(input.plan)} | ${padTableCell(input.fiveHour)} | ${padTableCell(input.fiveHourReset)} | ${padTableCell(input.weekly)} | ${padTableCell(input.weeklyReset)} | ${padTableCell(input.refresh)} |\n`
+  return `| ${cells.join(' | ')} |\n`
 }
 
 /** Builds the home information section of the tooltip with name and path. */

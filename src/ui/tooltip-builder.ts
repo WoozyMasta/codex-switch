@@ -44,10 +44,43 @@ export function createProfileTooltip(
     tooltip.appendMarkdown(`${vscode.l10n.t('No profiles yet.')}\n\n`)
   } else {
     const activeId = activeProfile?.id
-    tooltip.appendMarkdown(
-      `|  | ${padTableCell(escapeTableCell(vscode.l10n.t('Profile')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Plan')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('5h')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Weekly')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Reset')))} | ${padTableCell(escapeTableCell(vscode.l10n.t('Refresh')))} |\n`,
+    const includePlan = profiles.some((p) => {
+      const planType = p.planType.trim()
+      return planType && planType.toLowerCase() !== 'unknown'
+    })
+    const includeFiveHour = profiles.some((p) =>
+      Boolean(p.rateLimits?.fiveHour),
     )
-    tooltip.appendMarkdown('|---|---|---|---:|---|---:|---|---|\n')
+    const includeWeekly = profiles.some((p) => Boolean(p.rateLimits?.weekly))
+
+    const headers = [
+      '',
+      padTableCell(escapeTableCell(vscode.l10n.t('Profile'))),
+    ]
+    const separators = ['---', '---']
+    if (includePlan) {
+      headers.push(padTableCell(escapeTableCell(vscode.l10n.t('Plan'))))
+      separators.push('---')
+    }
+    if (includeFiveHour) {
+      headers.push(
+        padTableCell(escapeTableCell(vscode.l10n.t('5h'))),
+        padTableCell(escapeTableCell(vscode.l10n.t('Reset'))),
+      )
+      separators.push('---:', '---')
+    }
+    if (includeWeekly) {
+      headers.push(
+        padTableCell(escapeTableCell(vscode.l10n.t('Weekly'))),
+        padTableCell(escapeTableCell(vscode.l10n.t('Reset'))),
+      )
+      separators.push('---:', '---')
+    }
+    headers.push(padTableCell(escapeTableCell(vscode.l10n.t('Refresh'))))
+    separators.push('---')
+
+    tooltip.appendMarkdown(`| ${headers.join(' | ')} |\n`)
+    tooltip.appendMarkdown(`|${separators.join('|')}|\n`)
 
     for (const p of profiles) {
       const plan = escapeTableCell(getProfilePlanDisplay(p.planType))
@@ -80,6 +113,9 @@ export function createProfileTooltip(
           refresh,
           email: emailDisplay,
           isActive,
+          includePlan,
+          includeFiveHour,
+          includeWeekly,
         }),
       )
     }

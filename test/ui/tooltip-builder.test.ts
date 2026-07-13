@@ -84,6 +84,43 @@ test('createProfileTooltip renders the empty-state copy', () => {
   assert.match(tooltip.value, /Refresh limits/)
 })
 
+test('createProfileTooltip omits 5h columns when all profiles lack 5h limits', () => {
+  const profile = makeProfile({
+    rateLimits: {
+      fiveHour: null,
+      weekly: {
+        usedPercent: 7,
+        remainingPercent: 93,
+        resetsAt: 1_784_495_529,
+      },
+    },
+  })
+  const tooltip = createProfileTooltip(profile, [profile])
+
+  assert.ok(!tooltip.value.includes('&nbsp;5h&nbsp;'))
+  assert.ok(tooltip.value.includes('&nbsp;Weekly&nbsp;'))
+  assert.ok(tooltip.value.includes('&nbsp;93%&nbsp;'))
+  assert.match(tooltip.value, /\|---\|---\|---\|---:\|---\|---\|/)
+})
+
+test('createProfileTooltip omits plan and weekly columns when all profiles lack them', () => {
+  const profile = makeProfile({
+    planType: 'Unknown',
+    rateLimits: {
+      fiveHour: null,
+      weekly: null,
+    },
+  })
+  const tooltip = createProfileTooltip(profile, [profile])
+
+  assert.ok(!tooltip.value.includes('&nbsp;Plan&nbsp;'))
+  assert.ok(!tooltip.value.includes('&nbsp;5h&nbsp;'))
+  assert.ok(!tooltip.value.includes('&nbsp;Weekly&nbsp;'))
+  assert.ok(tooltip.value.includes('&nbsp;Profile&nbsp;'))
+  assert.ok(tooltip.value.includes('&nbsp;Refresh&nbsp;'))
+  assert.match(tooltip.value, /\|---\|---\|---\|/)
+})
+
 test('createProfileTooltip escapes multiline and command-like content', () => {
   const profile = makeProfile({
     name: 'Alpha\n$(zap) [open](command:evil)',

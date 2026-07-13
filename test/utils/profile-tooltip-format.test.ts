@@ -53,6 +53,9 @@ test('profile tooltip formatting helpers build profile rows', () => {
       refresh: '4m/11m',
       email: 'line1\r\nline2@example.com',
       isActive: true,
+      includePlan: true,
+      includeFiveHour: true,
+      includeWeekly: true,
     }),
     `| &nbsp;$(check)&nbsp; | &nbsp;[**Alpha $\\(zap\\) \\[open\\]\\(command:evil\\)**](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "line1\r\nline2@example.com")&nbsp; | &nbsp;PRO&nbsp; | &nbsp;58%&nbsp; | &nbsp;10:30&nbsp; | &nbsp;1%&nbsp; | &nbsp;-&nbsp; | &nbsp;4m/11m&nbsp; |\n`,
   )
@@ -68,8 +71,11 @@ test('profile tooltip formatting helpers build profile rows', () => {
       refresh: '',
       email: 'Unknown',
       isActive: false,
+      includePlan: false,
+      includeFiveHour: false,
+      includeWeekly: false,
     }),
-    `| &nbsp;&nbsp; | &nbsp;[Beta](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "Unknown")&nbsp; | &nbsp;PLUS&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;-&nbsp; | &nbsp;&nbsp; |\n`,
+    `| &nbsp;&nbsp; | &nbsp;[Beta](command:codex-switch.profile.activate?%5B%22abc-123%22%5D "Unknown")&nbsp; | &nbsp;&nbsp; |\n`,
   )
 })
 

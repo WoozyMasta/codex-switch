@@ -13,15 +13,17 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
-## Unreleased
+## [1.4.4][] - 2026-09-03
 
 ### Changed
 
 * Windows CLI auto-discovery now skips incompatible extensionless POSIX shims
   from npm installations and continues resolving the public `codex.cmd`
-  entry point without changing native Codex or PATH precedence.
+  entry point without changing native Codex or PATH precedence. #26
 * Failed background rate-limit refreshes are now visible while cached limits
   and the timestamp of the last successful refresh remain available.
+
+[1.4.4]: https://github.com/WoozyMasta/codex-switch/compare/1.4.3...1.4.4
 
 ## [1.4.3][] - 2026-08-10
 

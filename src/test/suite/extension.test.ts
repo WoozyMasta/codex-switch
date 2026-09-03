@@ -1,11 +1,19 @@
 /* global suite, suiteSetup, test */
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import * as vscode from 'vscode'
 import { createExtensionServices } from '../../extension-services'
+import { resolveCodexCliCommand } from '../../utils/codex-cli-resolver'
 
 class MemoryMemento {
   private readonly values = new Map<string, unknown>()
@@ -183,7 +191,89 @@ suite('Codex Switch extension smoke', () => {
       )
     }
   })
+
+  test('resolves and launches an npm-style Windows codex.cmd entry point', async function () {
+    if (process.platform !== 'win32') {
+      return
+    }
+
+    const tempRoot = mkdtempSync(path.join(os.tmpdir(), 'codex-switch-cli-'))
+    const bin = path.join(tempRoot, 'directory with spaces')
+    const originalPath = process.env.PATH
+    const originalCliPath = vscode.workspace
+      .getConfiguration('codexSwitch')
+      .get<string>('codexCliPath')
+
+    try {
+      await vscode.workspace
+        .getConfiguration('codexSwitch')
+        .update('codexCliPath', '', vscode.ConfigurationTarget.Global)
+      mkdirSync(bin, { recursive: true })
+      writeFileSync(path.join(bin, 'codex'), '#!/bin/sh\n')
+      writeFileSync(
+        path.join(bin, 'codex.cmd'),
+        '@echo off\r\nif "%1"=="app-server" echo OK\r\n',
+      )
+      process.env.PATH = `${bin}${path.delimiter}${originalPath ?? ''}`
+
+      const command = resolveCodexCliCommand({
+        platform: 'win32',
+        env: process.env,
+      })
+      assert.ok(command)
+      assert.equal(
+        command.command.toLowerCase(),
+        (process.env.ComSpec ?? 'cmd.exe').toLowerCase(),
+      )
+      assert.match(command.args[command.args.length - 2], /codex\.cmd$/i)
+      assert.equal(command.args[command.args.length - 1], 'app-server')
+
+      const result = await spawnAndCollect(command.command, command.args)
+      assert.equal(result.code, 0)
+      assert.match(result.stdout, /OK/)
+    } finally {
+      process.env.PATH = originalPath
+      await vscode.workspace
+        .getConfiguration('codexSwitch')
+        .update(
+          'codexCliPath',
+          originalCliPath ?? '',
+          vscode.ConfigurationTarget.Global,
+        )
+      rmSync(tempRoot, { recursive: true, force: true })
+    }
+  })
 })
+
+function spawnAndCollect(
+  command: string,
+  args: string[],
+): Promise<{ code: number | null; stdout: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8')
+    child.stderr.setEncoding('utf8')
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk
+    })
+    child.once('error', reject)
+    child.once('close', (code) => {
+      if (code !== 0 && stderr) {
+        reject(new Error(`codex.cmd exited with ${code}: ${stderr}`))
+        return
+      }
+      resolve({ code, stdout })
+    })
+  })
+}
 
 async function waitFor(
   predicate: () => boolean,

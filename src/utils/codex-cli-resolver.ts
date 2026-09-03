@@ -97,13 +97,7 @@ function createCodexCommand(
       command: env.ComSpec || 'cmd.exe',
       // Keep the batch command shape fixed. Only the resolved absolute path is
       // interpolated, and it is quoted before cmd.exe sees it.
-      args: [
-        '/d',
-        '/v:off',
-        '/s',
-        '/c',
-        `${quoteWindowsCmdArgument(executable)} app-server`,
-      ],
+      args: ['/d', '/v:off', '/c', executable, 'app-server'],
     }
   }
 
@@ -368,11 +362,6 @@ function isPosixShebangFile(filePath: string): boolean | undefined {
       closeSync(fileDescriptor)
     }
   }
-}
-
-/** Escapes and quotes a string for safe use with Windows cmd.exe. */
-function quoteWindowsCmdArgument(value: string): string {
-  return `"${value.replace(/%/g, '%%')}"`
 }
 
 /** Compares two paths for equality, normalizing and lowercasing for cross-platform consistency. */

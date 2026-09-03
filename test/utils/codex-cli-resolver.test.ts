@@ -38,9 +38,9 @@ test('Windows discovery skips an extensionless POSIX shim and keeps searching th
       args: [
         '/d',
         '/v:off',
-        '/s',
         '/c',
-        `"${path.join(directory, 'codex.cmd')}" app-server`,
+        path.join(directory, 'codex.cmd'),
+        'app-server',
       ],
     })
   })
@@ -71,9 +71,10 @@ test('Windows discovery preserves directory precedence after skipping a shim', (
     })
     assert.equal(result?.command, 'cmd.exe')
     assert.match(
-      result?.args[result.args.length - 1] ?? '',
-      /codex\.cmd" app-server$/,
+      result?.args[result.args.length - 2] ?? '',
+      /first[\\/]codex\.cmd$/,
     )
+    assert.equal(result?.args[result.args.length - 1], 'app-server')
   })
 })
 

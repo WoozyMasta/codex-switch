@@ -1,8 +1,11 @@
 import {
   accessSync,
+  closeSync,
   constants,
   Dirent,
   existsSync,
+  openSync,
+  readSync,
   readdirSync,
   statSync,
 } from 'fs'
@@ -46,10 +49,11 @@ export function resolveCodexCliCommand(
 function resolveConfiguredCodexCommand(
   deps: CodexCliResolverDeps,
 ): CodexCliCommand | null {
-  const configuredPath = vscode.workspace
-    .getConfiguration('codexSwitch')
-    .get<string>('codexCliPath', '')
-    .trim()
+  const configuredPath = (
+    vscode.workspace
+      .getConfiguration('codexSwitch')
+      .get<string>('codexCliPath', '') ?? ''
+  ).trim()
 
   if (!configuredPath) {
     return null
@@ -75,10 +79,10 @@ function resolveConfiguredCodexExecutable(
 
   if (isPathLike(candidate)) {
     const resolvedPath = path.resolve(candidate)
-    return isExecutableFile(resolvedPath) ? resolvedPath : null
+    return isExecutableFile(resolvedPath, deps) ? resolvedPath : null
   }
 
-  return findCodexExecutable(deps, candidate)
+  return findCodexExecutable(deps, candidate, false)
 }
 
 /** Constructs a CodexCliCommand with platform-specific handling for Windows batch files. */
@@ -93,13 +97,7 @@ function createCodexCommand(
       command: env.ComSpec || 'cmd.exe',
       // Keep the batch command shape fixed. Only the resolved absolute path is
       // interpolated, and it is quoted before cmd.exe sees it.
-      args: [
-        '/d',
-        '/v:off',
-        '/s',
-        '/c',
-        `${quoteWindowsCmdArgument(executable)} app-server`,
-      ],
+      args: ['/d', '/v:off', '/c', executable, 'app-server'],
     }
   }
 
@@ -113,12 +111,13 @@ function createCodexCommand(
 function findCodexExecutable(
   deps: CodexCliResolverDeps,
   commandName = 'codex',
+  autoDiscovery = true,
 ): string | null {
   const candidateNames = buildExecutableCandidateNames(commandName, deps)
   for (const dir of getCodexSearchDirectories(deps)) {
     for (const filename of candidateNames) {
       const candidate = path.join(dir, filename)
-      if (isExecutableFile(candidate)) {
+      if (isExecutableFile(candidate, deps, autoDiscovery)) {
         return candidate
       }
     }
@@ -309,7 +308,11 @@ function compareVersionParts(left: number[], right: number[]): number {
 }
 
 /** Checks if a file exists and is executable (with platform-specific handling). */
-function isExecutableFile(filePath: string): boolean {
+function isExecutableFile(
+  filePath: string,
+  deps: CodexCliResolverDeps,
+  autoDiscovery = false,
+): boolean {
   if (!existsSync(filePath)) {
     return false
   }
@@ -323,7 +326,16 @@ function isExecutableFile(filePath: string): boolean {
     return false
   }
 
-  if (process.platform === 'win32') {
+  if (
+    (deps.platform ?? process.platform) === 'win32' &&
+    autoDiscovery &&
+    path.extname(filePath) === '' &&
+    isPosixShebangFile(filePath) !== false
+  ) {
+    return false
+  }
+
+  if ((deps.platform ?? process.platform) === 'win32') {
     return true
   }
 
@@ -335,9 +347,21 @@ function isExecutableFile(filePath: string): boolean {
   }
 }
 
-/** Escapes and quotes a string for safe use with Windows cmd.exe. */
-function quoteWindowsCmdArgument(value: string): string {
-  return `"${value.replace(/%/g, '%%')}"`
+/** Returns true when a file starts with a POSIX-style interpreter shebang. */
+function isPosixShebangFile(filePath: string): boolean | undefined {
+  let fileDescriptor: number | undefined
+  try {
+    fileDescriptor = openSync(filePath, 'r')
+    const header = Buffer.alloc(2)
+    const bytesRead = readSync(fileDescriptor, header, 0, 2, 0)
+    return bytesRead === 2 && header.toString('ascii') === '#!'
+  } catch {
+    return undefined
+  } finally {
+    if (fileDescriptor !== undefined) {
+      closeSync(fileDescriptor)
+    }
+  }
 }
 
 /** Compares two paths for equality, normalizing and lowercasing for cross-platform consistency. */

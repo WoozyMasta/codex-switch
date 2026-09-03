@@ -72,5 +72,6 @@
   "Updated {0} ago": "{0}前更新",
   "Next refresh in {0}": "{0}後重新整理",
   "Retry in {0}": "{0}後重試",
-  "Automatic refresh disabled": "自動重新整理已停用"
+  "Automatic refresh disabled": "自動重新整理已停用",
+  "Refresh failed": "重新整理失敗"
 }

@@ -4,6 +4,8 @@
  * per-second UI timer is required.
  */
 
+import type { MaintenanceErrorCategory } from './profile-maintenance-state'
+
 export interface ProfileRefreshStatus {
   /** Timestamp (ms) of the last successful rate-limit result, if any. */
   lastSuccessAt?: number
@@ -11,6 +13,12 @@ export interface ProfileRefreshStatus {
   nextDueAt?: number
   /** Timestamp (ms) of the next retry after a failure, if a retry is pending. */
   nextRetryAt?: number
+  /** Details of the latest failed refresh, if any. */
+  failure?: {
+    category?: MaintenanceErrorCategory
+    consecutiveFailures: number
+    lastFailureAt: number
+  }
   /** True while a maintenance cycle is currently checking this profile. */
   isRefreshing: boolean
 }
@@ -66,6 +74,10 @@ export function formatProfileRefreshLabel(
     )
   }
 
+  if (status.failure) {
+    parts.push(translate('Refresh failed'))
+  }
+
   if (status.nextRetryAt !== undefined && status.nextRetryAt > now) {
     parts.push(
       translate(
@@ -92,6 +104,8 @@ export interface ProfileRefreshCells {
   updated: string
   /** Absolute HH:MM of next scheduled refresh/retry, or '' if auto-refresh is disabled or not scheduled. */
   next: string
+  /** Whether the latest refresh attempt failed. */
+  refreshFailed: boolean
 }
 
 function formatHHMM(timestampMs: number): string {
@@ -110,7 +124,7 @@ export function formatProfileRefreshCells(
   const { now, autoRefreshEnabled } = options
 
   if (status.isRefreshing) {
-    return { updated: '…', next: '' }
+    return { updated: '…', next: '', refreshFailed: false }
   }
 
   const updated =
@@ -125,5 +139,5 @@ export function formatProfileRefreshCells(
     next = formatHHMM(status.nextDueAt)
   }
 
-  return { updated, next }
+  return { updated, next, refreshFailed: status.failure !== undefined }
 }

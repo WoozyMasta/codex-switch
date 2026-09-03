@@ -72,5 +72,6 @@
   "Updated {0} ago": "{0}前に更新",
   "Next refresh in {0}": "次回更新まで{0}",
   "Retry in {0}": "{0}後に再試行",
-  "Automatic refresh disabled": "自動更新は無効"
+  "Automatic refresh disabled": "自動更新は無効",
+  "Refresh failed": "更新に失敗しました"
 }

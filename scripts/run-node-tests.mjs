@@ -30,6 +30,7 @@ if (coverageEnabled) {
     '--test-coverage-exclude=**/out-test/src/auth/profile-state-service.js',
     '--test-coverage-exclude=**/out-test/src/commands/profile-navigation-command-handlers.js',
     '--test-coverage-exclude=**/out-test/src/utils/vscode-restart.js',
+    '--test-coverage-exclude=**/out-test/src/utils/codex-cli-resolver.js',
     '--test-coverage-exclude=**/out-test/src/codex-home/codex-home-manager.js',
     '--test-coverage-exclude=**/out-test/src/ui/profile-display.js',
     '--test-coverage-exclude=**/out-test/src/ui/tooltip-builder.js',

@@ -72,5 +72,6 @@
   "Updated {0} ago": "{0}前更新",
   "Next refresh in {0}": "{0}后刷新",
   "Retry in {0}": "{0}后重试",
-  "Automatic refresh disabled": "自动刷新已禁用"
+  "Automatic refresh disabled": "自动刷新已禁用",
+  "Refresh failed": "刷新失败"
 }

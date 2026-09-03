@@ -72,5 +72,6 @@
   "Updated {0} ago": "Aggiornato {0} fa",
   "Next refresh in {0}": "Prossimo aggiornamento tra {0}",
   "Retry in {0}": "Nuovo tentativo tra {0}",
-  "Automatic refresh disabled": "Aggiornamento automatico disattivato"
+  "Automatic refresh disabled": "Aggiornamento automatico disattivato",
+  "Refresh failed": "Aggiornamento non riuscito"
 }

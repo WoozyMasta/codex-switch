@@ -72,5 +72,6 @@
   "Updated {0} ago": "{0} 전 업데이트됨",
   "Next refresh in {0}": "다음 새로 고침까지 {0}",
   "Retry in {0}": "{0} 후 재시도",
-  "Automatic refresh disabled": "자동 새로 고침 비활성화됨"
+  "Automatic refresh disabled": "자동 새로 고침 비활성화됨",
+  "Refresh failed": "새로 고침 실패"
 }

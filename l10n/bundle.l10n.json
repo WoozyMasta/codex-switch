@@ -72,5 +72,6 @@
   "Updated {0} ago": "Updated {0} ago",
   "Next refresh in {0}": "Next refresh in {0}",
   "Retry in {0}": "Retry in {0}",
-  "Automatic refresh disabled": "Automatic refresh disabled"
+  "Automatic refresh disabled": "Automatic refresh disabled",
+  "Refresh failed": "Refresh failed"
 }

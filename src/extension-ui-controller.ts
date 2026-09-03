@@ -63,6 +63,14 @@ export function createExtensionUiController(
     lastSuccessAt: state?.lastSuccessAt ?? undefined,
     nextDueAt: state?.nextDueAt ?? undefined,
     nextRetryAt: state?.nextRetryAt ?? undefined,
+    failure:
+      state?.status === 'failed'
+        ? {
+            category: state.errorCategory,
+            consecutiveFailures: state.consecutiveFailures,
+            lastFailureAt: state.lastAttemptAt,
+          }
+        : undefined,
     isRefreshing: profileMaintenanceService.getActiveProfileId() === profileId,
   })
 
@@ -101,9 +109,14 @@ export function createExtensionUiController(
         autoRefreshEnabled,
       })
       if (!cells.updated) {
-        return ''
+        return cells.refreshFailed ? vscode.l10n.t('Refresh failed') : ''
       }
-      return cells.next ? `${cells.updated}/${cells.next}` : cells.updated
+      const timing = cells.next
+        ? `${cells.updated}/${cells.next}`
+        : cells.updated
+      return cells.refreshFailed
+        ? `${timing} · ${vscode.l10n.t('Refresh failed')}`
+        : timing
     }
   }
 

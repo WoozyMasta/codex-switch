@@ -72,5 +72,6 @@
   "Updated {0} ago": "Actualisé il y a {0}",
   "Next refresh in {0}": "Prochaine actualisation dans {0}",
   "Retry in {0}": "Nouvel essai dans {0}",
-  "Automatic refresh disabled": "Actualisation automatique désactivée"
+  "Automatic refresh disabled": "Actualisation automatique désactivée",
+  "Refresh failed": "Échec de l’actualisation"
 }

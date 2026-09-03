@@ -72,5 +72,6 @@
   "Updated {0} ago": "Обновлено {0} назад",
   "Next refresh in {0}": "Следующее обновление через {0}",
   "Retry in {0}": "Повтор через {0}",
-  "Automatic refresh disabled": "Автообновление отключено"
+  "Automatic refresh disabled": "Автообновление отключено",
+  "Refresh failed": "Ошибка обновления"
 }

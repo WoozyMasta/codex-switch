@@ -69,6 +69,22 @@ test('formatProfileRefreshLabel prefers retry timing after a failure', () => {
   )
 })
 
+test('formatProfileRefreshLabel exposes a failed refresh while retaining cached age', () => {
+  const now = 1_000_000
+  assert.equal(
+    formatProfileRefreshLabel(
+      {
+        isRefreshing: false,
+        lastSuccessAt: now - 12 * 60 * 60_000,
+        nextRetryAt: now + 2 * 60_000,
+        failure: { consecutiveFailures: 48, lastFailureAt: now - 1_000 },
+      },
+      { now, autoRefreshEnabled: true, translate },
+    ),
+    'Updated 12h ago · Refresh failed · Retry in 2m',
+  )
+})
+
 test('formatProfileRefreshLabel falls back to next refresh when a retry is already due', () => {
   const now = 1_000_000
   assert.equal(
@@ -162,6 +178,19 @@ test('formatProfileRefreshCells uses retry time in next when pending', () => {
   )
   assert.equal(result.updated, '19m')
   assert.match(result.next, HH_MM)
+  assert.equal(result.refreshFailed, false)
+})
+
+test('formatProfileRefreshCells marks cached data from a failed refresh', () => {
+  const result = formatProfileRefreshCells(
+    {
+      isRefreshing: false,
+      lastSuccessAt: 1_000,
+      failure: { consecutiveFailures: 1, lastFailureAt: 2_000 },
+    },
+    { now: 3_000, autoRefreshEnabled: true },
+  )
+  assert.equal(result.refreshFailed, true)
 })
 
 test('formatProfileRefreshCells returns empty strings when no data', () => {

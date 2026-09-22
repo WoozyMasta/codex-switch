@@ -55,13 +55,35 @@ export function buildCodexAuthJson(authData: AuthData): string {
   return `${JSON.stringify({ tokens }, null, 2)}\n`
 }
 
+/**
+ * Narrows the auth file to owner-only access, best effort.
+ *
+ * The copy fallback above creates the destination with the process umask when
+ * it does not already exist, so the mode set on the temp file is not enough on
+ * its own. Failures are ignored: chmod is meaningless on Windows, and a file
+ * that was just written successfully should not be reported as a failed switch
+ * because its mode could not be tightened.
+ */
+function restrictAuthFilePermissions(authPath: string) {
+  if (process.platform === 'win32') {
+    return
+  }
+  try {
+    fs.chmodSync(authPath, 0o600)
+  } catch {
+    // ignore
+  }
+}
+
 export function syncCodexAuthFile(
   authPath: string,
   authData: AuthData,
   deps: CodexAuthSyncDeps = {},
 ) {
   const dir = path.dirname(authPath)
-  fs.mkdirSync(dir, { recursive: true })
+  // 0o700: a Codex home holds OAuth refresh tokens, and a directory created
+  // here for a custom CODEX_HOME would otherwise default to 0o755.
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   let now = Date.now
   if (deps.now) {
     now = deps.now
@@ -70,7 +92,11 @@ export function syncCodexAuthFile(
   const tmpPath = path.join(dir, `auth.json.tmp.${process.pid}.${now()}`)
   const content = buildCodexAuthJson(authData)
 
-  fs.writeFileSync(tmpPath, content, { encoding: 'utf8' })
+  // 0o600 on the TEMP file, because rename carries the source file's mode to
+  // the destination: without it a switch relaxes an existing 0o600 auth.json
+  // to 0o644 under the usual 0o022 umask, leaving refresh tokens readable by
+  // every local account. Codex itself writes this file 0o600.
+  fs.writeFileSync(tmpPath, content, { encoding: 'utf8', mode: 0o600 })
 
   // Best-effort atomic replace:
   // - POSIX: rename overwrites.
@@ -78,10 +104,12 @@ export function syncCodexAuthFile(
   try {
     try {
       fs.renameSync(tmpPath, authPath)
+      restrictAuthFilePermissions(authPath)
       return
     } catch {
       // Fall back to non-atomic replace.
       fs.copyFileSync(tmpPath, authPath)
+      restrictAuthFilePermissions(authPath)
     }
   } finally {
     try {

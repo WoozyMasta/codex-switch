@@ -292,3 +292,37 @@ test('syncCodexAuthFile skips temp cleanup when the temp file is already gone', 
     }
   }
 })
+
+test(
+  'syncCodexAuthFile keeps the auth file owner-only',
+  { skip: process.platform === 'win32' ? 'POSIX modes only' : false },
+  () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-auth-mode-'))
+    const authPath = path.join(dir, 'auth.json')
+    try {
+      // Codex writes this file 0o600; a switch must not widen it. Before the
+      // fix the temp file inherited the umask and rename carried 0o644 across.
+      fs.writeFileSync(authPath, '{}', { mode: 0o600 })
+      syncCodexAuthFile(authPath, baseAuthData)
+      assert.equal(fs.statSync(authPath).mode & 0o777, 0o600)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  },
+)
+
+test(
+  'syncCodexAuthFile creates a new auth file owner-only',
+  { skip: process.platform === 'win32' ? 'POSIX modes only' : false },
+  () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-auth-mode-new-'))
+    const authPath = path.join(dir, 'nested', 'auth.json')
+    try {
+      syncCodexAuthFile(authPath, baseAuthData)
+      assert.equal(fs.statSync(authPath).mode & 0o777, 0o600)
+      assert.equal(fs.statSync(path.dirname(authPath)).mode & 0o777, 0o700)
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  },
+)

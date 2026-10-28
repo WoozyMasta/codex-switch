@@ -90,11 +90,13 @@ test('matchesPreservationIdentityForProfile requires exact identity match', () =
       {
         ...baseProfile,
         defaultOrganizationId: ' org-1 ',
+        accountId: 'workspace-1',
         chatgptUserId: ' user-1 ',
       },
       {
         ...baseAuth,
         defaultOrganizationId: 'org-1',
+        accountId: 'workspace-1',
         chatgptUserId: 'user-1',
       },
       null,
@@ -124,10 +126,12 @@ test('matchesPreservationIdentityForProfile requires exact identity match', () =
       {
         ...baseProfile,
         userId: ' u-1 ',
+        accountId: 'workspace-1',
       },
       {
         ...baseAuth,
         userId: 'u-1',
+        accountId: 'workspace-1',
       },
       null,
     ),

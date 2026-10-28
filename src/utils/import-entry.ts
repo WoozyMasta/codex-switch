@@ -1,4 +1,5 @@
 import type { AuthData } from '../types'
+import { extractAuthDataFromAuthJson } from '../auth/auth-manager'
 import { validateImportedAuthJson } from './auth-payload'
 import { buildDefaultProfileName } from './profile-names'
 import { asOptionalString } from './strings'
@@ -46,7 +47,9 @@ export function parseImportEntry(value: unknown): ParsedImportEntry | null {
 
   const authJson = asObject(tokens.authJson) || undefined
   const accountId =
-    asOptionalString(tokens.accountId) || asOptionalString(profile.accountId)
+    asOptionalString(tokens.accountId) ||
+    asOptionalString(profile.accountId) ||
+    extractAuthDataFromAuthJson(authJson)?.accountId
   const validatedAuthJson = authJson
     ? validateImportedAuthJson(authJson, {
         idToken,

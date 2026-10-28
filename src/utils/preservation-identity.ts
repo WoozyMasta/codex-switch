@@ -22,6 +22,7 @@ export function buildStoredPreservationIdentity(
   storedAuth: AuthData | null,
 ) {
   return buildIdentitySnapshot({
+    accountId: pickNonEmptyString(storedAuth?.accountId, profile.accountId),
     defaultOrganizationId: pickNonEmptyString(
       storedAuth?.defaultOrganizationId,
       profile.defaultOrganizationId,

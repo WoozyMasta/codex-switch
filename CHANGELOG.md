@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
+## Unreleased
+
+### Fixed
+
+* Keep profiles for the same user in different ChatGPT workspaces separate
+  during authentication capture, reconciliation, and import.
+* Import the selected authentication file instead of the current live login.
+
 ## [1.4.4][] - 2026-09-03
 
 ### Changed

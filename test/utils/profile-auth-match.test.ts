@@ -9,6 +9,7 @@ const profile = {
   name: 'Alice',
   email: 'alice@example.com',
   planType: 'pro',
+  accountId: 'workspace-1',
   defaultOrganizationId: 'org-1',
   chatgptUserId: 'user-1',
   createdAt: '2026-06-12T10:00:00.000Z',
@@ -21,6 +22,7 @@ const auth = {
   refreshToken: 'refresh',
   email: 'alice@example.com',
   planType: 'pro',
+  accountId: 'workspace-1',
   defaultOrganizationId: 'org-1',
   chatgptUserId: 'user-1',
 } as AuthData

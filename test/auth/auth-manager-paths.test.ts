@@ -2,7 +2,10 @@
 import assert from 'node:assert/strict'
 import * as path from 'node:path'
 import test from 'node:test'
-import { getDefaultCodexAuthPathForHome } from '../../src/auth/auth-manager'
+import {
+  extractAuthDataFromAuthJson,
+  getDefaultCodexAuthPathForHome,
+} from '../../src/auth/auth-manager'
 import {
   getCodexAuthPathForHome,
   resolveDefaultCodexHomePath,
@@ -13,6 +16,23 @@ const meHome = path.resolve('C:\\Users\\me')
 const expectedCustomHome = path.resolve(customHome)
 const expectedDefaultHome = path.resolve(path.join(meHome, '.codex'))
 const expectedAuthPath = path.join(expectedCustomHome, 'auth.json')
+
+test('workspace account ID comes from selected tokens or the ID-token claim', () => {
+  const claims = {
+    'https://api.openai.com/auth': { chatgpt_account_id: 'jwt-workspace' },
+  }
+  const idToken = `synthetic.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`
+  assert.equal(
+    extractAuthDataFromAuthJson({ tokens: { id_token: idToken } })?.accountId,
+    'jwt-workspace',
+  )
+  assert.equal(
+    extractAuthDataFromAuthJson({
+      tokens: { id_token: idToken, account_id: 'selected-workspace' },
+    })?.accountId,
+    'selected-workspace',
+  )
+})
 
 test('resolveDefaultCodexHomePath and getCodexAuthPathForHome resolve deterministic paths', () => {
   assert.equal(

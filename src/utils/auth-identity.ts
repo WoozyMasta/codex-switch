@@ -11,7 +11,7 @@ export interface IdentitySnapshot {
   userId?: string
   /** OpenID Connect subject. */
   subject?: string
-  /** Account ID. */
+  /** Selected ChatGPT workspace/account ID, not a user ID. */
   accountId?: string
   /** Email address (normalized to lowercase, empty if 'unknown'). */
   email?: string
@@ -27,7 +27,7 @@ export interface IdentitySource {
   userId?: string
   /** OpenID Connect subject. */
   subject?: string
-  /** Account ID. */
+  /** Selected ChatGPT workspace/account ID, not a user ID. */
   accountId?: string
   /** Email address. */
   email?: string
@@ -108,11 +108,12 @@ export function compareIdentitySnapshots(
   left: IdentitySnapshot,
   right: IdentitySnapshot,
 ): IdentityMatch {
+  const accountState = compareIdentityValue(left.accountId, right.accountId)
   const organizationState = compareIdentityValue(
     left.organizationId,
     right.organizationId,
   )
-  if (organizationState === 'different') {
+  if (accountState === 'different' || organizationState === 'different') {
     return 'different'
   }
 
@@ -124,24 +125,22 @@ export function compareIdentitySnapshots(
   if (strongState === 'different') {
     return 'different'
   }
+  // A shared user can belong to several workspaces. Missing workspace IDs
+  // cannot prove a duplicate, even when the user or organization matches.
+  if (accountState !== 'match') {
+    return 'ambiguous'
+  }
   if (strongState === 'match') {
     return organizationState === 'ambiguous' ? 'ambiguous' : 'exact'
   }
 
-  const weakState = compareIdentityGroup(left, right, ['accountId', 'email'])
+  // A workspace shared by several users is not itself a user identity.
+  const weakState = compareIdentityValue(left.email, right.email)
   if (weakState === 'different') {
     return 'different'
   }
   if (weakState === 'match') {
     return organizationState === 'ambiguous' ? 'ambiguous' : 'exact'
-  }
-
-  if (
-    organizationState === 'ambiguous' ||
-    strongState === 'ambiguous' ||
-    weakState === 'ambiguous'
-  ) {
-    return 'ambiguous'
   }
 
   return 'ambiguous'

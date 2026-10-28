@@ -41,16 +41,45 @@ test('buildIdentitySnapshot normalizes identity fields', () => {
   )
 })
 
+test('workspace identity requires a matching user and confirmed account ID', () => {
+  const user = { chatgptUserId: 'alice', email: 'alice@example.com' }
+  const a = { ...user, accountId: 'workspace-a' }
+  for (const [left, right, expected] of [
+    [a, a, 'exact'],
+    [a, { ...a, accountId: 'workspace-b' }, 'different'],
+    [a, { ...a, chatgptUserId: 'bob' }, 'different'],
+    [a, user, 'ambiguous'],
+    [user, a, 'ambiguous'],
+    [user, user, 'ambiguous'],
+    [{ accountId: 'a' }, { accountId: 'a' }, 'ambiguous'],
+    [
+      { accountId: 'a', email: 'alice@example.com' },
+      { accountId: 'a', email: 'bob@example.com' },
+      'different',
+    ],
+    [a, { ...a, organizationId: 'org' }, 'ambiguous'],
+    [
+      { accountId: 'a', email: 'alice@example.com' },
+      { accountId: 'a', email: 'alice@example.com', organizationId: 'org' },
+      'ambiguous',
+    ],
+  ] as const) {
+    assert.equal(compareIdentitySnapshots(left, right), expected)
+  }
+})
+
 test('compareIdentitySnapshots distinguishes exact, different, and ambiguous matches', () => {
   assert.equal(
     compareIdentitySnapshots(
       {
         organizationId: 'org-1',
         chatgptUserId: 'user-1',
+        accountId: 'acc-1',
       },
       {
         organizationId: 'org-1',
         chatgptUserId: 'user-1',
+        accountId: 'acc-1',
       },
     ),
     'exact',
@@ -103,10 +132,12 @@ test('compareIdentitySnapshots distinguishes exact, different, and ambiguous mat
       buildIdentitySnapshot({
         defaultOrganizationId: 'org-1',
         email: 'alice@example.com',
+        accountId: 'acc-1',
       }),
       buildIdentitySnapshot({
         defaultOrganizationId: 'org-1',
         email: 'ALICE@example.com',
+        accountId: 'acc-1',
       }),
     ),
     'exact',
@@ -123,7 +154,7 @@ test('compareIdentitySnapshots distinguishes exact, different, and ambiguous mat
         accountId: ' acc-1 ',
       }),
     ),
-    'exact',
+    'ambiguous',
   )
 
   assert.equal(
@@ -207,7 +238,7 @@ test('compareIdentitySnapshots distinguishes exact, different, and ambiguous mat
         accountId: 'acc-1',
       },
     ),
-    'exact',
+    'ambiguous',
   )
 
   assert.equal(compareIdentitySnapshots({}, {}), 'ambiguous')

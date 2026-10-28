@@ -107,12 +107,14 @@ export function extractAuthDataFromAuthJson(
   const idToken = asNonEmptyString(tokens.id_token)
   const accessToken = asNonEmptyString(tokens.access_token)
   const refreshToken = asNonEmptyString(tokens.refresh_token)
-  const accountId = asNonEmptyString(tokens.account_id)
 
   const idTokenPayload = idToken ? parseJWT(idToken) : {}
   const authPayload = asObjectRecord(
     idTokenPayload['https://api.openai.com/auth'],
   )
+  const accountId =
+    asNonEmptyString(tokens.account_id) ||
+    asNonEmptyString(authPayload?.chatgpt_account_id)
   const defaultOrganization = getDefaultOrganization(authPayload)
 
   return {

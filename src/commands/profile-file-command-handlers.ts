@@ -78,7 +78,14 @@ export async function addFromFile(deps: ProfileFileCommandDeps): Promise<void> {
     return
   }
 
-  await addCurrentAuthJsonAsProfile(deps.promptDeps, true)
+  await addCurrentAuthJsonAsProfile(
+    {
+      ...deps.promptDeps,
+      getActiveCodexAuthPath: () => uri[0].fsPath,
+      loadAuthDataFromFile: async () => authData,
+    },
+    true,
+  )
 }
 
 /**

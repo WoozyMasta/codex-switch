@@ -459,7 +459,8 @@ export class ProfileStorageService {
     authData: AuthData,
   ): Promise<ProfileSummary | undefined> {
     const file = await readProfilesFile(this.profilesFileStorageDeps())
-    return file.profiles.find((p) => this.matchesAuth(p, authData))
+    const profileId = findMatchingProfileIdForAuth(file.profiles, authData)
+    return file.profiles.find((profile) => profile.id === profileId)
   }
 
   /**
@@ -497,19 +498,6 @@ export class ProfileStorageService {
 
     const extracted = extractAuthDataFromAuthJson(tokens.authJson)
     return buildProfileAuthData(profile, tokens, extracted)
-  }
-
-  private matchesAuth(profile: ProfileSummary, authData: AuthData): boolean {
-    return (
-      profile.email === authData.email &&
-      profile.planType === authData.planType &&
-      profile.accountId === authData.accountId &&
-      profile.defaultOrganizationId === authData.defaultOrganizationId &&
-      profile.defaultOrganizationTitle === authData.defaultOrganizationTitle &&
-      profile.chatgptUserId === authData.chatgptUserId &&
-      profile.userId === authData.userId &&
-      profile.subject === authData.subject
-    )
   }
 
   /**

@@ -256,3 +256,51 @@ test('importProfiles stops when live auth replacement is rejected', async () => 
   await importProfiles(deps as any)
   assert.deepEqual((deps.calls as string[]).length, 0)
 })
+
+for (const hasLiveAuth of [true, false]) {
+  test(`addFromFile imports selected credentials with ${hasLiveAuth ? 'a different' : 'no'} live login`, async () => {
+    const calls: string[] = []
+    const reads: string[] = []
+    const imported: unknown[] = []
+    const selectedAuth = {
+      idToken: 'selected-id',
+      accessToken: 'selected-access',
+      refreshToken: 'selected-refresh',
+      email: 'selected@example.com',
+      planType: 'plus',
+    }
+    const liveAuth = {
+      ...selectedAuth,
+      idToken: 'live-id',
+      accessToken: 'live-access',
+      refreshToken: 'live-refresh',
+      email: 'live@example.com',
+    }
+    const deps = makeFileDeps({
+      calls,
+      promptDeps: makePromptDeps({
+        calls,
+        getActiveCodexAuthPath: () => '/tmp/current-auth.json',
+        preserveLiveAuthForMatchingProfile: async () => ({
+          status: hasLiveAuth ? 'saved' : 'noLiveAuth',
+        }),
+        loadAuthDataFromFile: async (file: string) => {
+          reads.push(file)
+          return file === '/tmp/input.json'
+            ? selectedAuth
+            : hasLiveAuth
+              ? liveAuth
+              : null
+        },
+        createProfile: async (_name: string, authData: unknown) => {
+          imported.push(authData)
+          return { id: 'selected-profile' }
+        },
+      }),
+    })
+    await addFromFile(deps as any)
+    assert.deepEqual(reads, ['/tmp/input.json'])
+    assert.deepEqual(imported, [selectedAuth])
+    assert.deepEqual(calls, ['auth', 'restart'])
+  })
+}

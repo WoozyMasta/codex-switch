@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning][].
 ### Removed
 -->
 
+## Unreleased
+
+### Fixed
+
+* Importing an auth file now saves the selected file's credentials instead of
+  re-reading the current runtime auth file. Import also works when the runtime
+  has no auth file yet.
+
 ## [1.4.4][] - 2026-09-03
 
 ### Changed

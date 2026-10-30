@@ -56,20 +56,23 @@ export interface ProfileCommandPromptDeps {
 }
 
 /**
- * Prompts the user to add the current Codex auth.json as a profile.
+ * Prompts the user to save supplied auth data or the current Codex auth.json.
  * Handles deduplication, replacement, and profile activation.
  * @param deps - Dependencies for prompts and profile operations.
  * @param restartAfterImport - Whether to restart the extension after successful import.
+ * @param importedAuthData - Already parsed credentials from a selected file, when provided.
  * @returns A promise that resolves to true if the profile was successfully added or updated, false if canceled.
  */
 export async function addCurrentAuthJsonAsProfile(
   deps: ProfileCommandPromptDeps,
   restartAfterImport: boolean,
+  importedAuthData?: AuthData,
 ): Promise<boolean> {
   try {
     const authPath = deps.getActiveCodexAuthPath()
     const loginCommandText = deps.getLoginCommandText()
-    const authData = await deps.loadAuthDataFromFile(authPath)
+    const authData =
+      importedAuthData ?? (await deps.loadAuthDataFromFile(authPath))
     if (!authData) {
       deps.showErrorMessage(
         deps.translate(
